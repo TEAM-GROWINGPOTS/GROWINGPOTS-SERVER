@@ -1,0 +1,74 @@
+name: Dev CD
+
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Grant execute permission for Gradle wrapper
+        run: chmod +x gradlew
+
+      - name: Build with Gradle
+        run: ./gradlew clean build
+
+      - name: Prepare executable jar
+        run: |
+          JAR_PATH="$(find build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*-plain.jar' | head -n 1)"
+          if [ -z "$JAR_PATH" ]; then
+            echo "Executable jar not found."
+            exit 1
+          fi
+          cp "$JAR_PATH" app.jar
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2_key
+          chmod 600 ~/.ssh/ec2_key
+          ssh-keyscan -p "${{ secrets.EC2_PORT }}" -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Upload jar to EC2
+        run: |
+          scp -i ~/.ssh/ec2_key -P "${{ secrets.EC2_PORT }}" app.jar \
+            "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USER }}/app/app.jar"
+
+      - name: Restart application
+        run: |
+          ssh -i ~/.ssh/ec2_key -p "${{ secrets.EC2_PORT }}" \
+            "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" << 'EOF'
+          set -e
+          APP_DIR="/home/${USER}/app"
+          APP_JAR="${APP_DIR}/app.jar"
+          APP_LOG="${APP_DIR}/app.log"
+
+          mkdir -p "${APP_DIR}/data"
+          pkill -f "java -jar ${APP_JAR}" || true
+          cd "${APP_DIR}"
+          nohup java -jar "${APP_JAR}" --spring.profiles.active=dev > "${APP_LOG}" 2>&1 &
+          sleep 5
+
+          if ! pgrep -f "java -jar ${APP_JAR}" > /dev/null; then
+            echo "Application failed to start. Recent logs:"
+            tail -n 100 "${APP_LOG}" || true
+            exit 1
+          fi
+          EOF
