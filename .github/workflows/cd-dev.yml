@@ -1,13 +1,18 @@
 name: Dev CD
 
 on:
-  push:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
     branches:
       - develop
   workflow_dispatch:
 
 jobs:
   deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
 
     permissions:
@@ -16,6 +21,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: develop
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -60,10 +67,14 @@ jobs:
           APP_JAR="${APP_DIR}/app.jar"
           APP_LOG="${APP_DIR}/app.log"
 
-          mkdir -p "${APP_DIR}/data"
+          mkdir -p "${APP_DIR}"
           pkill -f "java -jar ${APP_JAR}" || true
           cd "${APP_DIR}"
-          nohup java -jar "${APP_JAR}" --spring.profiles.active=dev > "${APP_LOG}" 2>&1 &
+          nohup env \
+            DB_URL='${{ secrets.DB_URL }}' \
+            DB_USERNAME='${{ secrets.DB_USERNAME }}' \
+            DB_PASSWORD='${{ secrets.DB_PASSWORD }}' \
+            java -jar "${APP_JAR}" --spring.profiles.active=dev > "${APP_LOG}" 2>&1 &
           sleep 5
 
           if ! pgrep -f "java -jar ${APP_JAR}" > /dev/null; then
