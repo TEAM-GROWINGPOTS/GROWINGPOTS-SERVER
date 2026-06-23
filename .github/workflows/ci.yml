@@ -7,11 +7,9 @@ on:
       - synchronize
       - reopened
     branches:
-      - main
       - develop
   push:
     branches:
-      - main
       - develop
   workflow_dispatch:
 
