@@ -46,6 +46,3 @@ out/
 .env
 .env.*
 application-secret.yml
-application-local.yml
-application-prod.yml
-application-dev.yml
