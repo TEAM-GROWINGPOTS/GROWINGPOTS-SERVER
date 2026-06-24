@@ -1,0 +1,24 @@
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: false
+    open-in-view: false
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: 1800000
+
+app:
+  base-url: https://growing-pots.p-e.kr
+
+logging:
+  level:
+    com.growingpots: info
