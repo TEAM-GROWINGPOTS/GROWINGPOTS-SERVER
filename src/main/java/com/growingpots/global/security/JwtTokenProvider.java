@@ -28,7 +28,7 @@ public class JwtTokenProvider {
 
     public JwtTokenProvider(
             @Value("${jwt.secret}") String secret,
-            @Value("${jwt.expiration:86400000}") long expiration) {
+            @Value("${jwt.expiration:1800000}") long expiration) {
         this.expiration = expiration;
         SecretKeySpec key = new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
         OctetSequenceKey jwk = new OctetSequenceKey.Builder(key).build();
