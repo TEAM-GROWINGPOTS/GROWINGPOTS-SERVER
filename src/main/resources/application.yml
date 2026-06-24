@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: growing-pots
+  profiles:
+    default: local
+
+server:
+  port: 8080
+
+springdoc:
+  swagger-ui:
+    operations-sorter: alpha
+    tags-sorter: alpha
+    doc-expansion: none
+    display-request-duration: true
+    try-it-out-enabled: true
