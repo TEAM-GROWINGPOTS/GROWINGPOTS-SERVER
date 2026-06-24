@@ -1,18 +1,13 @@
 name: Dev CD
 
 on:
-  workflow_run:
-    workflows:
-      - CI
-    types:
-      - completed
+  push:
     branches:
       - develop
   workflow_dispatch:
 
 jobs:
   deploy:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
 
     permissions:
@@ -74,7 +69,8 @@ jobs:
             DB_URL='${{ secrets.DB_URL }}' \
             DB_USERNAME='${{ secrets.DB_USERNAME }}' \
             DB_PASSWORD='${{ secrets.DB_PASSWORD }}' \
-            java -jar "${APP_JAR}" --spring.profiles.active=dev > "${APP_LOG}" 2>&1 &
+            JWT_SECRET='${{ secrets.JWT_SECRET }}' \
+            java -jar "${APP_JAR}" --spring.profiles.active=prod > "${APP_LOG}" 2>&1 &
           sleep 5
 
           if ! pgrep -f "java -jar ${APP_JAR}" > /dev/null; then
