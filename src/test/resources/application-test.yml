@@ -7,3 +7,19 @@ spring:
   jpa:
     hibernate:
       ddl-auto: create-drop
+    open-in-view: false
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: test-client-id
+            client-secret: test-client-secret
+            scope: email,profile
+
+jwt:
+  secret: test-secret-key-must-be-at-least-32-characters
+  expiration: 1800000
+
+app:
+  base-url: http://localhost:8080
