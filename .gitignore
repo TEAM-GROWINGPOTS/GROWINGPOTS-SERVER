@@ -42,6 +42,9 @@ out/
 ### Logs ###
 *.log
 
+### H2 File Database ###
+data/
+
 ### Environment ###
 .env
 .env.*
