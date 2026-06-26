@@ -71,11 +71,18 @@ jobs:
             DB_PASSWORD='${{ secrets.DB_PASSWORD }}' \
             JWT_SECRET='${{ secrets.JWT_SECRET }}' \
             java -jar "${APP_JAR}" --spring.profiles.active=prod > "${APP_LOG}" 2>&1 &
-          sleep 5
 
-          if ! pgrep -f "java -jar ${APP_JAR}" > /dev/null; then
-            echo "Application failed to start. Recent logs:"
-            tail -n 100 "${APP_LOG}" || true
-            exit 1
-          fi
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080/actuator/health > /dev/null 2>&1; then
+              echo "Application started successfully"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "Application failed to start. Recent logs:"
+              tail -n 50 "${APP_LOG}" || true
+              exit 1
+            fi
+            echo "Waiting for application... ($i/30)"
+            sleep 2
+          done
           EOF
