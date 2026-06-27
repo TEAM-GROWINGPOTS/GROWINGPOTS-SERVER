@@ -1,5 +1,6 @@
 package com.growingpots.global.security;
 
+import com.growingpots.global.response.error.ErrorCode;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.OctetSequenceKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
@@ -17,6 +18,7 @@ import org.springframework.stereotype.Component;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.Optional;
 
 @Slf4j
 @Component
@@ -50,16 +52,19 @@ public class JwtTokenProvider {
         return decoder.decode(token).getSubject();
     }
 
-    public boolean validateToken(String token) {
+    public Optional<ErrorCode> extractErrorCode(String token) {
         try {
             decoder.decode(token);
-            return true;
+            return Optional.empty();
         } catch (JwtValidationException e) {
             log.debug("JWT validation failed: {}", e.getMessage());
-            return false;
+            boolean isExpired = e.getErrors().stream()
+                    .anyMatch(err -> err.getDescription() != null
+                            && err.getDescription().contains("Jwt expired"));
+            return Optional.of(isExpired ? ErrorCode.EXPIRED_TOKEN : ErrorCode.INVALID_TOKEN);
         } catch (Exception e) {
             log.warn("Invalid JWT: {}", e.getMessage());
-            return false;
+            return Optional.of(ErrorCode.INVALID_TOKEN);
         }
     }
 }

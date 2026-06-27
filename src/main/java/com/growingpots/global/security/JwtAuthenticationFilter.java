@@ -1,5 +1,6 @@
 package com.growingpots.global.security;
 
+import com.growingpots.global.response.error.ErrorCode;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -15,6 +16,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.Optional;
 
 @Slf4j
 @Component
@@ -29,14 +31,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
         String token = resolveToken(request);
 
-        if (token != null && jwtTokenProvider.validateToken(token)) {
-            String subject = jwtTokenProvider.getSubject(token);
+        if (token != null) {
+            Optional<ErrorCode> error = jwtTokenProvider.extractErrorCode(token);
+            if (error.isPresent()) {
+                request.setAttribute("exception", error.get());
+            } else {
+                String subject = jwtTokenProvider.getSubject(token);
 
-            // TODO: User 엔티티 구현 후 UserDetailsService로 교체
-            UsernamePasswordAuthenticationToken authentication =
-                    new UsernamePasswordAuthenticationToken(subject, null, Collections.emptyList());
-            authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-            SecurityContextHolder.getContext().setAuthentication(authentication);
+                // TODO: User 엔티티 구현 후 UserDetailsService로 교체
+                UsernamePasswordAuthenticationToken authentication =
+                        new UsernamePasswordAuthenticationToken(subject, null, Collections.emptyList());
+                authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+            }
         }
 
         filterChain.doFilter(request, response);
