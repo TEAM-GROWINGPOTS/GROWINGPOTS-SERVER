@@ -1,5 +1,7 @@
 package com.growingpots.global.config;
 
+import com.growingpots.global.security.JwtAccessDeniedHandler;
+import com.growingpots.global.security.JwtAuthenticationEntryPoint;
 import com.growingpots.global.security.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -19,6 +21,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+    private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
 
     private static final String[] PERMIT_ALL = {
             "/api/v1/auth/**",
@@ -26,7 +30,8 @@ public class SecurityConfig {
             "/login/**",
             "/swagger-ui/**",
             "/swagger-ui.html",
-            "/v3/api-docs/**"
+            "/v3/api-docs/**",
+            "/actuator/health"
     };
 
     @Bean
@@ -44,6 +49,9 @@ public class SecurityConfig {
 //                                .baseUri("/oauth2/authorization"))
 //                        .redirectionEndpoint(endpoint -> endpoint
 //                                .baseUri("/login/oauth2/code/*")))
+                .exceptionHandling(e -> e
+                        .authenticationEntryPoint(jwtAuthenticationEntryPoint)
+                        .accessDeniedHandler(jwtAccessDeniedHandler))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
