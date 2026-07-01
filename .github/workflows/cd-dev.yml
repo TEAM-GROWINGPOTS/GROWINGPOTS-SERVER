@@ -70,6 +70,7 @@ jobs:
             DB_USERNAME='${{ secrets.DB_USERNAME }}' \
             DB_PASSWORD='${{ secrets.DB_PASSWORD }}' \
             JWT_SECRET='${{ secrets.JWT_SECRET }}' \
+            DISCORD_WEBHOOK_URL='${{ secrets.DISCORD_WEBHOOK_URL }}' \
             java -jar "${APP_JAR}" --spring.profiles.active=prod > "${APP_LOG}" 2>&1 &
 
           for i in $(seq 1 30); do
@@ -86,3 +87,37 @@ jobs:
             sleep 2
           done
           EOF
+
+      - name: 배포 성공 알림
+        if: success()
+        run: |
+          curl -X POST ${{ secrets.DISCORD_WEBHOOK_URL }} \
+          -H "Content-Type: application/json" \
+          -d '{
+            "embeds": [{
+              "title": "✅ 배포 성공",
+              "description": "`${{ github.ref_name }}` 브랜치가 배포됐어요.",
+              "color": 5763719,
+              "fields": [
+                {"name": "커밋", "value": "${{ github.sha }}", "inline": true},
+                {"name": "작업자", "value": "${{ github.actor }}", "inline": true}
+              ]
+            }]
+          }'
+
+      - name: 배포 실패 알림
+        if: failure()
+        run: |
+          curl -X POST ${{ secrets.DISCORD_WEBHOOK_URL }} \
+          -H "Content-Type: application/json" \
+          -d '{
+            "embeds": [{
+              "title": "❌ 배포 실패",
+              "description": "Actions를 확인해주세요.",
+              "color": 15548997,
+              "fields": [
+                {"name": "작업자", "value": "${{ github.actor }}", "inline": true},
+                {"name": "링크", "value": "https://github.com/${{ github.repository }}/actions", "inline": true}
+              ]
+            }]
+          }'

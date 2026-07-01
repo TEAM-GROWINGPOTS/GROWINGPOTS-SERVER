@@ -19,6 +19,9 @@ jwt:
 app:
   base-url: https://growing-pots.p-e.kr
 
+discord:
+  webhook-url: ${DISCORD_WEBHOOK_URL}
+
 logging:
   level:
     com.growingpots: info

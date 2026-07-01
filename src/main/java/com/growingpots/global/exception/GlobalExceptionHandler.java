@@ -2,9 +2,12 @@ package com.growingpots.global.exception;
 
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
+import com.growingpots.global.discord.DiscordNotifier;
 import com.growingpots.global.response.BaseResponse;
 import com.growingpots.global.response.error.ErrorCode;
 import com.growingpots.global.response.error.ErrorType;
+import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -23,8 +26,11 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
+@RequiredArgsConstructor
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private final DiscordNotifier discordNotifier;
 
     // 커스텀 예외
     @ExceptionHandler(BaseException.class)
@@ -110,8 +116,12 @@ public class GlobalExceptionHandler {
 
     // 그 외 모든 예외
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<BaseResponse<?>> handleException(Exception e) {
+    public ResponseEntity<BaseResponse<?>> handleException(Exception e, HttpServletRequest request) {
         log.error("[UnhandledException] {}", e.getMessage(), e);
+        String message = String.format("**URL**: %s %s\n**Error**: %s\n**Message**: %s",
+                request.getMethod(), request.getRequestURI(),
+                e.getClass().getSimpleName(), e.getMessage());
+        discordNotifier.sendError("🚨 서버 에러 발생", message);
         return toResponse(ErrorCode.INTERNAL_SERVER_ERROR);
     }
 
