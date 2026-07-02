@@ -90,8 +90,11 @@ jobs:
 
       - name: 배포 성공 알림
         if: success()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
-          curl -X POST ${{ secrets.DISCORD_WEBHOOK_URL }} \
+          [ -z "$DISCORD_WEBHOOK_URL" ] && exit 0
+          curl -sf -X POST "$DISCORD_WEBHOOK_URL" \
           -H "Content-Type: application/json" \
           -d '{
             "embeds": [{
@@ -103,12 +106,15 @@ jobs:
                 {"name": "작업자", "value": "${{ github.actor }}", "inline": true}
               ]
             }]
-          }'
+          }' || true
 
       - name: 배포 실패 알림
         if: failure()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
-          curl -X POST ${{ secrets.DISCORD_WEBHOOK_URL }} \
+          [ -z "$DISCORD_WEBHOOK_URL" ] && exit 0
+          curl -sf -X POST "$DISCORD_WEBHOOK_URL" \
           -H "Content-Type: application/json" \
           -d '{
             "embeds": [{
@@ -120,4 +126,4 @@ jobs:
                 {"name": "링크", "value": "https://github.com/${{ github.repository }}/actions", "inline": true}
               ]
             }]
-          }'
+          }' || true
