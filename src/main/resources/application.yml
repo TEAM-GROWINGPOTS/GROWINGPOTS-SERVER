@@ -23,3 +23,7 @@ springdoc:
     doc-expansion: none
     display-request-duration: true
     try-it-out-enabled: true
+
+oauth:
+  kakao:
+    user-info-uri: https://kapi.kakao.com/v2/user/me

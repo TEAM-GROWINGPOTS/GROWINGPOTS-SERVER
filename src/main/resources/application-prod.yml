@@ -15,6 +15,7 @@ spring:
 jwt:
   secret: ${JWT_SECRET}
   expiration: 1800000
+  refresh-expiration: 1209600000
 
 app:
   base-url: https://growing-pots.p-e.kr
