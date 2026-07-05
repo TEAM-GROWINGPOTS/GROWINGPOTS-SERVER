@@ -44,11 +44,6 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PERMIT_ALL).permitAll()
                         .anyRequest().authenticated())
-//                .oauth2Login(oauth2 -> oauth2
-//                        .authorizationEndpoint(endpoint -> endpoint
-//                                .baseUri("/oauth2/authorization"))
-//                        .redirectionEndpoint(endpoint -> endpoint
-//                                .baseUri("/login/oauth2/code/*")))
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint(jwtAuthenticationEntryPoint)
                         .accessDeniedHandler(jwtAccessDeniedHandler))

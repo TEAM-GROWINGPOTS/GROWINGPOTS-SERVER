@@ -2,8 +2,8 @@ package com.growingpots.domain.user.service;
 
 import com.growingpots.domain.user.client.KakaoOAuthClient;
 import com.growingpots.domain.user.client.KakaoUserInfoResponse;
-import com.growingpots.domain.user.dto.OAuthLoginRequest;
-import com.growingpots.domain.user.dto.OAuthLoginResponse;
+import com.growingpots.domain.user.dto.request.OAuthLoginRequest;
+import com.growingpots.domain.user.dto.response.OAuthLoginResponse;
 import com.growingpots.domain.user.entity.Member;
 import com.growingpots.domain.user.entity.enums.OauthProvider;
 import com.growingpots.domain.user.repository.MemberRepository;
@@ -51,7 +51,7 @@ public class AuthService {
 
     private OauthProvider parseProvider(String provider) {
         try {
-            return OauthProvider.valueOf(provider);
+            return OauthProvider.valueOf(provider.toUpperCase());
         } catch (IllegalArgumentException e) {
             throw new BaseException(ErrorCode.INVALID_OAUTH_PROVIDER, provider);
         }

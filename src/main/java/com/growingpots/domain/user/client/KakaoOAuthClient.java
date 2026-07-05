@@ -2,8 +2,11 @@ package com.growingpots.domain.user.client;
 
 import com.growingpots.global.exception.BaseException;
 import com.growingpots.global.response.error.ErrorCode;
+import java.net.http.HttpClient;
+import java.time.Duration;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
@@ -15,7 +18,19 @@ import org.springframework.web.client.RestClientException;
 @Component
 public class KakaoOAuthClient {
 
-    private final RestClient restClient = RestClient.create();
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(3);
+    private static final Duration READ_TIMEOUT = Duration.ofSeconds(5);
+
+    private final RestClient restClient = RestClient.builder()
+            .requestFactory(createRequestFactory())
+            .build();
+
+    private static JdkClientHttpRequestFactory createRequestFactory() {
+        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(
+                HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build());
+        requestFactory.setReadTimeout(READ_TIMEOUT);
+        return requestFactory;
+    }
 
     @Value("${oauth.kakao.user-info-uri}")
     private String userInfoUri;
