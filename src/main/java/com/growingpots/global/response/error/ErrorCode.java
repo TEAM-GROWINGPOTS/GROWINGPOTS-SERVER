@@ -27,10 +27,12 @@ public enum ErrorCode implements ErrorType {
 
     // User
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "USER_001", "존재하지 않는 사용자입니다."),
+    STUDENT_PROFILE_ALREADY_EXISTS(HttpStatus.CONFLICT, "USER_002", "이미 온보딩 완료된 사용자입니다."),
 
     // University
     UNIVERSITY_NOT_FOUND(HttpStatus.NOT_FOUND, "UNIV_001", "존재하지 않는 학교입니다."),
     MAJOR_NOT_FOUND(HttpStatus.NOT_FOUND, "UNIV_002", "존재하지 않는 학과입니다."),
+    DEPARTMENT_NOT_IN_SCHOOL(HttpStatus.BAD_REQUEST, "UNIV_003", "해당 학교에 속하지 않는 학과입니다."),
 
     // Transcript
     PDF_PARSING_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "TRANS_001", "PDF 파싱에 실패했습니다."),

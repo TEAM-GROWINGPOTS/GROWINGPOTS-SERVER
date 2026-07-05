@@ -21,10 +21,12 @@ public enum SuccessCode implements SuccessType {
     // User
     USER_FOUND(HttpStatus.OK, "USER_200", "사용자 조회에 성공했습니다."),
     USER_UPDATED(HttpStatus.OK, "USER_200_1", "사용자 정보가 수정됐습니다."),
+    STUDENT_PROFILE_CREATED(HttpStatus.CREATED, "USER_201", "학적 정보가 저장되었습니다."),
 
     // University
     UNIVERSITY_LIST_FOUND(HttpStatus.OK, "UNIV_200", "학교 목록 조회에 성공했습니다."),
     MAJOR_LIST_FOUND(HttpStatus.OK, "UNIV_200_1", "학과 목록 조회에 성공했습니다."),
+    ONBOARDING_OPTIONS_FOUND(HttpStatus.OK, "UNIV_200_2", "온보딩 옵션 조회에 성공했습니다."),
 
     // Transcript
     PDF_PARSED(HttpStatus.CREATED, "TRANS_201", "PDF 파싱에 성공했습니다."),

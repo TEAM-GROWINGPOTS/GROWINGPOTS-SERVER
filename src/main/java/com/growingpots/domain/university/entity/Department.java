@@ -1,7 +1,5 @@
-package com.growingpots.domain.user.entity;
+package com.growingpots.domain.university.entity;
 
-import com.growingpots.domain.university.entity.Department;
-import com.growingpots.domain.university.entity.School;
 import com.growingpots.global.entity.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -11,7 +9,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
-import jakarta.persistence.OneToOne;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -20,32 +17,26 @@ import lombok.NoArgsConstructor;
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class StudentProfile extends BaseTimeEntity {
+public class Department extends BaseTimeEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "member_id", nullable = false, unique = true)
-    private Member member;
-
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "school_id", nullable = false)
     private School school;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "department_id", nullable = false)
-    private Department department;
+    @Column(nullable = false)
+    private String college;
 
     @Column(nullable = false)
-    private int admissionYear;
+    private String name;
 
     @Builder
-    private StudentProfile(Member member, School school, Department department, int admissionYear) {
-        this.member = member;
+    private Department(School school, String college, String name) {
         this.school = school;
-        this.department = department;
-        this.admissionYear = admissionYear;
+        this.college = college;
+        this.name = name;
     }
 }
