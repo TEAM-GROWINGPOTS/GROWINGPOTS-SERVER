@@ -1,7 +1,9 @@
 package com.growingpots.domain.user.controller;
 
 import com.growingpots.domain.user.dto.request.OAuthLoginRequest;
+import com.growingpots.domain.user.dto.request.TokenReissueRequest;
 import com.growingpots.domain.user.dto.response.OAuthLoginResponse;
+import com.growingpots.domain.user.dto.response.TokenReissueResponse;
 import com.growingpots.domain.user.service.AuthService;
 import com.growingpots.global.response.BaseResponse;
 import com.growingpots.global.response.success.SuccessCode;
@@ -40,5 +42,23 @@ public class AuthController {
         OAuthLoginResponse response = authService.login(request);
         return ResponseEntity.status(SuccessCode.LOGIN_SUCCESS.getStatus())
                 .body(BaseResponse.success(SuccessCode.LOGIN_SUCCESS, response));
+    }
+
+    @Operation(
+            summary = "토큰 재발급",
+            description = "refreshToken으로 accessToken과 refreshToken을 함께 재발급한다. accessToken 만료 시 자동 호출된다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "재발급 성공 (AUTH_200_2)"),
+            @ApiResponse(responseCode = "400", description = "요청값 검증 실패(CMN_002)"),
+            @ApiResponse(responseCode = "401",
+                    description = "만료된 refreshToken(AUTH_002), 유효하지 않은 refreshToken(AUTH_001), "
+                            + "저장된 토큰과 불일치(AUTH_005)")
+    })
+    @PostMapping("/reissue")
+    public ResponseEntity<BaseResponse<TokenReissueResponse>> reissue(@Valid @RequestBody TokenReissueRequest request) {
+        TokenReissueResponse response = authService.reissue(request);
+        return ResponseEntity.status(SuccessCode.TOKEN_REISSUED.getStatus())
+                .body(BaseResponse.success(SuccessCode.TOKEN_REISSUED, response));
     }
 }

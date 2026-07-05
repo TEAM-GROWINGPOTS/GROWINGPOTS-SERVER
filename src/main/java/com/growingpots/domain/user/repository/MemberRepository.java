@@ -8,4 +8,6 @@ import java.util.Optional;
 
 public interface MemberRepository extends JpaRepository<Member, Long> {
     Optional<Member> findByOauthProviderAndOauthId(OauthProvider oauthProvider, String oauthId);
+
+    Optional<Member> findByIdAndRefreshToken(Long id, String refreshToken);
 }

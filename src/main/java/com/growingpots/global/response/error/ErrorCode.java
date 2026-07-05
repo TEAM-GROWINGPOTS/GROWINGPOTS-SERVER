@@ -23,6 +23,7 @@ public enum ErrorCode implements ErrorType {
     EXPIRED_TOKEN(HttpStatus.UNAUTHORIZED, "AUTH_002", "만료된 토큰입니다."),
     INVALID_OAUTH_PROVIDER(HttpStatus.BAD_REQUEST, "AUTH_003", "지원하지 않는 소셜 로그인입니다."),
     OAUTH_SERVER_ERROR(HttpStatus.BAD_GATEWAY, "AUTH_004", "소셜 서버 통신에 실패했습니다."),
+    REFRESH_TOKEN_NOT_FOUND(HttpStatus.UNAUTHORIZED, "AUTH_005", "저장된 토큰과 일치하지 않습니다."),
 
     // User
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "USER_001", "존재하지 않는 사용자입니다."),
