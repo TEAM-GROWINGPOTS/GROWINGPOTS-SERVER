@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 
 import java.util.Map;
@@ -76,6 +77,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MissingServletRequestParameterException.class)
     public ResponseEntity<BaseResponse<?>> handleMissingParam(MissingServletRequestParameterException e) {
         log.warn("[MissingParam] param={}", e.getParameterName());
+        return toResponse(ErrorCode.MISSING_PARAMETER);
+    }
+
+    // 필수 파트(예: multipart 파일) 누락
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<BaseResponse<?>> handleMissingPart(MissingServletRequestPartException e) {
+        log.warn("[MissingPart] part={}", e.getRequestPartName());
         return toResponse(ErrorCode.MISSING_PARAMETER);
     }
 

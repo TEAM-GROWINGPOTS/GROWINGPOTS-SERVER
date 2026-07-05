@@ -7,19 +7,23 @@ import com.growingpots.domain.transcript.entity.CertResult;
 import com.growingpots.domain.transcript.entity.enums.CertType;
 import com.growingpots.domain.transcript.entity.enums.CourseStatus;
 import com.growingpots.domain.transcript.entity.GraduationAnalysisSummary;
-import com.growingpots.domain.transcript.entity.enums.MajorType;
 import com.growingpots.domain.transcript.entity.enums.RecordSource;
 import com.growingpots.domain.transcript.entity.StudentCourse;
-import com.growingpots.domain.transcript.entity.StudentMajor;
 import com.growingpots.domain.transcript.parser.ParsedTranscript;
 import com.growingpots.domain.transcript.parser.PdfParsingException;
 import com.growingpots.domain.transcript.parser.PdfTranscriptParser;
 import com.growingpots.domain.transcript.repository.CertResultRepository;
 import com.growingpots.domain.transcript.repository.GraduationAnalysisSummaryRepository;
 import com.growingpots.domain.transcript.repository.StudentCourseRepository;
-import com.growingpots.domain.transcript.repository.StudentMajorRepository;
 import com.growingpots.domain.university.entity.Department;
 import com.growingpots.domain.university.repository.DepartmentRepository;
+import com.growingpots.domain.user.entity.Member;
+import com.growingpots.domain.user.entity.StudentMajor;
+import com.growingpots.domain.user.entity.StudentMajor.MajorType;
+import com.growingpots.domain.user.entity.StudentProfile;
+import com.growingpots.domain.user.repository.MemberRepository;
+import com.growingpots.domain.user.repository.StudentMajorRepository;
+import com.growingpots.domain.user.repository.StudentProfileRepository;
 import com.growingpots.global.exception.BaseException;
 import com.growingpots.global.response.error.ErrorCode;
 import java.io.IOException;
@@ -46,6 +50,8 @@ public class TranscriptService {
     private static final Pattern DIGITS_PATTERN = Pattern.compile("\\d+");
     private static final Pattern DECIMAL_PATTERN = Pattern.compile("\\d+(\\.\\d+)?");
 
+    private final MemberRepository memberRepository;
+    private final StudentProfileRepository studentProfileRepository;
     private final StudentCourseRepository studentCourseRepository;
     private final StudentMajorRepository studentMajorRepository;
     private final DepartmentRepository departmentRepository;
@@ -56,6 +62,8 @@ public class TranscriptService {
 
     @Transactional
     public void uploadTranscript(Long memberId, MultipartFile file) {
+        StudentProfile studentProfile = findStudentProfile(memberId);
+
         byte[] pdfBytes = readBytes(file);
         validatePdfFormat(pdfBytes);
 
@@ -67,13 +75,20 @@ public class TranscriptService {
         }
         logForVerification(parsed);
 
-        studentCourseRepository.deleteByMemberIdAndSource(memberId, RecordSource.PDF);
-        studentCourseRepository.saveAll(toStudentCourses(memberId, parsed.courses()));
+        studentCourseRepository.deleteByStudentProfileAndSource(studentProfile, RecordSource.PDF);
+        studentCourseRepository.saveAll(toStudentCourses(studentProfile, parsed.courses()));
 
-        List<StudentMajor> studentMajors = saveMajorsAndSummaries(memberId, parsed);
+        List<StudentMajor> studentMajors = saveMajorsAndSummaries(studentProfile, parsed);
 
-        certResultRepository.deleteByMemberIdAndSource(memberId, RecordSource.PDF);
-        certResultRepository.saveAll(toCertResults(memberId, studentMajors, parsed.graduationSummary()));
+        certResultRepository.deleteByStudentProfileAndSource(studentProfile, RecordSource.PDF);
+        certResultRepository.saveAll(toCertResults(studentProfile, studentMajors, parsed.graduationSummary()));
+    }
+
+    private StudentProfile findStudentProfile(Long memberId) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND));
+        return studentProfileRepository.findByMember(member)
+                .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
     }
 
     private byte[] readBytes(MultipartFile file) {
@@ -104,20 +119,20 @@ public class TranscriptService {
         }
     }
 
-    private List<StudentCourse> toStudentCourses(Long memberId, List<Map<String, String>> courses) {
+    private List<StudentCourse> toStudentCourses(StudentProfile studentProfile, List<Map<String, String>> courses) {
         return courses.stream()
-                .map(course -> toStudentCourse(memberId, course))
+                .map(course -> toStudentCourse(studentProfile, course))
                 .toList();
     }
 
-    private StudentCourse toStudentCourse(Long memberId, Map<String, String> course) {
+    private StudentCourse toStudentCourse(StudentProfile studentProfile, Map<String, String> course) {
         String section = course.get("section");
         String rawClassification = course.get("rawClassification");
         String semester = course.get("semester");
         boolean inProgress = CURRENT_SEMESTER_SECTION.equals(section);
 
         return StudentCourse.builder()
-                .memberId(memberId)
+                .studentProfile(studentProfile)
                 .rawCourseCode(course.get("courseCode"))
                 .rawCourseName(course.get("courseName"))
                 .credit(Integer.parseInt(course.get("credits")))
@@ -141,10 +156,10 @@ public class TranscriptService {
     }
 
     // 전공(본전공/복수전공)별로 STUDENT_MAJOR를 찾거나 만들고, GRADUATION_ANALYSIS_SUMMARY는 덮어쓴다.
-    private List<StudentMajor> saveMajorsAndSummaries(Long memberId, ParsedTranscript parsed) {
+    private List<StudentMajor> saveMajorsAndSummaries(StudentProfile studentProfile, ParsedTranscript parsed) {
         List<StudentMajor> studentMajors = new ArrayList<>();
         for (Map<String, String> majorRequirement : parsed.majorRequirements()) {
-            StudentMajor studentMajor = findOrCreateStudentMajor(memberId, majorRequirement);
+            StudentMajor studentMajor = findOrCreateStudentMajor(studentProfile, majorRequirement, parsed.studentInfo());
             studentMajors.add(studentMajor);
 
             GraduationAnalysisSummary newSummary = toGraduationAnalysisSummary(
@@ -157,25 +172,26 @@ public class TranscriptService {
         return studentMajors;
     }
 
-    private StudentMajor findOrCreateStudentMajor(Long memberId, Map<String, String> majorRequirement) {
+    private StudentMajor findOrCreateStudentMajor(
+            StudentProfile studentProfile, Map<String, String> majorRequirement, Map<String, String> studentInfo) {
         MajorType majorType = toMajorType(majorRequirement.get("majorType"));
-        Department department = findMatchingDepartment(majorRequirement.get("majorName"));
+        String majorName = majorRequirement.get("majorName");
+        Department matched = findMatchingDepartment(majorName);
 
-        if (department != null) {
-            return studentMajorRepository.findByMemberIdAndDepartment(memberId, department)
-                    .orElseGet(() -> studentMajorRepository.save(StudentMajor.builder()
-                            .memberId(memberId)
-                            .majorType(majorType)
-                            .department(department)
-                            .build()));
+        // majorName이 학과명이 아니라 트랙명(예: "영화트랙")인 학과도 있다. 본전공은 학생정보의 학과명으로 한 번 더 시도한다.
+        if (matched == null && majorType == MajorType.MAIN) {
+            matched = findMatchingDepartment(studentInfo.get("department"));
+        }
+        if (matched == null) {
+            throw new BaseException(ErrorCode.MAJOR_NOT_FOUND, majorName);
         }
 
-        log.warn("전공명과 매칭되는 학과를 찾지 못함: {}", majorRequirement.get("majorName"));
-        return studentMajorRepository.findByMemberIdAndDepartmentIsNullAndMajorType(memberId, majorType)
+        Department department = matched;
+        return studentMajorRepository.findByStudentProfileAndDepartment(studentProfile, department)
                 .orElseGet(() -> studentMajorRepository.save(StudentMajor.builder()
-                        .memberId(memberId)
+                        .studentProfile(studentProfile)
                         .majorType(majorType)
-                        .department(null)
+                        .department(department)
                         .build()));
     }
 
@@ -191,9 +207,9 @@ public class TranscriptService {
                 .orElse(null);
     }
 
-    // "스포츠의학과" = "스포츠의학"(전공명) + "과" 이므로 "학과"를 통째로 지우면 "학"까지 날아간다. "과"/"학부"만 벗겨낸다.
+    // "스포츠의학과"="스포츠의학"+"과", "컴퓨터공학부"="컴퓨터공학"+"부" 이므로 "학"까지 포함해서 지우면 전공명이 잘린다. "과"/"부"만 벗겨낸다.
     private String normalizeDepartmentName(String name) {
-        return name.replaceAll("(학부|과)$", "");
+        return name.replaceAll("(부|과)$", "");
     }
 
     // ERD의 MAJOR_TYPE은 MAIN/DOUBLE 2종뿐이라, PDF의 4가지 표기(단일전공/심화전공/복수전공/다전공)를 2종으로 합친다.
@@ -246,21 +262,21 @@ public class TranscriptService {
                 .orElse(0);
     }
 
-    private List<CertResult> toCertResults(Long memberId, List<StudentMajor> studentMajors, Map<String, String> graduationSummary) {
+    private List<CertResult> toCertResults(StudentProfile studentProfile, List<StudentMajor> studentMajors, Map<String, String> graduationSummary) {
         List<CertResult> certResults = new ArrayList<>();
         for (StudentMajor studentMajor : studentMajors) {
-            certResults.add(toCertResult(memberId, studentMajor, CertType.THESIS, graduationSummary.get("thesisJudgement")));
-            certResults.add(toCertResult(memberId, studentMajor, CertType.ENGLISH, graduationSummary.get("englishLectureJudgement")));
-            certResults.add(toCertResult(memberId, studentMajor, CertType.SW, graduationSummary.get("swCertification")));
-            certResults.add(toCertResult(memberId, studentMajor, CertType.TOPIK, graduationSummary.get("topik")));
-            certResults.add(toCertResult(memberId, studentMajor, CertType.GRADUATION_CERT, graduationSummary.get("graduationCertification")));
+            certResults.add(toCertResult(studentProfile, studentMajor, CertType.THESIS, graduationSummary.get("thesisJudgement")));
+            certResults.add(toCertResult(studentProfile, studentMajor, CertType.ENGLISH, graduationSummary.get("englishLectureJudgement")));
+            certResults.add(toCertResult(studentProfile, studentMajor, CertType.SW, graduationSummary.get("swCertification")));
+            certResults.add(toCertResult(studentProfile, studentMajor, CertType.TOPIK, graduationSummary.get("topik")));
+            certResults.add(toCertResult(studentProfile, studentMajor, CertType.GRADUATION_CERT, graduationSummary.get("graduationCertification")));
         }
         return certResults;
     }
 
-    private CertResult toCertResult(Long memberId, StudentMajor studentMajor, CertType certType, String rawJudgement) {
+    private CertResult toCertResult(StudentProfile studentProfile, StudentMajor studentMajor, CertType certType, String rawJudgement) {
         return CertResult.builder()
-                .memberId(memberId)
+                .studentProfile(studentProfile)
                 .studentMajor(studentMajor)
                 .certType(certType)
                 .result(toCertJudgement(rawJudgement))

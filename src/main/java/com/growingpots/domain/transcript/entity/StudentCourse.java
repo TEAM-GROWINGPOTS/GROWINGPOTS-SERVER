@@ -2,14 +2,18 @@ package com.growingpots.domain.transcript.entity;
 
 import com.growingpots.domain.transcript.entity.enums.CourseStatus;
 import com.growingpots.domain.transcript.entity.enums.RecordSource;
+import com.growingpots.domain.user.entity.StudentProfile;
 import com.growingpots.global.entity.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -24,8 +28,9 @@ public class StudentCourse extends BaseTimeEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "member_id", nullable = false)
-    private Long memberId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "student_profile_id", nullable = false)
+    private StudentProfile studentProfile;
 
     private String rawCourseCode;
 
@@ -58,7 +63,7 @@ public class StudentCourse extends BaseTimeEntity {
 
     @Builder
     private StudentCourse(
-            Long memberId,
+            StudentProfile studentProfile,
             String rawCourseCode,
             String rawCourseName,
             int credit,
@@ -70,7 +75,7 @@ public class StudentCourse extends BaseTimeEntity {
             CourseStatus status,
             RecordSource source
     ) {
-        this.memberId = memberId;
+        this.studentProfile = studentProfile;
         this.rawCourseCode = rawCourseCode;
         this.rawCourseName = rawCourseName;
         this.credit = credit;

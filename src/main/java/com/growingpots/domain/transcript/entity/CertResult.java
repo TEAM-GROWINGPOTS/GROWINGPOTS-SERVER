@@ -3,6 +3,8 @@ package com.growingpots.domain.transcript.entity;
 import com.growingpots.domain.transcript.entity.enums.CertJudgement;
 import com.growingpots.domain.transcript.entity.enums.CertType;
 import com.growingpots.domain.transcript.entity.enums.RecordSource;
+import com.growingpots.domain.user.entity.StudentMajor;
+import com.growingpots.domain.user.entity.StudentProfile;
 import com.growingpots.global.entity.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -28,8 +30,9 @@ public class CertResult extends BaseTimeEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "member_id", nullable = false)
-    private Long memberId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "student_profile_id", nullable = false)
+    private StudentProfile studentProfile;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "student_major_id", nullable = false)
@@ -48,8 +51,8 @@ public class CertResult extends BaseTimeEntity {
     private RecordSource source;
 
     @Builder
-    private CertResult(Long memberId, StudentMajor studentMajor, CertType certType, CertJudgement result, RecordSource source) {
-        this.memberId = memberId;
+    private CertResult(StudentProfile studentProfile, StudentMajor studentMajor, CertType certType, CertJudgement result, RecordSource source) {
+        this.studentProfile = studentProfile;
         this.studentMajor = studentMajor;
         this.certType = certType;
         this.result = result;

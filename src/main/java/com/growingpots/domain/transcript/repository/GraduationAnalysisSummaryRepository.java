@@ -1,7 +1,7 @@
 package com.growingpots.domain.transcript.repository;
 
 import com.growingpots.domain.transcript.entity.GraduationAnalysisSummary;
-import com.growingpots.domain.transcript.entity.StudentMajor;
+import com.growingpots.domain.user.entity.StudentMajor;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 

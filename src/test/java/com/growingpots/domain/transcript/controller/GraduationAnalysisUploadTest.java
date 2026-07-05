@@ -11,17 +11,22 @@ import com.growingpots.domain.transcript.entity.enums.CertJudgement;
 import com.growingpots.domain.transcript.entity.CertResult;
 import com.growingpots.domain.transcript.entity.enums.CertType;
 import com.growingpots.domain.transcript.entity.GraduationAnalysisSummary;
-import com.growingpots.domain.transcript.entity.enums.MajorType;
-import com.growingpots.domain.transcript.entity.StudentMajor;
 import com.growingpots.domain.transcript.parser.ParsedTranscript;
 import com.growingpots.domain.transcript.parser.PdfTranscriptParser;
 import com.growingpots.domain.transcript.repository.CertResultRepository;
 import com.growingpots.domain.transcript.repository.GraduationAnalysisSummaryRepository;
-import com.growingpots.domain.transcript.repository.StudentMajorRepository;
 import com.growingpots.domain.university.entity.Department;
 import com.growingpots.domain.university.entity.School;
 import com.growingpots.domain.university.repository.DepartmentRepository;
 import com.growingpots.domain.university.repository.SchoolRepository;
+import com.growingpots.domain.user.entity.Member;
+import com.growingpots.domain.user.entity.StudentMajor;
+import com.growingpots.domain.user.entity.StudentMajor.MajorType;
+import com.growingpots.domain.user.entity.StudentProfile;
+import com.growingpots.domain.user.entity.enums.OauthProvider;
+import com.growingpots.domain.user.repository.MemberRepository;
+import com.growingpots.domain.user.repository.StudentMajorRepository;
+import com.growingpots.domain.user.repository.StudentProfileRepository;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
@@ -47,6 +52,12 @@ class GraduationAnalysisUploadTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private MemberRepository memberRepository;
+
+    @Autowired
+    private StudentProfileRepository studentProfileRepository;
 
     @Autowired
     private StudentMajorRepository studentMajorRepository;
@@ -81,15 +92,31 @@ class GraduationAnalysisUploadTest {
                 });
     }
 
+    // 온보딩(StudentProfile 생성)까지 마친 학생을 만든다. PDF 업로드는 이 학생이 존재해야만 가능하다.
+    private StudentProfile onboardedStudent(String oauthId, Department department) {
+        Member member = memberRepository.save(Member.builder()
+                .nickname("테스트유저")
+                .oauthProvider(OauthProvider.KAKAO)
+                .oauthId(oauthId)
+                .email(null)
+                .build());
+        return studentProfileRepository.save(StudentProfile.builder()
+                .member(member)
+                .school(department.getSchool())
+                .department(department)
+                .admissionYear(2023)
+                .build());
+    }
+
     @Test
     void 전공별_졸업요건_스냅샷과_비학점요건_5종이_저장된다() throws Exception {
-        Long memberId = 9001L;
         Department sportsScience = department("스포츠의학과");
+        StudentProfile studentProfile = onboardedStudent("9001", sportsScience);
         when(pdfTranscriptParser.parse(any())).thenReturn(singleMajorTranscript());
 
-        upload(memberId);
+        upload(studentProfile.getMember().getId());
 
-        StudentMajor major = studentMajorRepository.findByMemberIdAndDepartment(memberId, sportsScience).orElseThrow();
+        StudentMajor major = studentMajorRepository.findByStudentProfileAndDepartment(studentProfile, sportsScience).orElseThrow();
         assertThat(major.getMajorType()).isEqualTo(MajorType.MAIN);
 
         GraduationAnalysisSummary summary = graduationAnalysisSummaryRepository.findByStudentMajor(major).orElseThrow();
@@ -103,7 +130,7 @@ class GraduationAnalysisUploadTest {
         assertThat(summary.getFreeGeCurrent()).isEqualTo(5);
 
         List<CertResult> certResults = certResultRepository.findAll().stream()
-                .filter(c -> memberId.equals(c.getMemberId()))
+                .filter(c -> studentProfile.getId().equals(c.getStudentProfile().getId()))
                 .toList();
         assertThat(certResults).hasSize(5);
         assertThat(certResultOf(certResults, CertType.SW)).isEqualTo(CertJudgement.PASS);
@@ -115,10 +142,10 @@ class GraduationAnalysisUploadTest {
 
     @Test
     void 재업로드하면_summary는_갱신되고_cert_result는_교체된다() throws Exception {
-        Long memberId = 9002L;
         Department sportsScience = department("스포츠의학과");
+        StudentProfile studentProfile = onboardedStudent("9002", sportsScience);
         when(pdfTranscriptParser.parse(any())).thenReturn(singleMajorTranscript());
-        upload(memberId);
+        upload(studentProfile.getMember().getId());
 
         Map<String, String> updatedMajorRequirement = Map.ofEntries(
                 Map.entry("majorType", "단일전공"),
@@ -133,24 +160,25 @@ class GraduationAnalysisUploadTest {
                 Map.of(), graduationSummary(), generalEducation(), List.of(updatedMajorRequirement), List.of());
         when(pdfTranscriptParser.parse(any())).thenReturn(updated);
 
-        upload(memberId);
+        upload(studentProfile.getMember().getId());
 
-        assertThat(studentMajorRepository.findAll().stream().filter(m -> memberId.equals(m.getMemberId()))).hasSize(1);
-        StudentMajor major = studentMajorRepository.findByMemberIdAndDepartment(memberId, sportsScience).orElseThrow();
+        assertThat(studentMajorRepository.findAll().stream()
+                .filter(m -> studentProfile.getId().equals(m.getStudentProfile().getId()))).hasSize(1);
+        StudentMajor major = studentMajorRepository.findByStudentProfileAndDepartment(studentProfile, sportsScience).orElseThrow();
         GraduationAnalysisSummary summary = graduationAnalysisSummaryRepository.findByStudentMajor(major).orElseThrow();
         assertThat(summary.getMajorElectiveCurrent()).isEqualTo(20);
 
         List<CertResult> certResults = certResultRepository.findAll().stream()
-                .filter(c -> memberId.equals(c.getMemberId()))
+                .filter(c -> studentProfile.getId().equals(c.getStudentProfile().getId()))
                 .toList();
         assertThat(certResults).hasSize(5);
     }
 
     @Test
     void 복수전공이면_교양값이_전공별로_동일하게_복제된다() throws Exception {
-        Long memberId = 9003L;
         Department physicalEducation = department("체육학과");
         Department sportsScience = department("스포츠의학과");
+        StudentProfile studentProfile = onboardedStudent("9003", physicalEducation);
         Map<String, String> mainMajor = Map.ofEntries(
                 Map.entry("majorType", "단일전공"), Map.entry("majorName", "체육학"), Map.entry("standardYear", "2024"),
                 Map.entry("basicEarned", "6"), Map.entry("basicRequired", "7"),
@@ -168,10 +196,10 @@ class GraduationAnalysisUploadTest {
         when(pdfTranscriptParser.parse(any())).thenReturn(new ParsedTranscript(
                 Map.of(), graduationSummary(), generalEducation(), List.of(mainMajor, doubleMajor), List.of()));
 
-        upload(memberId);
+        upload(studentProfile.getMember().getId());
 
-        StudentMajor main = studentMajorRepository.findByMemberIdAndDepartment(memberId, physicalEducation).orElseThrow();
-        StudentMajor doubleM = studentMajorRepository.findByMemberIdAndDepartment(memberId, sportsScience).orElseThrow();
+        StudentMajor main = studentMajorRepository.findByStudentProfileAndDepartment(studentProfile, physicalEducation).orElseThrow();
+        StudentMajor doubleM = studentMajorRepository.findByStudentProfileAndDepartment(studentProfile, sportsScience).orElseThrow();
         assertThat(doubleM.getMajorType()).isEqualTo(MajorType.DOUBLE);
 
         GraduationAnalysisSummary mainSummary = graduationAnalysisSummaryRepository.findByStudentMajor(main).orElseThrow();
