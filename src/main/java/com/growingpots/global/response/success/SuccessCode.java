@@ -16,7 +16,7 @@ public enum SuccessCode implements SuccessType {
     // Auth
     LOGIN_SUCCESS(HttpStatus.OK, "AUTH_200", "로그인에 성공했습니다."),
     LOGOUT_SUCCESS(HttpStatus.OK, "AUTH_200_1", "로그아웃에 성공했습니다."),
-    TOKEN_REISSUED(HttpStatus.OK, "AUTH_200_2", "토큰이 재발급됐습니다."),
+    TOKEN_REISSUED(HttpStatus.OK, "AUTH_200_2", "토큰이 재발급되었습니다."),
 
     // User
     USER_FOUND(HttpStatus.OK, "USER_200", "사용자 조회에 성공했습니다."),
