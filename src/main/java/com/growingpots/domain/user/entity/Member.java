@@ -43,6 +43,7 @@ public class Member extends BaseTimeEntity {
     @Column(nullable = false)
     private MemberRole role;
 
+    @Column(length = 512)
     private String refreshToken;
 
     @Builder
