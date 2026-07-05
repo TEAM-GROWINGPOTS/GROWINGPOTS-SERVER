@@ -20,6 +20,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 
 import java.util.Map;
@@ -91,6 +92,13 @@ public class GlobalExceptionHandler {
             log.warn("[NotReadable] {}", e.getMessage());
         }
         return toResponse(ErrorCode.INVALID_FORMAT);
+    }
+
+    // 업로드 용량 초과
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<BaseResponse<?>> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException e) {
+        log.warn("[MaxUploadSizeExceeded] {}", e.getMessage());
+        return toResponse(ErrorCode.PDF_TOO_LARGE);
     }
 
     // 잘못된 URL
