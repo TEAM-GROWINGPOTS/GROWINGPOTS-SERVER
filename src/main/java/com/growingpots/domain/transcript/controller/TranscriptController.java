@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+@TranscriptApi
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/diagnosis")
@@ -20,6 +21,7 @@ public class TranscriptController {
 
     private final TranscriptService transcriptService;
 
+    @TranscriptApi.UploadTranscript
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<BaseResponse<Void>> uploadTranscript(
             @RequestParam("file") MultipartFile file,
