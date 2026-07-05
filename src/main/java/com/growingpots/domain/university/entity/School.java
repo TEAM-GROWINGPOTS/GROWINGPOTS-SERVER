@@ -19,15 +19,11 @@ public class School {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    @Column(nullable = false, unique = true)
     private String name;
 
-    @Column(nullable = false)
-    private String code;
-
     @Builder
-    private School(String name, String code) {
+    private School(String name) {
         this.name = name;
-        this.code = code;
     }
 }

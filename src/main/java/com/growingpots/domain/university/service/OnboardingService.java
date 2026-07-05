@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.IntStream;
 
@@ -50,7 +51,7 @@ public class OnboardingService {
         int currentYear = LocalDate.now().getYear();
         return IntStream.rangeClosed(currentYear - ADMISSION_YEAR_RANGE + 1, currentYear)
                 .boxed()
-                .sorted((a, b) -> b - a)
+                .sorted(Comparator.reverseOrder())
                 .toList();
     }
 }
