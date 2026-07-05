@@ -16,11 +16,12 @@ public enum SuccessCode implements SuccessType {
     // Auth
     LOGIN_SUCCESS(HttpStatus.OK, "AUTH_200", "로그인에 성공했습니다."),
     LOGOUT_SUCCESS(HttpStatus.OK, "AUTH_200_1", "로그아웃에 성공했습니다."),
-    TOKEN_REISSUED(HttpStatus.OK, "AUTH_200_2", "토큰이 재발급됐습니다."),
+    TOKEN_REISSUED(HttpStatus.OK, "AUTH_200_2", "토큰이 재발급되었습니다."),
 
     // User
     USER_FOUND(HttpStatus.OK, "USER_200", "사용자 조회에 성공했습니다."),
     USER_UPDATED(HttpStatus.OK, "USER_200_1", "사용자 정보가 수정됐습니다."),
+    STUDENT_PROFILE_CREATED(HttpStatus.CREATED, "USER_201", "학적 정보가 저장되었습니다."),
 
     // University
     UNIVERSITY_LIST_FOUND(HttpStatus.OK, "UNIV_200", "학교 목록 조회에 성공했습니다."),

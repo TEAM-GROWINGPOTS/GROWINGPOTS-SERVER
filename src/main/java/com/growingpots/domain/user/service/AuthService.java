@@ -3,7 +3,9 @@ package com.growingpots.domain.user.service;
 import com.growingpots.domain.user.client.KakaoOAuthClient;
 import com.growingpots.domain.user.client.KakaoUserInfoResponse;
 import com.growingpots.domain.user.dto.request.OAuthLoginRequest;
+import com.growingpots.domain.user.dto.request.TokenReissueRequest;
 import com.growingpots.domain.user.dto.response.OAuthLoginResponse;
+import com.growingpots.domain.user.dto.response.TokenReissueResponse;
 import com.growingpots.domain.user.entity.Member;
 import com.growingpots.domain.user.entity.enums.OauthProvider;
 import com.growingpots.domain.user.repository.MemberRepository;
@@ -34,8 +36,29 @@ public class AuthService {
 
         String accessToken = jwtTokenProvider.generateToken(member.getId().toString());
         String refreshToken = jwtTokenProvider.generateRefreshToken(member.getId().toString());
+        member.updateRefreshToken(refreshToken);
 
         return new OAuthLoginResponse(accessToken, refreshToken, onboardingCompleted, member.getNickname());
+    }
+
+    @Transactional
+    public TokenReissueResponse reissue(TokenReissueRequest request) {
+        String refreshToken = request.refreshToken();
+        JwtTokenProvider.ValidatedToken validated = jwtTokenProvider.validate(refreshToken);
+        if (!validated.isValid()) {
+            throw new BaseException(validated.errorCode());
+        }
+
+        Long memberId = Long.valueOf(validated.subject());
+        Member member = memberRepository.findByIdAndRefreshToken(memberId, refreshToken)
+                .orElseThrow(() -> new BaseException(ErrorCode.REFRESH_TOKEN_NOT_FOUND));
+
+        String subject = memberId.toString();
+        String newAccessToken = jwtTokenProvider.generateToken(subject);
+        String newRefreshToken = jwtTokenProvider.generateRefreshToken(subject);
+        member.updateRefreshToken(newRefreshToken);
+
+        return new TokenReissueResponse(newAccessToken, newRefreshToken);
     }
 
     private Member findOrCreateMember(OauthProvider provider, KakaoUserInfoResponse userInfo) {
