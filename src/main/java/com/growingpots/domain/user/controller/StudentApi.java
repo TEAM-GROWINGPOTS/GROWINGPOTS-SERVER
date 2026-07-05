@@ -1,6 +1,6 @@
-package com.growingpots.domain.university.controller;
+package com.growingpots.domain.user.controller;
 
-import com.growingpots.domain.university.dto.response.OnboardingOptionsResponse;
+import com.growingpots.domain.user.dto.response.StudentProfileCreateResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
@@ -16,44 +16,49 @@ import java.lang.annotation.Target;
 
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
-@Tag(name = "Onboarding", description = "온보딩 관련 API")
-public @interface OnboardingApi {
+@Tag(name = "Student", description = "학생 프로필 관련 API")
+public @interface StudentApi {
 
     @Target(ElementType.METHOD)
     @Retention(RetentionPolicy.RUNTIME)
     @Operation(
-            summary = "온보딩 옵션 조회",
-            description = """
-                    온보딩 화면에 필요한 학교 목록, 학과 목록, 입학연도 목록을 반환합니다.
-
-                    - `schoolId` 미전달 시 전체 학교와 전체 학과를 반환합니다.
-                    - `schoolId` 전달 시 해당 학교와 해당 학교의 학과만 반환합니다.
-                    - 단과대학 필터링은 응답의 `college` 필드를 기준으로 클라이언트에서 처리합니다.
-                    - `admissionYears`는 현재 연도 기준 최근 8개년을 내림차순으로 반환합니다.
-                    """
+            summary = "학생 프로필 생성",
+            description = "학교, 학과, 입학연도를 기반으로 학생 프로필을 생성합니다."
     )
     @ApiResponses({
             @ApiResponse(
-                    responseCode = "200",
-                    description = "온보딩 옵션 조회 성공",
+                    responseCode = "201",
+                    description = "학생 프로필 생성 성공",
                     content = @Content(
                             mediaType = "application/json",
-                            schema = @Schema(implementation = OnboardingOptionsResponse.class),
+                            schema = @Schema(implementation = StudentProfileCreateResponse.class),
                             examples = @ExampleObject(value = """
                                     {
                                       "success": true,
-                                      "code": "UNIV_200_2",
-                                      "message": "온보딩 옵션 조회에 성공했습니다.",
+                                      "code": "USER_201",
+                                      "message": "학적 정보가 저장되었습니다.",
                                       "data": {
-                                        "schools": [
-                                          { "schoolId": 1, "name": "경희대학교 국제캠퍼스" }
-                                        ],
-                                        "departments": [
-                                          { "departmentId": 1, "schoolId": 1, "college": "공과대학", "name": "컴퓨터공학과" },
-                                          { "departmentId": 2, "schoolId": 1, "college": "공과대학", "name": "전자공학과" }
-                                        ],
-                                        "admissionYears": [2026, 2025, 2024, 2023, 2022, 2021, 2020, 2019]
+                                        "studentProfileId": 1,
+                                        "mainMajor": {
+                                          "studentMajorId": 1,
+                                          "departmentName": "컴퓨터공학과"
+                                        }
                                       }
+                                    }
+                                    """)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "잘못된 요청 (필수값 누락)",
+                    content = @Content(
+                            mediaType = "application/json",
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "success": false,
+                                      "code": "CMN_002",
+                                      "message": "잘못된 요청입니다.",
+                                      "data": null
                                     }
                                     """)
                     )
@@ -68,21 +73,6 @@ public @interface OnboardingApi {
                                       "success": false,
                                       "code": "CMN_005",
                                       "message": "인증이 필요합니다.",
-                                      "data": null
-                                    }
-                                    """)
-                    )
-            ),
-            @ApiResponse(
-                    responseCode = "404",
-                    description = "존재하지 않는 학교 ID",
-                    content = @Content(
-                            mediaType = "application/json",
-                            examples = @ExampleObject(value = """
-                                    {
-                                      "success": false,
-                                      "code": "UNIV_001",
-                                      "message": "존재하지 않는 학교입니다.",
                                       "data": null
                                     }
                                     """)
@@ -104,5 +94,5 @@ public @interface OnboardingApi {
                     )
             )
     })
-    @interface GetOptions {}
+    @interface CreateStudentProfile {}
 }

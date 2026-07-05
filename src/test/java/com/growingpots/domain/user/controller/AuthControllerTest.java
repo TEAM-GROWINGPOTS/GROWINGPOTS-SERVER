@@ -1,6 +1,10 @@
 package com.growingpots.domain.user.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.growingpots.domain.university.entity.Department;
+import com.growingpots.domain.university.entity.School;
+import com.growingpots.domain.university.repository.DepartmentRepository;
+import com.growingpots.domain.university.repository.SchoolRepository;
 import com.growingpots.domain.user.client.KakaoOAuthClient;
 import com.growingpots.domain.user.client.KakaoUserInfoResponse;
 import com.growingpots.domain.user.entity.Member;
@@ -10,6 +14,7 @@ import com.growingpots.domain.user.repository.MemberRepository;
 import com.growingpots.domain.user.repository.StudentProfileRepository;
 import com.growingpots.global.exception.BaseException;
 import com.growingpots.global.response.error.ErrorCode;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -42,8 +47,22 @@ class AuthControllerTest {
     @Autowired
     private StudentProfileRepository studentProfileRepository;
 
+    @Autowired
+    private SchoolRepository schoolRepository;
+
+    @Autowired
+    private DepartmentRepository departmentRepository;
+
     @MockitoBean
     private KakaoOAuthClient kakaoOAuthClient;
+
+    @AfterEach
+    void tearDown() {
+        studentProfileRepository.deleteAll();
+        memberRepository.deleteAll();
+        departmentRepository.deleteAll();
+        schoolRepository.deleteAll();
+    }
 
     @Test
     void 신규_카카오_사용자는_온보딩_미완료_상태로_로그인에_성공한다() throws Exception {
@@ -67,13 +86,25 @@ class AuthControllerTest {
 
     @Test
     void 온보딩을_완료한_기존_회원은_onboardingCompleted가_true다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교 국제캠퍼스").build());
+        Department department = departmentRepository.save(Department.builder()
+                .school(school)
+                .college("공과대학")
+                .name("컴퓨터공학과")
+                .build());
+
         Member member = memberRepository.save(Member.builder()
                 .nickname("기존회원")
                 .oauthProvider(OauthProvider.KAKAO)
                 .oauthId("2002")
                 .email(null)
                 .build());
-        studentProfileRepository.save(new StudentProfile(member));
+        studentProfileRepository.save(StudentProfile.builder()
+                .member(member)
+                .school(school)
+                .department(department)
+                .admissionYear(2022)
+                .build());
 
         when(kakaoOAuthClient.getUserInfo(anyString())).thenReturn(
                 new KakaoUserInfoResponse(2002L,
