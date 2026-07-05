@@ -44,6 +44,10 @@ public class StudentProfileService {
         Department department = departmentRepository.findById(request.departmentId())
                 .orElseThrow(() -> new BaseException(ErrorCode.MAJOR_NOT_FOUND));
 
+        if (!department.getSchool().getId().equals(school.getId())) {
+            throw new BaseException(ErrorCode.DEPARTMENT_NOT_IN_SCHOOL);
+        }
+
         StudentProfile studentProfile = studentProfileRepository.save(
                 StudentProfile.builder()
                         .member(member)
