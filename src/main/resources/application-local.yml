@@ -15,6 +15,7 @@ spring:
 jwt:
   secret: ${JWT_SECRET:local-development-jwt-secret-must-be-at-least-32-characters}
   expiration: 1800000
+  refresh-expiration: 1209600000
 
 app:
   base-url: http://localhost:8080
