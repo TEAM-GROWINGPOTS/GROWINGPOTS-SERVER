@@ -99,7 +99,7 @@ public class PdfTranscriptParser {
     }
 
     // 같은 과목코드가 일반 목록과 금학기수강학점에 동시에 나오면 같은 사건(현재 재수강 중)이므로
-    // 금학기수강학점 쪽만 남긴다. 단, 일반 목록에서 이미 "재수강"으로 표시된 건 과거의 별도 이력이라 그대로 둔다.
+    // 금학기수강학점 쪽만 남긴다. 단, 일반 목록에서 이미 "재수강"으로 표시된 건 과거의 별도 이력이라 그대로 유지
     private List<Map<String, String>> mergeCourses(
             List<Map<String, String>> regularCourses,
             List<Map<String, String>> currentSemesterCourses
@@ -204,7 +204,6 @@ public class PdfTranscriptParser {
             summary.put("thesisRequirement", criteria.group(7));
             summary.put("thesisEarned", earned.group(7));
             summary.put("topik", criteria.group(8));
-            // "취득" 줄은 "기준"/"판정" 줄과 달리 컬럼이 하나 적다(11개). 마지막 그룹이 SW인증 학점(기준=12번째, 취득=11번째)이다.
             summary.put("swCertRequirement", criteria.group(12));
             summary.put("swCertEarned", earned.group(11));
             summary.put("englishLectureJudgement", judgement.group(6));
