@@ -103,6 +103,12 @@ public class TranscriptPersister {
         return (month >= 3 && month <= 8) ? 1 : 2;
     }
 
+    // 학사년도 기준 계산. 1~2월은 달력상 다음 해지만 학사년도로는 전년도 2학기이므로 연도에서 1을 뺀다.
+    private int computeCurrentAcademicYear() {
+        LocalDate now = LocalDate.now();
+        return now.getMonthValue() <= 2 ? now.getYear() - 1 : now.getYear();
+    }
+
     private Integer extractGrade(String value) {
         if (value == null) {
             return null;
@@ -126,14 +132,19 @@ public class TranscriptPersister {
         String rawCourseCode = course.get("courseCode");
         boolean inProgress = CURRENT_SEMESTER_SECTION.equals(section);
 
+        // 금학기수강학점(진행 중) 과목은 PDF에 수강년도/학기가 안 찍혀 있어 오늘 날짜 기준으로 채운다.
+        Integer takenYear = semester != null ? takenYear(semester) : (inProgress ? computeCurrentAcademicYear() : null);
+        String takenSemester = semester != null ? takenSemester(semester)
+                : (inProgress ? String.valueOf(computeCurrentTerm()) : null);
+
         return StudentCourse.builder()
                 .studentProfile(studentProfile)
                 .course(rawCourseCode == null ? null : coursesByCode.get(rawCourseCode))
                 .rawCourseCode(rawCourseCode)
                 .rawCourseName(course.get("courseName"))
                 .credit(Integer.parseInt(course.get("credits")))
-                .takenYear(semester == null ? null : takenYear(semester))
-                .takenSemester(semester == null ? null : takenSemester(semester))
+                .takenYear(takenYear)
+                .takenSemester(takenSemester)
                 .section(section)
                 .rawClassification(rawClassification)
                 .isRetake(RETAKE_SECTION.equals(section))

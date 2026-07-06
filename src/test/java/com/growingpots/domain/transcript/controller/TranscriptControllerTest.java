@@ -198,7 +198,7 @@ class TranscriptControllerTest {
     }
 
     @Test
-    void 금학기수강학점_과목은_수강년도_학기없이_IN_PROGRESS로_저장된다() throws Exception {
+    void 금학기수강학점_과목은_오늘_날짜_기준_학사년도_학기로_IN_PROGRESS로_저장된다() throws Exception {
         StudentProfile studentProfile = onboardedStudent("5005");
         Map<String, String> inProgressCourse = Map.of(
                 "section", "금학기수강학점",
@@ -216,8 +216,12 @@ class TranscriptControllerTest {
 
         StudentCourse course = coursesOf(studentProfile).getFirst();
         assertThat(course.getStatus()).isEqualTo(CourseStatus.IN_PROGRESS);
-        assertThat(course.getTakenYear()).isNull();
-        assertThat(course.getTakenSemester()).isNull();
+
+        java.time.LocalDate now = java.time.LocalDate.now();
+        int expectedYear = now.getMonthValue() <= 2 ? now.getYear() - 1 : now.getYear();
+        int expectedTerm = (now.getMonthValue() >= 3 && now.getMonthValue() <= 8) ? 1 : 2;
+        assertThat(course.getTakenYear()).isEqualTo(expectedYear);
+        assertThat(course.getTakenSemester()).isEqualTo(String.valueOf(expectedTerm));
     }
 
     @Test
