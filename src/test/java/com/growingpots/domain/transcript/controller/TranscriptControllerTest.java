@@ -220,6 +220,44 @@ class TranscriptControllerTest {
         assertThat(course.getTakenSemester()).isNull();
     }
 
+    @Test
+    void 파싱된_학생정보로_StudentProfile의_학적정보가_갱신된다() throws Exception {
+        StudentProfile studentProfile = onboardedStudent("7007");
+        Map<String, String> studentInfo = Map.of(
+                "studentId", "2019123456",
+                "grade", "4",
+                "academicStatus", "재학"
+        );
+        when(pdfTranscriptParser.parse(any()))
+                .thenReturn(new ParsedTranscript(studentInfo, Map.of(), List.of(), List.of(), sampleParsedTranscript().courses()));
+
+        mockMvc.perform(multipart("/api/v1/diagnosis/upload")
+                        .file(new MockMultipartFile("file", "transcript.pdf", "application/pdf", PDF_BYTES))
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isCreated());
+
+        StudentProfile updated = studentProfileRepository.findById(studentProfile.getId()).orElseThrow();
+        assertThat(updated.getStudentNo()).isEqualTo("2019123456");
+        assertThat(updated.getCurrentGrade()).isEqualTo(4);
+        assertThat(updated.getEnrollmentStatus()).isEqualTo("재학");
+        assertThat(updated.getAdmissionYear()).isEqualTo(2019);
+        int currentMonth = java.time.LocalDate.now().getMonthValue();
+        assertThat(updated.getCurrentTerm()).isEqualTo((currentMonth >= 3 && currentMonth <= 8) ? 1 : 2);
+    }
+
+    @Test
+    void 과목과_전공요건이_모두_비어있으면_500_TRANS_001을_반환한다() throws Exception {
+        StudentProfile studentProfile = onboardedStudent("8008");
+        when(pdfTranscriptParser.parse(any()))
+                .thenReturn(new ParsedTranscript(Map.of(), Map.of(), List.of(), List.of(), List.of()));
+
+        mockMvc.perform(multipart("/api/v1/diagnosis/upload")
+                        .file(new MockMultipartFile("file", "transcript.pdf", "application/pdf", PDF_BYTES))
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("TRANS_001"));
+    }
+
     private List<StudentCourse> coursesOf(StudentProfile studentProfile) {
         return studentCourseRepository.findAll().stream()
                 .filter(course -> studentProfile.getId().equals(course.getStudentProfile().getId()))

@@ -2,65 +2,35 @@ package com.growingpots.domain.transcript.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.growingpots.domain.transcript.entity.enums.CertJudgement;
-import com.growingpots.domain.transcript.entity.CertResult;
-import com.growingpots.domain.transcript.entity.enums.CertType;
-import com.growingpots.domain.transcript.entity.enums.CourseStatus;
-import com.growingpots.domain.transcript.entity.GraduationAnalysisSummary;
-import com.growingpots.domain.transcript.entity.enums.RecordSource;
-import com.growingpots.domain.transcript.entity.StudentCourse;
 import com.growingpots.domain.transcript.parser.ParsedTranscript;
 import com.growingpots.domain.transcript.parser.PdfParsingException;
 import com.growingpots.domain.transcript.parser.PdfTranscriptParser;
-import com.growingpots.domain.transcript.repository.CertResultRepository;
-import com.growingpots.domain.transcript.repository.GraduationAnalysisSummaryRepository;
-import com.growingpots.domain.transcript.repository.StudentCourseRepository;
-import com.growingpots.domain.university.entity.Department;
-import com.growingpots.domain.university.repository.DepartmentRepository;
 import com.growingpots.domain.user.entity.Member;
-import com.growingpots.domain.user.entity.StudentMajor;
-import com.growingpots.domain.user.entity.StudentMajor.MajorType;
 import com.growingpots.domain.user.entity.StudentProfile;
 import com.growingpots.domain.user.repository.MemberRepository;
-import com.growingpots.domain.user.repository.StudentMajorRepository;
 import com.growingpots.domain.user.repository.StudentProfileRepository;
 import com.growingpots.global.exception.BaseException;
 import com.growingpots.global.response.error.ErrorCode;
 import java.io.IOException;
-import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+// PDF 파싱(DB 무관)과 DB 저장(TranscriptPersister)을 분리했다. 파싱하는 동안 DB 커넥션을 붙들고 있지 않기 위함.
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class TranscriptService {
 
     private static final byte[] PDF_MAGIC_BYTES = {'%', 'P', 'D', 'F'};
-    private static final String CURRENT_SEMESTER_SECTION = "금학기수강학점";
-    private static final String RETAKE_SECTION = "재수강";
-    private static final Pattern DIGITS_PATTERN = Pattern.compile("\\d+");
-    private static final Pattern DECIMAL_PATTERN = Pattern.compile("\\d+(\\.\\d+)?");
 
     private final MemberRepository memberRepository;
     private final StudentProfileRepository studentProfileRepository;
-    private final StudentCourseRepository studentCourseRepository;
-    private final StudentMajorRepository studentMajorRepository;
-    private final DepartmentRepository departmentRepository;
-    private final GraduationAnalysisSummaryRepository graduationAnalysisSummaryRepository;
-    private final CertResultRepository certResultRepository;
     private final PdfTranscriptParser pdfTranscriptParser;
+    private final TranscriptPersister transcriptPersister;
     private final ObjectMapper objectMapper;
 
-    @Transactional
     public void uploadTranscript(Long memberId, MultipartFile file) {
         StudentProfile studentProfile = findStudentProfile(memberId);
 
@@ -73,15 +43,10 @@ public class TranscriptService {
         } catch (PdfParsingException e) {
             throw new BaseException(ErrorCode.PDF_PARSING_FAILED, e.getMessage());
         }
+        validateNotEmpty(parsed);
         logForVerification(parsed);
 
-        studentCourseRepository.deleteByStudentProfileAndSource(studentProfile, RecordSource.PDF);
-        studentCourseRepository.saveAll(toStudentCourses(studentProfile, parsed.courses()));
-
-        List<StudentMajor> studentMajors = saveMajorsAndSummaries(studentProfile, parsed);
-
-        certResultRepository.deleteByStudentProfileAndSource(studentProfile, RecordSource.PDF);
-        certResultRepository.saveAll(toCertResults(studentProfile, studentMajors, parsed.graduationSummary()));
+        transcriptPersister.persist(studentProfile, parsed);
     }
 
     private StudentProfile findStudentProfile(Long memberId) {
@@ -110,6 +75,13 @@ public class TranscriptService {
         }
     }
 
+    // 과목/전공요건이 둘 다 비어있으면 파싱 자체는 성공해도 사실상 실패한 것이므로 여기서 걸러낸다.
+    private void validateNotEmpty(ParsedTranscript parsed) {
+        if (parsed.courses().isEmpty() && parsed.majorRequirements().isEmpty()) {
+            throw new BaseException(ErrorCode.PDF_PARSING_FAILED, "파싱된 과목/전공 정보가 없습니다.");
+        }
+    }
+
     // 자동 파싱 결과를 눈으로 검증하기 위한 용도 (DB에는 courses만 저장)
     private void logForVerification(ParsedTranscript parsed) {
         try {
@@ -117,203 +89,5 @@ public class TranscriptService {
         } catch (JsonProcessingException e) {
             log.warn("파싱 결과 로깅 실패: {}", e.getMessage());
         }
-    }
-
-    private List<StudentCourse> toStudentCourses(StudentProfile studentProfile, List<Map<String, String>> courses) {
-        return courses.stream()
-                .map(course -> toStudentCourse(studentProfile, course))
-                .toList();
-    }
-
-    private StudentCourse toStudentCourse(StudentProfile studentProfile, Map<String, String> course) {
-        String section = course.get("section");
-        String rawClassification = course.get("rawClassification");
-        String semester = course.get("semester");
-        boolean inProgress = CURRENT_SEMESTER_SECTION.equals(section);
-
-        return StudentCourse.builder()
-                .studentProfile(studentProfile)
-                .rawCourseCode(course.get("courseCode"))
-                .rawCourseName(course.get("courseName"))
-                .credit(Integer.parseInt(course.get("credits")))
-                .takenYear(semester == null ? null : takenYear(semester))
-                .takenSemester(semester == null ? null : takenSemester(semester))
-                .section(section)
-                .rawClassification(rawClassification)
-                .isRetake(RETAKE_SECTION.equals(section))
-                .status(inProgress ? CourseStatus.IN_PROGRESS : CourseStatus.COMPLETED)
-                .source(RecordSource.PDF)
-                .build();
-    }
-
-    // 파서가 내려주는 "yyyy/n" 형식(예: "2023/2")을 분리한다.
-    private Integer takenYear(String semester) {
-        return Integer.parseInt(semester.substring(0, semester.indexOf('/')));
-    }
-
-    private String takenSemester(String semester) {
-        return semester.substring(semester.indexOf('/') + 1);
-    }
-
-    // 전공(본전공/복수전공)별로 STUDENT_MAJOR를 찾거나 만들고, GRADUATION_ANALYSIS_SUMMARY는 덮어쓴다.
-    private List<StudentMajor> saveMajorsAndSummaries(StudentProfile studentProfile, ParsedTranscript parsed) {
-        List<StudentMajor> studentMajors = new ArrayList<>();
-        for (Map<String, String> majorRequirement : parsed.majorRequirements()) {
-            StudentMajor studentMajor = findOrCreateStudentMajor(studentProfile, majorRequirement, parsed.studentInfo());
-            studentMajors.add(studentMajor);
-
-            GraduationAnalysisSummary newSummary = toGraduationAnalysisSummary(
-                    studentMajor, majorRequirement, parsed.graduationSummary(), parsed.generalEducation());
-            graduationAnalysisSummaryRepository.findByStudentMajor(studentMajor)
-                    .ifPresentOrElse(
-                            existing -> existing.updateFrom(newSummary),
-                            () -> graduationAnalysisSummaryRepository.save(newSummary));
-        }
-        return studentMajors;
-    }
-
-    private StudentMajor findOrCreateStudentMajor(
-            StudentProfile studentProfile, Map<String, String> majorRequirement, Map<String, String> studentInfo) {
-        MajorType majorType = toMajorType(majorRequirement.get("majorType"));
-        String majorName = majorRequirement.get("majorName");
-        Department matched = findMatchingDepartment(majorName);
-
-        // majorName이 학과명이 아니라 트랙명(예: "영화트랙")인 학과도 있다. 본전공은 학생정보의 학과명으로 한 번 더 시도한다.
-        if (matched == null && majorType == MajorType.MAIN) {
-            matched = findMatchingDepartment(studentInfo.get("department"));
-        }
-        if (matched == null) {
-            throw new BaseException(ErrorCode.MAJOR_NOT_FOUND, majorName);
-        }
-
-        Department department = matched;
-        return studentMajorRepository.findByStudentProfileAndDepartment(studentProfile, department)
-                .orElseGet(() -> studentMajorRepository.save(StudentMajor.builder()
-                        .studentProfile(studentProfile)
-                        .majorType(majorType)
-                        .department(department)
-                        .build()));
-    }
-
-    // PDF의 전공명("스포츠의학")과 DEPARTMENT.name("스포츠의학과")은 "학과/과" 접미사 유무가 달라 정규화 후 비교한다.
-    private Department findMatchingDepartment(String majorName) {
-        if (majorName == null) {
-            return null;
-        }
-        String normalizedMajorName = normalizeDepartmentName(majorName);
-        return departmentRepository.findAll().stream()
-                .filter(department -> normalizeDepartmentName(department.getName()).equals(normalizedMajorName))
-                .findFirst()
-                .orElse(null);
-    }
-
-    // "스포츠의학과"="스포츠의학"+"과", "컴퓨터공학부"="컴퓨터공학"+"부" 이므로 "학"까지 포함해서 지우면 전공명이 잘린다. "과"/"부"만 벗겨낸다.
-    private String normalizeDepartmentName(String name) {
-        return name.replaceAll("(부|과)$", "");
-    }
-
-    // ERD의 MAJOR_TYPE은 MAIN/DOUBLE 2종뿐이라, PDF의 4가지 표기(단일전공/심화전공/복수전공/다전공)를 2종으로 합친다.
-    private MajorType toMajorType(String rawMajorType) {
-        return switch (rawMajorType) {
-            case "복수전공", "다전공" -> MajorType.DOUBLE;
-            default -> MajorType.MAIN;
-        };
-    }
-
-    private GraduationAnalysisSummary toGraduationAnalysisSummary(
-            StudentMajor studentMajor,
-            Map<String, String> majorRequirement,
-            Map<String, String> graduationSummary,
-            List<Map<String, String>> generalEducation
-    ) {
-        return GraduationAnalysisSummary.builder()
-                .studentMajor(studentMajor)
-                .totalCreditCurrent(extractInt(graduationSummary.get("earnedCredits")))
-                .totalCreditRequired(extractInt(graduationSummary.get("requiredCredits")))
-                .gpaCurrent(extractDecimal(graduationSummary.get("gpaEarned")))
-                .gpaRequired(extractDecimal(graduationSummary.get("gpaRequirement")))
-                .englishCurrent(extractInt(graduationSummary.get("englishLectureEarned")))
-                .englishRequired(extractInt(graduationSummary.get("englishLectureRequirement")))
-                .swCertCurrent(null)
-                .swCertRequired(null)
-                .majorBasicCurrent(extractInt(majorRequirement.get("basicEarned")))
-                .majorBasicRequired(extractInt(majorRequirement.get("basicRequired")))
-                .majorRequiredCurrent(extractInt(majorRequirement.get("requiredEarned")))
-                .majorRequiredRequired(extractInt(majorRequirement.get("requiredRequired")))
-                .majorElectiveCurrent(extractInt(majorRequirement.get("electiveEarned")))
-                .majorElectiveRequired(extractInt(majorRequirement.get("electiveRequired")))
-                .requiredPlusElectiveCurrent(extractInt(majorRequirement.get("requiredPlusElectiveEarned")))
-                .requiredPlusElectiveRequired(extractInt(majorRequirement.get("requiredPlusElectiveRequired")))
-                .requiredGeCurrent(generalEducationCredit(generalEducation, "필수교과", true))
-                .requiredGeRequired(generalEducationCredit(generalEducation, "필수교과", false))
-                .distributedGeCurrent(generalEducationCredit(generalEducation, "배분이수", true))
-                .distributedGeRequired(generalEducationCredit(generalEducation, "배분이수", false))
-                .freeGeCurrent(generalEducationCredit(generalEducation, "자유이수", true))
-                .freeGeRequired(generalEducationCredit(generalEducation, "자유이수", false))
-                .build();
-    }
-
-    // "배분이수교과(2024~)"처럼 연도 접미사가 붙으므로 접두 일치로 찾는다.
-    private int generalEducationCredit(List<Map<String, String>> generalEducation, String categoryPrefix, boolean earned) {
-        return generalEducation.stream()
-                .filter(row -> row.get("category") != null && row.get("category").startsWith(categoryPrefix))
-                .findFirst()
-                .map(row -> extractInt(row.get(earned ? "creditsEarned" : "creditsRequired")))
-                .orElse(0);
-    }
-
-    private List<CertResult> toCertResults(StudentProfile studentProfile, List<StudentMajor> studentMajors, Map<String, String> graduationSummary) {
-        List<CertResult> certResults = new ArrayList<>();
-        for (StudentMajor studentMajor : studentMajors) {
-            certResults.add(toCertResult(studentProfile, studentMajor, CertType.THESIS, graduationSummary.get("thesisJudgement")));
-            certResults.add(toCertResult(studentProfile, studentMajor, CertType.ENGLISH, graduationSummary.get("englishLectureJudgement")));
-            certResults.add(toCertResult(studentProfile, studentMajor, CertType.SW, graduationSummary.get("swCertification")));
-            certResults.add(toCertResult(studentProfile, studentMajor, CertType.TOPIK, graduationSummary.get("topik")));
-            certResults.add(toCertResult(studentProfile, studentMajor, CertType.GRADUATION_CERT, graduationSummary.get("graduationCertification")));
-        }
-        return certResults;
-    }
-
-    private CertResult toCertResult(StudentProfile studentProfile, StudentMajor studentMajor, CertType certType, String rawJudgement) {
-        return CertResult.builder()
-                .studentProfile(studentProfile)
-                .studentMajor(studentMajor)
-                .certType(certType)
-                .result(toCertJudgement(rawJudgement))
-                .source(RecordSource.PDF)
-                .build();
-    }
-
-    private CertJudgement toCertJudgement(String rawJudgement) {
-        if (rawJudgement == null) {
-            return CertJudgement.NONE;
-        }
-        return switch (rawJudgement) {
-            case "통과" -> CertJudgement.PASS;
-            case "미통과" -> CertJudgement.FAIL;
-            case "해당없음" -> CertJudgement.NONE;
-            case "면제" -> CertJudgement.EXEMPT;
-            default -> {
-                log.warn("알 수 없는 인증 판정값: {}", rawJudgement);
-                yield CertJudgement.NONE;
-            }
-        };
-    }
-
-    // PDF 자체의 글자 깨짐(예: "픕2.788")이나 부가 표기("44(62)")를 방어적으로 걸러내고 숫자만 취한다.
-    private int extractInt(String value) {
-        if (value == null) {
-            return 0;
-        }
-        Matcher matcher = DIGITS_PATTERN.matcher(value);
-        return matcher.find() ? Integer.parseInt(matcher.group()) : 0;
-    }
-
-    private BigDecimal extractDecimal(String value) {
-        if (value == null) {
-            return null;
-        }
-        Matcher matcher = DECIMAL_PATTERN.matcher(value);
-        return matcher.find() ? new BigDecimal(matcher.group()) : null;
     }
 }

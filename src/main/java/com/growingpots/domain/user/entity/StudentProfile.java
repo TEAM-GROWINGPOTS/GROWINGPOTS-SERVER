@@ -41,11 +41,33 @@ public class StudentProfile extends BaseTimeEntity {
     @Column(nullable = false)
     private int admissionYear;
 
+    // 아래 4개는 온보딩 시점엔 비어있다가 PDF 분석 시점에 채워진다.
+    private String studentNo;
+
+    private String enrollmentStatus;
+
+    private Integer currentGrade;
+
+    private Integer currentTerm;
+
     @Builder
     private StudentProfile(Member member, School school, Department department, int admissionYear) {
         this.member = member;
         this.school = school;
         this.department = department;
         this.admissionYear = admissionYear;
+    }
+
+    // PDF 파싱 결과(학번/재학상태/학년)로 학적 정보를 갱신한다.
+    // admissionYear는 학번 앞자리에서 뽑은 값이 있을 때만 덮어쓴다(온보딩 때 입력한 값보다 학번 기준이 더 신뢰할 수 있음).
+    public void updateAcademicInfo(
+            String studentNo, String enrollmentStatus, Integer currentGrade, Integer admissionYearFromStudentNo, int currentTerm) {
+        this.studentNo = studentNo;
+        this.enrollmentStatus = enrollmentStatus;
+        this.currentGrade = currentGrade;
+        if (admissionYearFromStudentNo != null) {
+            this.admissionYear = admissionYearFromStudentNo;
+        }
+        this.currentTerm = currentTerm;
     }
 }
