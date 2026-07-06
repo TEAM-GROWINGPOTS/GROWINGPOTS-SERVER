@@ -85,7 +85,7 @@ public class TranscriptPersister {
         studentProfileRepository.save(studentProfile);
     }
 
-    // 국내 대학 학번은 앞 4자리가 입학연도인 관례를 따른다.
+    // 연도는 학번의 앞 4자리를 가져옴.
     private Integer extractAdmissionYear(String studentNo) {
         if (studentNo == null || studentNo.length() < 4) {
             return null;
@@ -220,12 +220,10 @@ public class TranscriptPersister {
                 .orElse(null);
     }
 
-    // "스포츠의학과"="스포츠의학"+"과", "컴퓨터공학부"="컴퓨터공학"+"부" 이므로 "학"까지 포함해서 지우면 전공명이 잘린다. "과"/"부"만 벗겨낸다.
     private String normalizeDepartmentName(String name) {
         return name.replaceAll("(부|과)$", "");
     }
 
-    // ERD의 MAJOR_TYPE은 MAIN/DOUBLE 2종뿐이라, PDF의 4가지 표기(단일전공/심화전공/복수전공/다전공)를 2종으로 합친다.
     private MajorType toMajorType(String rawMajorType) {
         return switch (rawMajorType) {
             case "복수전공", "다전공" -> MajorType.DOUBLE;

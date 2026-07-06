@@ -321,8 +321,6 @@ public class PdfTranscriptParser {
             }
             updateCourseSectionState(line, state);
             if (inCurrentSemesterArea) {
-                // 이 구간의 과목은 extractCurrentSemesterCourses가 이미 "금학기수강학점"으로 전담 추출한다.
-                // 여기서 또 추가하면 이전 전공/구분명이 붙은 채로 중복 저장된다.
                 continue;
             }
             Optional<Map<String, String>> leftCourse =
@@ -723,8 +721,6 @@ public class PdfTranscriptParser {
                 .orElse(null);
     }
 
-    // 금학기수강학점 구역의 "08 11"처럼 이수구분 코드가 같은 줄에 두 세그먼트로 나뉘어 찍히는 경우, 첫 번째만
-    // 가져오면 앞자리(예: "08")가 누락된다. x좌표 순으로 전부 이어붙여 "0811" 형태로 복원한다.
     private String findRawClassificationText(List<TextSegment> segments, CourseSide side) {
         String text = segments.stream()
                 .filter(segment -> segment.text().matches("\\d{2,4}"))
