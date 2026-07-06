@@ -47,6 +47,8 @@ public class PdfTranscriptParser {
     private static final Pattern GENERAL_EDUCATION_SINGLE_PATTERN = Pattern.compile(
             "(.+?)\\s+(\\d+)\\s*/\\s*(\\d+)\\s+(\\d+)\\s*/\\s*(\\d+)\\s+(통과|미통과)"
     );
+    private static final Pattern GENERAL_ELECTIVE_HEADER_PATTERN = Pattern.compile("기타\\s+공통\\s+일반선택");
+    private static final Pattern CREDIT_TOTAL_PATTERN = Pattern.compile("학점계:\\s*(\\d+)");
     private static final Pattern MAJOR_REQUIREMENT_PATTERN = Pattern.compile(
             "(심화전공|단일전공|복수전공|다전공)\\s+(\\d+)\\s+(.+?)\\s+(\\d{4})\\s+"
                     + "(\\d+)\\s*/\\s*(\\d+)\\s+(\\d+)\\s*/\\s*(\\d+)\\s+(\\d+)\\s*/\\s*(\\d+)\\s+"
@@ -211,7 +213,34 @@ public class PdfTranscriptParser {
             summary.put("graduationCertification", judgement.group(10));
             summary.put("swCertification", judgement.group(12));
         }
+        String generalElectiveEarned = extractGeneralElectiveCredit(lines);
+        if (generalElectiveEarned != null) {
+            summary.put("generalElectiveEarned", generalElectiveEarned);
+        }
         return summary;
+    }
+
+    // "기타/공통/일반선택" 이수영역은 상단 기준/취득 요약 표에는 값이 없다. 전공내역 표에서 "기타 공통 일반선택"
+    // 헤더로 시작하는 과목 나열 블록을 찾은 뒤, 그 아래 나오는 "학점계: N" 줄의 N을 취득 학점으로 쓴다.
+    // 기준(요구) 학점은 PDF 어디에도 없어 취득 값만 저장한다.
+    private String extractGeneralElectiveCredit(List<String> lines) {
+        int headerIndex = -1;
+        for (int i = 0; i < lines.size(); i++) {
+            if (GENERAL_ELECTIVE_HEADER_PATTERN.matcher(lines.get(i)).find()) {
+                headerIndex = i;
+                break;
+            }
+        }
+        if (headerIndex < 0) {
+            return null;
+        }
+        for (int i = headerIndex; i < lines.size(); i++) {
+            Matcher matcher = CREDIT_TOTAL_PATTERN.matcher(lines.get(i));
+            if (matcher.find()) {
+                return matcher.group(1);
+            }
+        }
+        return null;
     }
 
     private List<Map<String, String>> extractGeneralEducation(List<String> lines) {

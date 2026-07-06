@@ -261,6 +261,7 @@ public class TranscriptPersister {
                 .distributedGeRequired(generalEducationCredit(generalEducation, "배분이수", false))
                 .freeGeCurrent(generalEducationCredit(generalEducation, "자유이수", true))
                 .freeGeRequired(generalEducationCredit(generalEducation, "자유이수", false))
+                .generalElectiveCurrent(extractInt(graduationSummary.get("generalElectiveEarned")))
                 .build();
     }
 

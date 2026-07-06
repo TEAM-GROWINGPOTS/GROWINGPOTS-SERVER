@@ -41,7 +41,7 @@ public class GraduationAnalysisSummary extends BaseTimeEntity {
     private int englishCurrent;
     private int englishRequired;
 
-    // PDF 상단 요약엔 SW인증의 현재/기준 수치가 보이지 않아(통과/미통과만 있음) 당장은 채우지 못함 (CERT_RESULT.SW로 통과여부만 관리)
+    // PDF 상단 요약(기준/취득)의 마지막 컬럼이 SW인증 학점. 통과/미통과 자체는 CERT_RESULT.SW가 별도로 관리
     private Integer swCertCurrent;
     private Integer swCertRequired;
 
@@ -72,6 +72,9 @@ public class GraduationAnalysisSummary extends BaseTimeEntity {
     @Column(name = "free_ge_required")
     private int freeGeRequired;
 
+    // "기타/공통/일반선택" 이수영역은 PDF에 기준(요구) 학점이 없어 취득 학점만 저장한다.
+    private int generalElectiveCurrent;
+
     @Builder
     private GraduationAnalysisSummary(
             StudentMajor studentMajor,
@@ -96,7 +99,8 @@ public class GraduationAnalysisSummary extends BaseTimeEntity {
             int distributedGeCurrent,
             int distributedGeRequired,
             int freeGeCurrent,
-            int freeGeRequired
+            int freeGeRequired,
+            int generalElectiveCurrent
     ) {
         this.studentMajor = studentMajor;
         this.totalCreditCurrent = totalCreditCurrent;
@@ -121,6 +125,7 @@ public class GraduationAnalysisSummary extends BaseTimeEntity {
         this.distributedGeRequired = distributedGeRequired;
         this.freeGeCurrent = freeGeCurrent;
         this.freeGeRequired = freeGeRequired;
+        this.generalElectiveCurrent = generalElectiveCurrent;
     }
 
     // 재업로드 시 기존 스냅샷 행을 새 파싱 결과로 덮어쓴다 (studentMajor는 유지)
@@ -147,5 +152,6 @@ public class GraduationAnalysisSummary extends BaseTimeEntity {
         this.distributedGeRequired = newValues.distributedGeRequired;
         this.freeGeCurrent = newValues.freeGeCurrent;
         this.freeGeRequired = newValues.freeGeRequired;
+        this.generalElectiveCurrent = newValues.generalElectiveCurrent;
     }
 }

@@ -64,6 +64,8 @@ class PdfTranscriptParserTest {
         assertThat(result.graduationSummary().get("swCertRequirement")).isEqualTo("6");
         assertThat(result.graduationSummary().get("swCertEarned")).isEqualTo("6");
         assertThat(result.graduationSummary().get("swCertification")).isEqualTo("통과");
+        // 전공내역 표의 "기타 공통 일반선택 12" 블록 아래 "학점계: 12"에서 취득 학점을 가져온다.
+        assertThat(result.graduationSummary().get("generalElectiveEarned")).isEqualTo("12");
     }
 
     @Test
@@ -85,6 +87,8 @@ class PdfTranscriptParserTest {
         assertThat(result.graduationSummary().get("swCertRequirement")).isEqualTo("6");
         assertThat(result.graduationSummary().get("swCertEarned")).isEqualTo("4");
         assertThat(result.graduationSummary().get("swCertification")).isEqualTo("미통과");
+        // 전공내역 표의 "기타 공통 일반선택 8" 블록 아래 "학점계: 8"에서 취득 학점을 가져온다.
+        assertThat(result.graduationSummary().get("generalElectiveEarned")).isEqualTo("8");
     }
 
     @Test
