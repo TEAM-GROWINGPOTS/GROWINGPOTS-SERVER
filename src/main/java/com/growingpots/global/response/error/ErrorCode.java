@@ -27,6 +27,7 @@ public enum ErrorCode implements ErrorType {
     // User
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "USER_001", "존재하지 않는 사용자입니다."),
     STUDENT_PROFILE_ALREADY_EXISTS(HttpStatus.CONFLICT, "USER_002", "이미 온보딩 완료된 사용자입니다."),
+    STUDENT_PROFILE_NOT_FOUND(HttpStatus.NOT_FOUND, "USER_003", "온보딩이 완료되지 않은 사용자입니다."),
 
     // University
     UNIVERSITY_NOT_FOUND(HttpStatus.NOT_FOUND, "UNIV_001", "존재하지 않는 학교입니다."),
