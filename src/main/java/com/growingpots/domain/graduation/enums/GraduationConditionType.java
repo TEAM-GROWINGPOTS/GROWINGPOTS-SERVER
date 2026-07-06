@@ -43,8 +43,7 @@ public enum GraduationConditionType {
             GraduationAnalysisSummary::getEnglishCurrent,
             GraduationAnalysisSummary::getEnglishRequired),
 
-    // TODO: PDF 파서에서 SW인증 학점 수치(group 미매핑) 추출 후 swCertCurrent/Required 저장 필요
-    SW_CERT_COURSE("SW 인증 강의", "COURSES", false, true,
+    SW_CERT_COURSE("SW 인증 강의", "CREDITS", false, true,
             s -> s.getSwCertCurrent() != null ? s.getSwCertCurrent() : 0,
             s -> s.getSwCertRequired() != null ? s.getSwCertRequired() : 0);
 
