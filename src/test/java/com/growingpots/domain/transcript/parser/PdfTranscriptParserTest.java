@@ -60,6 +60,10 @@ class PdfTranscriptParserTest {
         assertThat(countInSection(result.courses(), "금학기수강학점")).isEqualTo(6);
         assertThat(inSection(result.courses(), "자유이수"))
                 .anySatisfy(course -> assertThat(course.get("courseName")).isEqualTo("전공탐색및기업가정신세미나"));
+        // SW인증 필요/취득 학점이 판정(통과) 결과와 일치하는지 확인: 6학점 필요에 6학점 취득 → 통과
+        assertThat(result.graduationSummary().get("swCertRequirement")).isEqualTo("6");
+        assertThat(result.graduationSummary().get("swCertEarned")).isEqualTo("6");
+        assertThat(result.graduationSummary().get("swCertification")).isEqualTo("통과");
     }
 
     @Test
@@ -77,6 +81,10 @@ class PdfTranscriptParserTest {
         assertThat(inSection(result.courses(), "배분이수"))
                 .anySatisfy(course -> assertThat(course.get("courseCode")).isEqualTo("GED11020"))
                 .anySatisfy(course -> assertThat(course.get("courseCode")).isEqualTo("GED11107"));
+        // SW인증 필요/취득 학점이 판정(미통과) 결과와 일치하는지 확인: 6학점 필요에 4학점 취득 → 미통과
+        assertThat(result.graduationSummary().get("swCertRequirement")).isEqualTo("6");
+        assertThat(result.graduationSummary().get("swCertEarned")).isEqualTo("4");
+        assertThat(result.graduationSummary().get("swCertification")).isEqualTo("미통과");
     }
 
     @Test

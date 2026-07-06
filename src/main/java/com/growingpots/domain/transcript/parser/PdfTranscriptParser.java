@@ -203,6 +203,9 @@ public class PdfTranscriptParser {
             summary.put("thesisRequirement", criteria.group(7));
             summary.put("thesisEarned", earned.group(7));
             summary.put("topik", criteria.group(8));
+            // "취득" 줄은 "기준"/"판정" 줄과 달리 컬럼이 하나 적다(11개). 마지막 그룹이 SW인증 학점(기준=12번째, 취득=11번째)이다.
+            summary.put("swCertRequirement", criteria.group(12));
+            summary.put("swCertEarned", earned.group(11));
             summary.put("englishLectureJudgement", judgement.group(6));
             summary.put("thesisJudgement", judgement.group(7));
             summary.put("graduationCertification", judgement.group(10));
