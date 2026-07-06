@@ -128,9 +128,7 @@ public class StudentProfileService {
 
     @Transactional(readOnly = true)
     public StudentCourseListResponse getMyCourses(Long memberId) {
-        Member member = memberRepository.findById(memberId)
-                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND));
-        StudentProfile profile = studentProfileRepository.findByMember(member)
+        StudentProfile profile = studentProfileRepository.findWithDetailsByMemberId(memberId)
                 .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
 
         List<StudentCourse> courses = studentCourseRepository.findWithCourseByStudentProfile(profile);

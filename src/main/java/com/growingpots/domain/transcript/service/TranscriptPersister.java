@@ -57,14 +57,18 @@ public class TranscriptPersister {
 
     @Transactional
     public void persist(StudentProfile studentProfile, ParsedTranscript parsed) {
-        updateStudentProfile(studentProfile, parsed.studentInfo());
+        // 진행 중 과목의 수강년도/학기 계산에 쓰는 "오늘"을 한 번만 고정해, 학기 경계를 걸치는 순간에도
+        // 같은 persist() 호출 안에서는 일관된 값을 쓰도록 한다.
+        LocalDate now = LocalDate.now();
+        updateStudentProfile(studentProfile, parsed.studentInfo(), now);
 
         // 과목 수만큼 학수번호로 매번 조회하지 않도록 COURSE 마스터를 한 번만 불러와 재사용한다.
-        Map<String, Course> coursesByCode = courseRepository.findAll().stream()
+        // 학교별로 학수번호가 겹칠 수 있어 학생 소속 학교로 한정한다.
+        Map<String, Course> coursesByCode = courseRepository.findBySchool(studentProfile.getSchool()).stream()
                 .collect(Collectors.toMap(Course::getCourseCode, c -> c, (a, b) -> a));
 
         studentCourseRepository.deleteByStudentProfileAndSource(studentProfile, RecordSource.PDF);
-        studentCourseRepository.saveAll(toStudentCourses(studentProfile, parsed.courses(), coursesByCode));
+        studentCourseRepository.saveAll(toStudentCourses(studentProfile, parsed.courses(), coursesByCode, now));
 
         // 전공이 여러 개(복수전공)여도 학과 목록은 한 번만 조회해서 재사용한다.
         List<Department> departments = departmentRepository.findAll();
@@ -74,14 +78,14 @@ public class TranscriptPersister {
         certResultRepository.saveAll(toCertResults(studentProfile, studentMajors, parsed.graduationSummary()));
     }
 
-    private void updateStudentProfile(StudentProfile studentProfile, Map<String, String> studentInfo) {
+    private void updateStudentProfile(StudentProfile studentProfile, Map<String, String> studentInfo, LocalDate now) {
         String studentNo = studentInfo.get("studentId");
         studentProfile.updateAcademicInfo(
                 studentNo,
                 studentInfo.get("academicStatus"),
                 extractGrade(studentInfo.get("grade")),
                 extractAdmissionYear(studentNo),
-                computeCurrentTerm());
+                computeCurrentTerm(now));
         studentProfileRepository.save(studentProfile);
     }
 
@@ -98,14 +102,13 @@ public class TranscriptPersister {
     }
 
     // PDF에 현재 학기 정보가 없어 오늘 날짜로 계산한다: 1학기=3~8월, 2학기=9~2월(다음 해 2월까지 이어짐).
-    private int computeCurrentTerm() {
-        int month = LocalDate.now().getMonthValue();
+    private int computeCurrentTerm(LocalDate now) {
+        int month = now.getMonthValue();
         return (month >= 3 && month <= 8) ? 1 : 2;
     }
 
     // 학사년도 기준 계산. 1~2월은 달력상 다음 해지만 학사년도로는 전년도 2학기이므로 연도에서 1을 뺀다.
-    private int computeCurrentAcademicYear() {
-        LocalDate now = LocalDate.now();
+    private int computeCurrentAcademicYear(LocalDate now) {
         return now.getMonthValue() <= 2 ? now.getYear() - 1 : now.getYear();
     }
 
@@ -118,14 +121,16 @@ public class TranscriptPersister {
     }
 
     private List<StudentCourse> toStudentCourses(
-            StudentProfile studentProfile, List<Map<String, String>> courses, Map<String, Course> coursesByCode) {
+            StudentProfile studentProfile, List<Map<String, String>> courses, Map<String, Course> coursesByCode,
+            LocalDate now) {
         return courses.stream()
-                .map(course -> toStudentCourse(studentProfile, course, coursesByCode))
+                .map(course -> toStudentCourse(studentProfile, course, coursesByCode, now))
                 .toList();
     }
 
     private StudentCourse toStudentCourse(
-            StudentProfile studentProfile, Map<String, String> course, Map<String, Course> coursesByCode) {
+            StudentProfile studentProfile, Map<String, String> course, Map<String, Course> coursesByCode,
+            LocalDate now) {
         String section = course.get("section");
         String rawClassification = course.get("rawClassification");
         String semester = course.get("semester");
@@ -133,9 +138,9 @@ public class TranscriptPersister {
         boolean inProgress = CURRENT_SEMESTER_SECTION.equals(section);
 
         // 금학기수강학점(진행 중) 과목은 PDF에 수강년도/학기가 안 찍혀 있어 오늘 날짜 기준으로 채운다.
-        Integer takenYear = semester != null ? takenYear(semester) : (inProgress ? computeCurrentAcademicYear() : null);
+        Integer takenYear = semester != null ? takenYear(semester) : (inProgress ? computeCurrentAcademicYear(now) : null);
         String takenSemester = semester != null ? takenSemester(semester)
-                : (inProgress ? String.valueOf(computeCurrentTerm()) : null);
+                : (inProgress ? String.valueOf(computeCurrentTerm(now)) : null);
 
         return StudentCourse.builder()
                 .studentProfile(studentProfile)
