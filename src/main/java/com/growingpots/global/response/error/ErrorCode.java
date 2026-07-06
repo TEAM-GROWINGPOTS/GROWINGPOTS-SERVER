@@ -43,6 +43,7 @@ public enum ErrorCode implements ErrorType {
 
     // Requirement
     REQUIREMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "REQ_001", "졸업요건 데이터가 존재하지 않습니다."),
+    DOUBLE_MAJOR_NOT_FOUND(HttpStatus.NOT_FOUND, "REQ_002", "복수전공이 등록되지 않은 사용자입니다."),
 
     // Planner
     COURSE_NOT_FOUND(HttpStatus.NOT_FOUND, "PLAN_001", "존재하지 않는 과목입니다."),

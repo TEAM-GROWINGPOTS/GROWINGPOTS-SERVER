@@ -57,7 +57,7 @@ public class GraduationService {
                 StudentMajor doubleMajor = majors.stream()
                         .filter(m -> m.getMajorType() == MajorType.DOUBLE)
                         .findFirst()
-                        .orElseThrow(() -> new BaseException(ErrorCode.REQUIREMENT_NOT_FOUND));
+                        .orElseThrow(() -> new BaseException(ErrorCode.DOUBLE_MAJOR_NOT_FOUND));
                 GraduationAnalysisSummary summary = requireSummary(doubleMajor);
                 List<CertResult> certs = certResultRepository.findByStudentMajor(doubleMajor);
                 yield buildResponse(profile, summary, null, certs);

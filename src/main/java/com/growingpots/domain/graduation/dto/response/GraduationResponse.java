@@ -19,7 +19,6 @@ public class GraduationResponse {
     public static class Summary {
         private final CreditInfo totalCredits;
         private final GpaInfo gpa;
-        // TODO: StudentProfile.enrollmentStatus 필드 추가 후 반영
         private final String enrollmentStatus;
     }
 
