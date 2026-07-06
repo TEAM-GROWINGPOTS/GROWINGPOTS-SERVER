@@ -1,6 +1,7 @@
 package com.growingpots.domain.user.controller;
 
 import com.growingpots.domain.user.dto.request.StudentProfileCreateRequest;
+import com.growingpots.domain.user.dto.response.StudentCourseListResponse;
 import com.growingpots.domain.user.dto.response.StudentProfileCreateResponse;
 import com.growingpots.domain.user.dto.response.StudentProfileResponse;
 import com.growingpots.domain.user.service.StudentProfileService;
@@ -41,5 +42,13 @@ public class StudentController {
         Long memberId = Long.parseLong(authentication.getName());
         StudentProfileResponse response = studentProfileService.getMyProfile(memberId);
         return ResponseEntity.ok(BaseResponse.success(SuccessCode.STUDENT_PROFILE_FOUND, response));
+    }
+
+    @StudentApi.GetMyCourses
+    @GetMapping("/me/courses")
+    public ResponseEntity<BaseResponse<StudentCourseListResponse>> getMyCourses(Authentication authentication) {
+        Long memberId = Long.parseLong(authentication.getName());
+        StudentCourseListResponse response = studentProfileService.getMyCourses(memberId);
+        return ResponseEntity.ok(BaseResponse.success(SuccessCode.STUDENT_COURSE_LIST_FOUND, response));
     }
 }

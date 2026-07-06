@@ -1,5 +1,6 @@
 package com.growingpots.domain.user.controller;
 
+import com.growingpots.domain.user.dto.response.StudentCourseListResponse;
 import com.growingpots.domain.user.dto.response.StudentProfileCreateResponse;
 import com.growingpots.domain.user.dto.response.StudentProfileResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -185,4 +186,74 @@ public @interface StudentApi {
             )
     })
     @interface GetMyProfile {}
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @Operation(
+            summary = "이수 과목 목록 조회",
+            description = "PDF 분석 결과로 저장된 이수 과목 목록을 조회합니다. "
+                    + "departmentName은 COURSE 마스터와 매칭된 경우에만, appliedDivisionName은 교양 과목인 경우에만 값이 채워집니다."
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "이수 과목 목록 조회 성공",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = StudentCourseListResponse.class),
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "success": true,
+                                      "code": "USER_200_3",
+                                      "message": "이수 과목을 조회했습니다.",
+                                      "data": {
+                                        "courses": [
+                                          {
+                                            "studentCourseId": 7001,
+                                            "courseCode": "THE2001",
+                                            "name": "연극문헌과연기",
+                                            "departmentName": null,
+                                            "credit": 3,
+                                            "appliedDivisionName": null,
+                                            "takenYear": 2023,
+                                            "takenSemester": "1학기"
+                                          }
+                                        ]
+                                      }
+                                    }
+                                    """)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "인증 실패",
+                    content = @Content(
+                            mediaType = "application/json",
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "success": false,
+                                      "code": "CMN_005",
+                                      "message": "인증이 필요합니다.",
+                                      "data": null
+                                    }
+                                    """)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "온보딩 미완료 (학적 프로필 없음)",
+                    content = @Content(
+                            mediaType = "application/json",
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "success": false,
+                                      "code": "USER_003",
+                                      "message": "온보딩이 완료되지 않은 사용자입니다.",
+                                      "data": null
+                                    }
+                                    """)
+                    )
+            )
+    })
+    @interface GetMyCourses {}
 }
