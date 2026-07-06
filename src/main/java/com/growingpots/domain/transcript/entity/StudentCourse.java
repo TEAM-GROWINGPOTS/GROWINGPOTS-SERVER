@@ -2,6 +2,7 @@ package com.growingpots.domain.transcript.entity;
 
 import com.growingpots.domain.transcript.entity.enums.CourseStatus;
 import com.growingpots.domain.transcript.entity.enums.RecordSource;
+import com.growingpots.domain.university.entity.Course;
 import com.growingpots.domain.user.entity.StudentProfile;
 import com.growingpots.global.entity.BaseTimeEntity;
 import jakarta.persistence.Column;
@@ -31,6 +32,11 @@ public class StudentCourse extends BaseTimeEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "student_profile_id", nullable = false)
     private StudentProfile studentProfile;
+
+    // COURSE 마스터와 매칭 실패 시(시드 데이터 없음/학수번호 불일치) null
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "course_id")
+    private Course course;
 
     private String rawCourseCode;
 
@@ -64,6 +70,7 @@ public class StudentCourse extends BaseTimeEntity {
     @Builder
     private StudentCourse(
             StudentProfile studentProfile,
+            Course course,
             String rawCourseCode,
             String rawCourseName,
             int credit,
@@ -76,6 +83,7 @@ public class StudentCourse extends BaseTimeEntity {
             RecordSource source
     ) {
         this.studentProfile = studentProfile;
+        this.course = course;
         this.rawCourseCode = rawCourseCode;
         this.rawCourseName = rawCourseName;
         this.credit = credit;

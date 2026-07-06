@@ -11,7 +11,9 @@ import com.growingpots.domain.transcript.parser.ParsedTranscript;
 import com.growingpots.domain.transcript.repository.CertResultRepository;
 import com.growingpots.domain.transcript.repository.GraduationAnalysisSummaryRepository;
 import com.growingpots.domain.transcript.repository.StudentCourseRepository;
+import com.growingpots.domain.university.entity.Course;
 import com.growingpots.domain.university.entity.Department;
+import com.growingpots.domain.university.repository.CourseRepository;
 import com.growingpots.domain.university.repository.DepartmentRepository;
 import com.growingpots.domain.user.entity.StudentMajor;
 import com.growingpots.domain.user.entity.StudentMajor.MajorType;
@@ -27,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -48,6 +51,7 @@ public class TranscriptPersister {
     private final StudentCourseRepository studentCourseRepository;
     private final StudentMajorRepository studentMajorRepository;
     private final DepartmentRepository departmentRepository;
+    private final CourseRepository courseRepository;
     private final GraduationAnalysisSummaryRepository graduationAnalysisSummaryRepository;
     private final CertResultRepository certResultRepository;
 
@@ -55,8 +59,12 @@ public class TranscriptPersister {
     public void persist(StudentProfile studentProfile, ParsedTranscript parsed) {
         updateStudentProfile(studentProfile, parsed.studentInfo());
 
+        // 과목 수만큼 학수번호로 매번 조회하지 않도록 COURSE 마스터를 한 번만 불러와 재사용한다.
+        Map<String, Course> coursesByCode = courseRepository.findAll().stream()
+                .collect(Collectors.toMap(Course::getCourseCode, c -> c, (a, b) -> a));
+
         studentCourseRepository.deleteByStudentProfileAndSource(studentProfile, RecordSource.PDF);
-        studentCourseRepository.saveAll(toStudentCourses(studentProfile, parsed.courses()));
+        studentCourseRepository.saveAll(toStudentCourses(studentProfile, parsed.courses(), coursesByCode));
 
         // 전공이 여러 개(복수전공)여도 학과 목록은 한 번만 조회해서 재사용한다.
         List<Department> departments = departmentRepository.findAll();
@@ -103,21 +111,25 @@ public class TranscriptPersister {
         return matcher.find() ? Integer.valueOf(matcher.group()) : null;
     }
 
-    private List<StudentCourse> toStudentCourses(StudentProfile studentProfile, List<Map<String, String>> courses) {
+    private List<StudentCourse> toStudentCourses(
+            StudentProfile studentProfile, List<Map<String, String>> courses, Map<String, Course> coursesByCode) {
         return courses.stream()
-                .map(course -> toStudentCourse(studentProfile, course))
+                .map(course -> toStudentCourse(studentProfile, course, coursesByCode))
                 .toList();
     }
 
-    private StudentCourse toStudentCourse(StudentProfile studentProfile, Map<String, String> course) {
+    private StudentCourse toStudentCourse(
+            StudentProfile studentProfile, Map<String, String> course, Map<String, Course> coursesByCode) {
         String section = course.get("section");
         String rawClassification = course.get("rawClassification");
         String semester = course.get("semester");
+        String rawCourseCode = course.get("courseCode");
         boolean inProgress = CURRENT_SEMESTER_SECTION.equals(section);
 
         return StudentCourse.builder()
                 .studentProfile(studentProfile)
-                .rawCourseCode(course.get("courseCode"))
+                .course(rawCourseCode == null ? null : coursesByCode.get(rawCourseCode))
+                .rawCourseCode(rawCourseCode)
                 .rawCourseName(course.get("courseName"))
                 .credit(Integer.parseInt(course.get("credits")))
                 .takenYear(semester == null ? null : takenYear(semester))
