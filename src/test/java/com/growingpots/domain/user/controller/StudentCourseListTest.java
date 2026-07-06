@@ -7,6 +7,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.growingpots.domain.transcript.entity.StudentCourse;
 import com.growingpots.domain.transcript.entity.enums.CourseStatus;
 import com.growingpots.domain.transcript.entity.enums.RecordSource;
@@ -39,6 +41,9 @@ class StudentCourseListTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @Autowired
     private MemberRepository memberRepository;
@@ -110,15 +115,26 @@ class StudentCourseListTest {
                 .source(RecordSource.PDF)
                 .build());
 
-        mockMvc.perform(get("/api/v1/students/me/courses")
+        String responseBody = mockMvc.perform(get("/api/v1/students/me/courses")
                         .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("USER_200_3"))
-                .andExpect(jsonPath("$.data.courses.length()").value(2));
+                .andExpect(jsonPath("$.data.courses.length()").value(2))
+                .andReturn().getResponse().getContentAsString();
 
-        // 필드별 값은 순서를 보장하지 않으므로 응답 대신 서비스 결과를 직접 검증
-        var courses = studentCourseRepository.findWithCourseByStudentProfile(studentProfile);
-        assertThat(courses).hasSize(2);
+        JsonNode courses = objectMapper.readTree(responseBody).path("data").path("courses");
+        assertThat(departmentNameOf(courses, "GEC1104")).isEqualTo("교양");
+        assertThat(departmentNameOf(courses, "THE2001")).isNull();
+    }
+
+    private String departmentNameOf(JsonNode courses, String courseCode) {
+        for (JsonNode course : courses) {
+            if (courseCode.equals(course.path("courseCode").asText())) {
+                JsonNode value = course.path("departmentName");
+                return value.isNull() ? null : value.asText();
+            }
+        }
+        throw new AssertionError("과목을 찾을 수 없음: " + courseCode);
     }
 
     @Test
@@ -146,6 +162,7 @@ class StudentCourseListTest {
                 .takenYear(2023)
                 .takenSemester("1")
                 .section("연극영화학")
+                .rawClassification("04")
                 .status(CourseStatus.COMPLETED)
                 .source(RecordSource.PDF)
                 .build());
@@ -155,7 +172,93 @@ class StudentCourseListTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.courses[0].departmentName").value("연극영화학과"))
                 .andExpect(jsonPath("$.data.courses[0].takenSemester").value("1학기"))
-                .andExpect(jsonPath("$.data.courses[0].appliedDivisionName").value(nullValue()));
+                .andExpect(jsonPath("$.data.courses[0].appliedDivisionName").value("전공필수"));
+    }
+
+    @Test
+    void 전공_과목의_rawClassification_코드로_이수구분명이_매핑된다() throws Exception {
+        StudentProfile studentProfile = onboardedStudent("4004");
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(studentProfile)
+                .rawCourseCode("FT2076")
+                .rawCourseName("초급영화이론")
+                .credit(3)
+                .takenYear(2024)
+                .takenSemester("1")
+                .section("연극영화학")
+                .rawClassification("05")
+                .status(CourseStatus.COMPLETED)
+                .source(RecordSource.PDF)
+                .build());
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(studentProfile)
+                .rawCourseCode("FT1003")
+                .rawCourseName("영화사")
+                .credit(3)
+                .takenYear(2023)
+                .takenSemester("1")
+                .section("연극영화학")
+                .rawClassification("11")
+                .status(CourseStatus.COMPLETED)
+                .source(RecordSource.PDF)
+                .build());
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(studentProfile)
+                .rawCourseCode("FR2042")
+                .rawCourseName("프랑스영화예술")
+                .credit(3)
+                .takenYear(2024)
+                .takenSemester("2")
+                .section("연극영화학")
+                .rawClassification(null)
+                .status(CourseStatus.COMPLETED)
+                .source(RecordSource.PDF)
+                .build());
+
+        String responseBody = mockMvc.perform(get("/api/v1/students/me/courses")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        JsonNode courses = objectMapper.readTree(responseBody).path("data").path("courses");
+        assertThat(appliedDivisionNameOf(courses, "FT2076")).isEqualTo("전공선택");
+        assertThat(appliedDivisionNameOf(courses, "FT1003")).isEqualTo("전공기초");
+        assertThat(appliedDivisionNameOf(courses, "FR2042")).isNull();
+    }
+
+    @Test
+    void raw_classification이_08로_시작하면_전공코드와_안겹치고_교양으로_분류된다() throws Exception {
+        StudentProfile studentProfile = onboardedStudent("5005");
+        // 금학기수강학점 구역에서 "08 11"의 앞자리가 잘려 "11"만 남으면 전공기초(11)로 오인될 수 있어 "0811"로 온전히 저장된 경우를 검증
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(studentProfile)
+                .rawCourseCode("BME213")
+                .rawCourseName("기초프로그래밍")
+                .credit(3)
+                .section("금학기수강학점")
+                .rawClassification("0811")
+                .status(CourseStatus.IN_PROGRESS)
+                .source(RecordSource.PDF)
+                .build());
+
+        String responseBody = mockMvc.perform(get("/api/v1/students/me/courses")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        JsonNode courses = objectMapper.readTree(responseBody).path("data").path("courses");
+        assertThat(appliedDivisionNameOf(courses, "BME213")).isEqualTo("기타");
+        assertThat(departmentNameOf(courses, "BME213")).isEqualTo("교양");
+    }
+
+    private String appliedDivisionNameOf(JsonNode courses, String courseCode) {
+        for (JsonNode course : courses) {
+            if (courseCode.equals(course.path("courseCode").asText())) {
+                JsonNode value = course.path("appliedDivisionName");
+                return value.isNull() ? null : value.asText();
+            }
+        }
+        throw new AssertionError("과목을 찾을 수 없음: " + courseCode);
     }
 
     @Test

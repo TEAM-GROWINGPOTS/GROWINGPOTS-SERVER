@@ -34,6 +34,7 @@ public class PdfTranscriptParser {
     private static final Pattern SUMMARY_CRITERIA_PATTERN = Pattern.compile(
             "기준\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)"
     );
+    // "취득" 줄은 "기준"/"판정" 줄과 달리 컬럼이 하나 적다(11개). 마지막 그룹(11번째)이 SW인증 취득 학점이다.
     private static final Pattern SUMMARY_EARNED_PATTERN = Pattern.compile(
             "취득\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)"
     );
@@ -203,6 +204,8 @@ public class PdfTranscriptParser {
             summary.put("thesisRequirement", criteria.group(7));
             summary.put("thesisEarned", earned.group(7));
             summary.put("topik", criteria.group(8));
+            summary.put("swCertRequirement", criteria.group(12));
+            summary.put("swCertEarned", earned.group(11));
             summary.put("englishLectureJudgement", judgement.group(6));
             summary.put("thesisJudgement", judgement.group(7));
             summary.put("graduationCertification", judgement.group(10));
@@ -636,9 +639,9 @@ public class PdfTranscriptParser {
         course.put("courseCode", matcher.group(2));
         course.put("courseName", matcher.group(3).trim());
         course.put("credits", matcher.group(4));
-        TextSegment rawClassification = findRawClassificationSegment(line.segments(), CourseSide.LEFT);
+        String rawClassification = findRawClassificationText(line.segments(), CourseSide.LEFT);
         if (rawClassification != null) {
-            course.put("rawClassification", rawClassification.text());
+            course.put("rawClassification", rawClassification);
         }
         return Optional.of(course);
     }
@@ -718,6 +721,19 @@ public class PdfTranscriptParser {
                         : segment.x1() >= 190 && segment.x1() < 285)
                 .findFirst()
                 .orElse(null);
+    }
+
+    // 금학기수강학점 구역의 "08 11"처럼 이수구분 코드가 같은 줄에 두 세그먼트로 나뉘어 찍히는 경우, 첫 번째만
+    // 가져오면 앞자리(예: "08")가 누락된다. x좌표 순으로 전부 이어붙여 "0811" 형태로 복원한다.
+    private String findRawClassificationText(List<TextSegment> segments, CourseSide side) {
+        String text = segments.stream()
+                .filter(segment -> segment.text().matches("\\d{2,4}"))
+                .filter(segment -> side == CourseSide.LEFT ? segment.x1() < 80
+                        : segment.x1() >= 190 && segment.x1() < 285)
+                .sorted(Comparator.comparingDouble(TextSegment::x1))
+                .map(TextSegment::text)
+                .collect(Collectors.joining());
+        return text.isEmpty() ? null : text;
     }
 
     private String extractCourseName(
