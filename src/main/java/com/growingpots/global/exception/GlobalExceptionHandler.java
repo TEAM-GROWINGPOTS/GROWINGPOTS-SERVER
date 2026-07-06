@@ -20,6 +20,8 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 
 import java.util.Map;
@@ -78,6 +80,13 @@ public class GlobalExceptionHandler {
         return toResponse(ErrorCode.MISSING_PARAMETER);
     }
 
+    // 필수 파트(예: multipart 파일) 누락
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<BaseResponse<?>> handleMissingPart(MissingServletRequestPartException e) {
+        log.warn("[MissingPart] part={}", e.getRequestPartName());
+        return toResponse(ErrorCode.MISSING_PARAMETER);
+    }
+
     // JSON 파싱 실패
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<BaseResponse<?>> handleNotReadable(HttpMessageNotReadableException e) {
@@ -91,6 +100,13 @@ public class GlobalExceptionHandler {
             log.warn("[NotReadable] {}", e.getMessage());
         }
         return toResponse(ErrorCode.INVALID_FORMAT);
+    }
+
+    // 업로드 용량 초과
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<BaseResponse<?>> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException e) {
+        log.warn("[MaxUploadSizeExceeded] {}", e.getMessage());
+        return toResponse(ErrorCode.PDF_TOO_LARGE);
     }
 
     // 잘못된 URL

@@ -30,7 +30,7 @@ public enum SuccessCode implements SuccessType {
     ONBOARDING_OPTIONS_FOUND(HttpStatus.OK, "UNIV_200_2", "온보딩 옵션 조회에 성공했습니다."),
 
     // Transcript
-    PDF_PARSED(HttpStatus.CREATED, "TRANS_201", "PDF 파싱에 성공했습니다."),
+    PDF_PARSED(HttpStatus.CREATED, "TRANS_201", "PDF 분석이 완료되었습니다."),
 
     // Requirement
     REQUIREMENT_FOUND(HttpStatus.OK, "REQ_200", "졸업요건 조회에 성공했습니다."),
