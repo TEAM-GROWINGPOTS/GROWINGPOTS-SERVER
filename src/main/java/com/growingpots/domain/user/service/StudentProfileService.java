@@ -102,17 +102,16 @@ public class StudentProfileService {
                         .build())
                 .toList();
 
-
         return StudentProfileResponse.builder()
                 .studentProfileId(profile.getId())
                 .name(profile.getMember().getNickname())
                 .schoolName(profile.getSchool().getName())
                 .departmentName(profile.getDepartment().getName())
-                .studentNo(null) // PDF 파싱 전까지 null
+                .studentNo(profile.getStudentNo())
                 .admissionYear(profile.getAdmissionYear())
-                .gradeLevel(null)
-                .semester(null)
-                .enrollmentStatus(null)
+                .gradeLevel(profile.getCurrentGrade())
+                .semester(profile.getCurrentTerm())
+                .enrollmentStatus(profile.getEnrollmentStatus())
                 .majors(majorInfos)
                 .build();
     }
