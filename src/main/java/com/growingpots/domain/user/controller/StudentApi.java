@@ -1,6 +1,7 @@
 package com.growingpots.domain.user.controller;
 
 import com.growingpots.domain.user.dto.response.StudentProfileCreateResponse;
+import com.growingpots.domain.user.dto.response.StudentProfileResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
@@ -50,14 +51,14 @@ public @interface StudentApi {
             ),
             @ApiResponse(
                     responseCode = "400",
-                    description = "잘못된 요청 (필수값 누락)",
+                    description = "잘못된 요청 (CMN_002: 필수값 누락 / UNIV_003: 학과가 해당 학교 소속이 아님)",
                     content = @Content(
                             mediaType = "application/json",
                             examples = @ExampleObject(value = """
                                     {
                                       "success": false,
-                                      "code": "CMN_002",
-                                      "message": "잘못된 요청입니다.",
+                                      "code": "UNIV_003",
+                                      "message": "해당 학교에 속하지 않는 학과입니다.",
                                       "data": null
                                     }
                                     """)
@@ -73,6 +74,21 @@ public @interface StudentApi {
                                       "success": false,
                                       "code": "CMN_005",
                                       "message": "인증이 필요합니다.",
+                                      "data": null
+                                    }
+                                    """)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "409",
+                    description = "이미 온보딩 완료된 사용자",
+                    content = @Content(
+                            mediaType = "application/json",
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "success": false,
+                                      "code": "USER_002",
+                                      "message": "이미 온보딩 완료된 사용자입니다.",
                                       "data": null
                                     }
                                     """)
@@ -95,4 +111,78 @@ public @interface StudentApi {
             )
     })
     @interface CreateStudentProfile {}
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @Operation(
+            summary = "내 학적 정보 조회",
+            description = "JWT로 인증된 사용자의 학적 정보를 조회합니다. PDF 미업로드 상태면 studentNo, gradeLevel, semester, enrollmentStatus는 null입니다."
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "학적 정보 조회 성공",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = StudentProfileResponse.class),
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "success": true,
+                                      "code": "USER_200",
+                                      "message": "사용자 조회에 성공했습니다.",
+                                      "data": {
+                                        "studentProfileId": 5001,
+                                        "name": "김경민",
+                                        "schoolName": "경희대학교 국제캠퍼스",
+                                        "departmentName": "연극영화학과",
+                                        "studentNo": null,
+                                        "admissionYear": 2023,
+                                        "gradeLevel": null,
+                                        "semester": null,
+                                        "enrollmentStatus": null,
+                                        "majors": [
+                                          {
+                                            "studentMajorId": 9001,
+                                            "majorType": "MAIN",
+                                            "departmentName": "연극영화학과",
+                                            "trackName": null
+                                          }
+                                        ]
+                                      }
+                                    }
+                                    """)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "인증 실패",
+                    content = @Content(
+                            mediaType = "application/json",
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "success": false,
+                                      "code": "CMN_005",
+                                      "message": "인증이 필요합니다.",
+                                      "data": null
+                                    }
+                                    """)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "온보딩 미완료 (학적 프로필 없음)",
+                    content = @Content(
+                            mediaType = "application/json",
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "success": false,
+                                      "code": "USER_003",
+                                      "message": "온보딩이 완료되지 않은 사용자입니다.",
+                                      "data": null
+                                    }
+                                    """)
+                    )
+            )
+    })
+    @interface GetMyProfile {}
 }
