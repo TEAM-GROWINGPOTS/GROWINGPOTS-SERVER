@@ -1,6 +1,7 @@
 package com.growingpots.domain.user.entity;
 
 import com.growingpots.domain.university.entity.Department;
+import com.growingpots.domain.university.entity.Track;
 import com.growingpots.global.entity.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -38,14 +39,17 @@ public class StudentMajor extends BaseTimeEntity {
     @Column(nullable = false)
     private MajorType majorType;
 
-    private Long trackId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "track_id")
+    private Track track;
 
     public enum MajorType { MAIN, DOUBLE }
 
     @Builder
-    private StudentMajor(StudentProfile studentProfile, Department department, MajorType majorType) {
+    private StudentMajor(StudentProfile studentProfile, Department department, MajorType majorType, Track track) {
         this.studentProfile = studentProfile;
         this.department = department;
         this.majorType = majorType;
+        this.track = track;
     }
 }
