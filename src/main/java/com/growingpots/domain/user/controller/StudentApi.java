@@ -256,4 +256,76 @@ public @interface StudentApi {
             )
     })
     @interface GetMyCourses {}
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @Operation(
+            summary = "이수 과목 검수/저장",
+            description = "분석 확인 화면의 편집모드에서 수정·추가·삭제한 이수 과목 전체를 저장합니다. "
+                    + "studentCourseId가 있으면 수정, 없으면 직접 추가한 과목으로 신규 생성됩니다. "
+                    + "요청 목록에 없는 기존 과목은 삭제됩니다(편집모드 상태를 그대로 반영하는 전체 교체 방식)."
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "이수 과목 저장 성공",
+                    content = @Content(
+                            mediaType = "application/json",
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "success": true,
+                                      "code": "USER_200_4",
+                                      "message": "이수 과목이 저장되었습니다.",
+                                      "data": null
+                                    }
+                                    """)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "잘못된 입력값 (다른 학생의 studentCourseId, 존재하지 않는 courseId/departmentId/appliedDivisionId 포함)",
+                    content = @Content(
+                            mediaType = "application/json",
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "success": false,
+                                      "code": "CMN_002",
+                                      "message": "잘못된 입력값입니다.",
+                                      "data": null
+                                    }
+                                    """)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "인증 실패",
+                    content = @Content(
+                            mediaType = "application/json",
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "success": false,
+                                      "code": "CMN_005",
+                                      "message": "인증이 필요합니다.",
+                                      "data": null
+                                    }
+                                    """)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "온보딩 미완료 (학적 프로필 없음)",
+                    content = @Content(
+                            mediaType = "application/json",
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "success": false,
+                                      "code": "USER_003",
+                                      "message": "온보딩이 완료되지 않은 사용자입니다.",
+                                      "data": null
+                                    }
+                                    """)
+                    )
+            )
+    })
+    @interface UpdateMyCourses {}
 }
