@@ -4,6 +4,7 @@ import com.growingpots.domain.university.entity.Course;
 import com.growingpots.domain.university.entity.School;
 import com.growingpots.domain.university.entity.enums.DivisionCategory;
 import com.growingpots.domain.university.entity.enums.OpenedSemester;
+import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import java.util.ArrayList;
 import java.util.List;
@@ -18,6 +19,19 @@ public class CourseSpecifications {
 
     public static Specification<Course> withSchool(School school) {
         return (root, query, cb) -> cb.equal(root.get("school"), school);
+    }
+
+    // offeringDepartment/defaultDivision은 LAZY라 fetch join 없이 응답 매핑 시 접근하면 페이지당 N+1이
+    // 발생한다. count 쿼리(결과 타입이 Long)에는 fetch join을 걸면 안 되므로 content 쿼리에만 적용한다.
+    // to-one 연관관계라 페이지네이션과 같이 써도 안전하다(컬렉션 fetch join과 달리 행이 늘어나지 않음).
+    public static Specification<Course> withFetchedAssociations() {
+        return (root, query, cb) -> {
+            if (query.getResultType() != Long.class && query.getResultType() != long.class) {
+                root.fetch("offeringDepartment", JoinType.LEFT);
+                root.fetch("defaultDivision", JoinType.LEFT);
+            }
+            return cb.conjunction();
+        };
     }
 
     public static Specification<Course> withKeyword(String keyword) {

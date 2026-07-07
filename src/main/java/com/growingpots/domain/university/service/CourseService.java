@@ -73,7 +73,8 @@ public class CourseService {
                 CourseSpecifications.withYears(request.year()),
                 CourseSpecifications.withSemesters(request.semester()),
                 CourseSpecifications.withCredits(request.credits()),
-                CourseSpecifications.withDivisionFilters(categories, crossMajorRequested, crossMajorCourseIds)
+                CourseSpecifications.withDivisionFilters(categories, crossMajorRequested, crossMajorCourseIds),
+                CourseSpecifications.withFetchedAssociations()
         ));
 
         Pageable pageable = PageRequest.of(request.pageOrDefault(), request.sizeOrDefault());
