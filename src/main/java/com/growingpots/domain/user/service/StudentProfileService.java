@@ -1,12 +1,21 @@
 package com.growingpots.domain.user.service;
 
 import com.growingpots.domain.transcript.entity.StudentCourse;
+import com.growingpots.domain.transcript.entity.enums.CourseStatus;
+import com.growingpots.domain.transcript.entity.enums.RecordSource;
 import com.growingpots.domain.transcript.entity.enums.Semester;
 import com.growingpots.domain.transcript.repository.StudentCourseRepository;
+import com.growingpots.domain.university.entity.Course;
 import com.growingpots.domain.university.entity.Department;
+import com.growingpots.domain.university.entity.Division;
 import com.growingpots.domain.university.entity.School;
+import com.growingpots.domain.university.entity.enums.DivisionCategory;
+import com.growingpots.domain.university.repository.CourseRepository;
 import com.growingpots.domain.university.repository.DepartmentRepository;
+import com.growingpots.domain.university.repository.DivisionRepository;
 import com.growingpots.domain.university.repository.SchoolRepository;
+import com.growingpots.domain.user.dto.request.StudentCourseUpdateRequest;
+import com.growingpots.domain.user.dto.request.StudentCourseUpdateRequest.CourseUpdateItem;
 import com.growingpots.domain.user.dto.request.StudentProfileCreateRequest;
 import com.growingpots.domain.user.dto.response.StudentCourseListResponse;
 import com.growingpots.domain.user.dto.response.StudentProfileCreateResponse;
@@ -24,9 +33,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -34,6 +46,10 @@ public class StudentProfileService {
 
     // 교양 이수구분(section)만 그대로 표시용으로 재사용한다. 전공 과목은 section에 전공/트랙명이 들어있어 여기 해당 안 됨.
     private static final Set<String> GENERAL_EDUCATION_SECTIONS = Set.of("필수교과", "배분이수", "자유이수", "기타");
+
+    // 검수 화면에서 사용자가 직접 추가한 과목(PDF 출처 없음)의 section placeholder.
+    // appliedDivisionName()은 appliedDivision FK를 우선 참조하므로 이 값 자체가 표시에 쓰이진 않는다.
+    private static final String MANUAL_SECTION = "직접추가";
 
     // 전공 과목의 raw_classification 코드 → 이수구분명. 실제 PDF의 전공학점 표(이수구분 04/05/11)와
     // 졸업요건 요약(전필/전선/전기 학점)을 교차검증해서 확인한 값이라, 다른 학과 PDF에서도 같은지는 재검증 필요.
@@ -50,6 +66,8 @@ public class StudentProfileService {
     private final StudentCourseRepository studentCourseRepository;
     private final SchoolRepository schoolRepository;
     private final DepartmentRepository departmentRepository;
+    private final CourseRepository courseRepository;
+    private final DivisionRepository divisionRepository;
 
     @Transactional
     public StudentProfileCreateResponse create(Long memberId, StudentProfileCreateRequest request) {
@@ -143,6 +161,84 @@ public class StudentProfileService {
                 .build();
     }
 
+    // 검수 화면([저장하기])에서 넘어온 전체 목록으로 STUDENT_COURSE를 완전히 교체한다.
+    // studentCourseId가 있으면 수정, 없으면 신규(직접추가), 요청에 없는 기존 항목은 삭제.
+    @Transactional
+    public void updateMyCourses(Long memberId, StudentCourseUpdateRequest request) {
+        StudentProfile profile = studentProfileRepository.findWithDetailsByMemberId(memberId)
+                .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
+
+        Map<Long, StudentCourse> existingById = studentCourseRepository.findByStudentProfile(profile).stream()
+                .collect(Collectors.toMap(StudentCourse::getId, sc -> sc));
+
+        Set<Long> keepIds = new HashSet<>();
+        List<StudentCourse> newCourses = new ArrayList<>();
+
+        for (CourseUpdateItem item : request.courses()) {
+            Course course = findCourseOrThrow(item.courseId());
+            Department department = findDepartmentOrThrow(item.departmentId());
+            Division division = findDivisionOrThrow(item.appliedDivisionId());
+
+            if (item.studentCourseId() == null) {
+                newCourses.add(StudentCourse.builder()
+                        .studentProfile(profile)
+                        .course(course)
+                        .appliedDepartment(department)
+                        .appliedDivision(division)
+                        .rawCourseCode(course != null ? course.getCourseCode() : null)
+                        .rawCourseName(item.rawCourseName())
+                        .credit(item.credit())
+                        .takenYear(item.takenYear())
+                        .takenSemester(item.takenSemester())
+                        .section(MANUAL_SECTION)
+                        .isRetake(false)
+                        .status(CourseStatus.COMPLETED)
+                        .source(RecordSource.MANUAL)
+                        .build());
+                continue;
+            }
+
+            // 다른 학생의 studentCourseId를 보내거나 존재하지 않는 id면 잘못된 입력값으로 취급한다.
+            StudentCourse existing = existingById.get(item.studentCourseId());
+            if (existing == null) {
+                throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
+            }
+            existing.applyEdit(course, item.rawCourseName(), department, item.credit(), division,
+                    item.takenYear(), item.takenSemester());
+            keepIds.add(existing.getId());
+        }
+
+        List<StudentCourse> toDelete = existingById.values().stream()
+                .filter(sc -> !keepIds.contains(sc.getId()))
+                .toList();
+        studentCourseRepository.deleteAll(toDelete);
+        studentCourseRepository.saveAll(newCourses);
+    }
+
+    private Course findCourseOrThrow(Long courseId) {
+        if (courseId == null) {
+            return null;
+        }
+        return courseRepository.findById(courseId)
+                .orElseThrow(() -> new BaseException(ErrorCode.INVALID_INPUT_VALUE));
+    }
+
+    private Department findDepartmentOrThrow(Long departmentId) {
+        if (departmentId == null) {
+            return null;
+        }
+        return departmentRepository.findById(departmentId)
+                .orElseThrow(() -> new BaseException(ErrorCode.INVALID_INPUT_VALUE));
+    }
+
+    private Division findDivisionOrThrow(Long divisionId) {
+        if (divisionId == null) {
+            return null;
+        }
+        return divisionRepository.findById(divisionId)
+                .orElseThrow(() -> new BaseException(ErrorCode.INVALID_INPUT_VALUE));
+    }
+
     private StudentCourseListResponse.CourseInfo toCourseInfo(StudentCourse course) {
         return StudentCourseListResponse.CourseInfo.builder()
                 .studentCourseId(course.getId())
@@ -168,9 +264,12 @@ public class StudentProfileService {
         };
     }
 
-    // COURSE 매칭이 되면 개설학과명을 그대로 쓰고, 안 됐으면 교양 과목일 때만 "교양"으로 표시한다.
-    // 전공 과목인데 COURSE 시드가 없어 매칭 안 된 경우(예: 시드 누락된 타전공 과목)는 "교양"이 아니므로 null로 남긴다.
+    // 사용자가 검수 화면에서 개설학부를 직접 바꿨으면(appliedDepartment) 그 값을 우선한다.
+    // 아니면 COURSE 매칭 결과를 쓰고, 그마저 없으면 교양 과목일 때만 "교양"으로 표시한다.
     private String departmentName(StudentCourse course) {
+        if (course.getAppliedDepartment() != null) {
+            return course.getAppliedDepartment().getName();
+        }
         if (course.getCourse() != null && course.getCourse().getOfferingDepartment() != null) {
             return course.getCourse().getOfferingDepartment().getName();
         }
@@ -187,6 +286,9 @@ public class StudentProfileService {
     }
 
     private String appliedDivisionName(StudentCourse course) {
+        if (course.getAppliedDivision() != null) {
+            return divisionCategoryName(course.getAppliedDivision().getCategory());
+        }
         if (GENERAL_EDUCATION_SECTIONS.contains(course.getSection())) {
             return course.getSection();
         }
@@ -195,5 +297,17 @@ public class StudentProfileService {
             return "기타";
         }
         return rawClassification == null ? null : MAJOR_DIVISION_NAMES.get(rawClassification);
+    }
+
+    private String divisionCategoryName(DivisionCategory category) {
+        return switch (category) {
+            case MAJOR_BASIC -> "전공기초";
+            case MAJOR_REQUIRED -> "전공필수";
+            case MAJOR_ELECTIVE -> "전공선택";
+            case GE_REQUIRED -> "필수교과";
+            case GE_DISTRIBUTION -> "배분이수";
+            case GE_FREE -> "자유이수";
+            case GENERAL_ELECTIVE -> "일반선택";
+        };
     }
 }

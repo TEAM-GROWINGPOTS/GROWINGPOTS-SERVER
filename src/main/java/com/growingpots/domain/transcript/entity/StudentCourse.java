@@ -116,6 +116,7 @@ public class StudentCourse extends BaseTimeEntity {
 
     // 이수 과목 검수/저장 화면(PUT)에서 사용자가 확정한 값으로 덮어쓴다.
     public void applyEdit(
+            Course course,
             String rawCourseName,
             Department appliedDepartment,
             int credit,
@@ -123,6 +124,7 @@ public class StudentCourse extends BaseTimeEntity {
             Integer takenYear,
             Semester takenSemester
     ) {
+        this.course = course;
         this.rawCourseName = rawCourseName;
         this.appliedDepartment = appliedDepartment;
         this.credit = credit;
