@@ -39,6 +39,7 @@ public enum GraduationConditionType {
             GraduationAnalysisSummary::getGeneralElectiveCurrent,
             null),
 
+    // Division 기반이 아닌 Course.isEnglish/isSw 플래그로 조회
     ENGLISH_COURSE("영어 강의", "COURSES", false, true,
             GraduationAnalysisSummary::getEnglishCurrent,
             GraduationAnalysisSummary::getEnglishRequired),
