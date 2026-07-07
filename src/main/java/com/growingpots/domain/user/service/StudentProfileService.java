@@ -210,7 +210,7 @@ public class StudentProfileService {
         List<StudentCourse> toDelete = existingById.values().stream()
                 .filter(sc -> !keepIds.contains(sc.getId()))
                 .toList();
-        studentCourseRepository.deleteAll(toDelete);
+        studentCourseRepository.deleteAllInBatch(toDelete);
         studentCourseRepository.saveAll(newCourses);
     }
 
