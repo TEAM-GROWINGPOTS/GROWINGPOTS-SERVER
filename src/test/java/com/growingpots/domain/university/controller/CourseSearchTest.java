@@ -154,7 +154,7 @@ class CourseSearchTest {
         Division majorElective = divisionRepository.save(Division.builder()
                 .school(school).code("05").category(DivisionCategory.MAJOR_ELECTIVE).build());
         Division geRequired = divisionRepository.save(Division.builder()
-                .school(school).code("01").category(DivisionCategory.GE_REQUIRED).build());
+                .school(school).code("01").category(DivisionCategory.REQUIRED_GE).build());
 
         // 전공필수, 2학년 -> 매칭
         courseRepository.save(Course.builder()
