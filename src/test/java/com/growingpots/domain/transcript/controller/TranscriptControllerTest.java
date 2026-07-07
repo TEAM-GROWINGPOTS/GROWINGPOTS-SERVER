@@ -17,8 +17,11 @@ import com.growingpots.domain.transcript.parser.PdfParsingException;
 import com.growingpots.domain.transcript.parser.PdfTranscriptParser;
 import com.growingpots.domain.transcript.repository.StudentCourseRepository;
 import com.growingpots.domain.university.entity.Department;
+import com.growingpots.domain.university.entity.Division;
 import com.growingpots.domain.university.entity.School;
+import com.growingpots.domain.university.entity.enums.DivisionCategory;
 import com.growingpots.domain.university.repository.DepartmentRepository;
+import com.growingpots.domain.university.repository.DivisionRepository;
 import com.growingpots.domain.university.repository.SchoolRepository;
 import com.growingpots.domain.user.entity.Member;
 import com.growingpots.domain.user.entity.StudentProfile;
@@ -64,6 +67,9 @@ class TranscriptControllerTest {
 
     @Autowired
     private DepartmentRepository departmentRepository;
+
+    @Autowired
+    private DivisionRepository divisionRepository;
 
     @MockitoBean
     private PdfTranscriptParser pdfTranscriptParser;
@@ -113,6 +119,26 @@ class TranscriptControllerTest {
     }
 
     @Test
+    void 교양_구역의_과목은_학교의_GE_FREE_Division으로_해석되어_저장된다() throws Exception {
+        StudentProfile studentProfile = onboardedStudent("1002");
+        Division geFree = divisionRepository.save(Division.builder()
+                .school(studentProfile.getSchool())
+                .code("02")
+                .category(DivisionCategory.GE_FREE)
+                .build());
+        when(pdfTranscriptParser.parse(any())).thenReturn(sampleParsedTranscript());
+
+        mockMvc.perform(multipart("/api/v1/diagnosis/upload")
+                        .file(new MockMultipartFile("file", "transcript.pdf", "application/pdf", PDF_BYTES))
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isCreated());
+
+        StudentCourse course = coursesOf(studentProfile).getFirst();
+        assertThat(course.getAppliedDivision()).isNotNull();
+        assertThat(course.getAppliedDivision().getId()).isEqualTo(geFree.getId());
+    }
+
+    @Test
     void 재업로드하면_기존_PDF_데이터는_삭제되고_수동입력_데이터는_보존된다() throws Exception {
         StudentProfile studentProfile = onboardedStudent("2002");
         studentCourseRepository.save(StudentCourse.builder()
@@ -122,7 +148,6 @@ class TranscriptControllerTest {
                 .credit(3)
                 .takenYear(2020)
                 .takenSemester(Semester.FIRST)
-                .section("기타")
                 .status(CourseStatus.COMPLETED)
                 .source(RecordSource.PDF)
                 .build());
@@ -133,7 +158,6 @@ class TranscriptControllerTest {
                 .credit(2)
                 .takenYear(2021)
                 .takenSemester(Semester.SECOND)
-                .section("자유이수")
                 .status(CourseStatus.COMPLETED)
                 .source(RecordSource.MANUAL)
                 .build());

@@ -116,7 +116,6 @@ class StudentCourseUpdateTest {
                 .credit(3)
                 .takenYear(2023)
                 .takenSemester(Semester.FIRST)
-                .section("연극영화학")
                 .status(CourseStatus.COMPLETED)
                 .source(RecordSource.PDF)
                 .build());
@@ -127,7 +126,6 @@ class StudentCourseUpdateTest {
                 .credit(2)
                 .takenYear(2022)
                 .takenSemester(Semester.SECOND)
-                .section("기타")
                 .status(CourseStatus.COMPLETED)
                 .source(RecordSource.PDF)
                 .build());
@@ -198,7 +196,6 @@ class StudentCourseUpdateTest {
                 .rawCourseCode("OTH001")
                 .rawCourseName("남의 과목")
                 .credit(3)
-                .section("기타")
                 .status(CourseStatus.COMPLETED)
                 .source(RecordSource.PDF)
                 .build());
