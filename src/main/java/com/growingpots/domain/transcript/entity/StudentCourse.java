@@ -65,9 +65,6 @@ public class StudentCourse extends BaseTimeEntity {
     @Enumerated(EnumType.STRING)
     private Semester takenSemester;
 
-    @Column(nullable = false)
-    private String section;
-
     private String rawClassification;
 
     @Column(nullable = false)
@@ -92,7 +89,6 @@ public class StudentCourse extends BaseTimeEntity {
             int credit,
             Integer takenYear,
             Semester takenSemester,
-            String section,
             String rawClassification,
             boolean isRetake,
             CourseStatus status,
@@ -107,7 +103,6 @@ public class StudentCourse extends BaseTimeEntity {
         this.credit = credit;
         this.takenYear = takenYear;
         this.takenSemester = takenSemester;
-        this.section = section;
         this.rawClassification = rawClassification;
         this.isRetake = isRetake;
         this.status = status;

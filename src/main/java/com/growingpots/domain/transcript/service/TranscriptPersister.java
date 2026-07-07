@@ -14,8 +14,11 @@ import com.growingpots.domain.transcript.repository.GraduationAnalysisSummaryRep
 import com.growingpots.domain.transcript.repository.StudentCourseRepository;
 import com.growingpots.domain.university.entity.Course;
 import com.growingpots.domain.university.entity.Department;
+import com.growingpots.domain.university.entity.Division;
+import com.growingpots.domain.university.entity.enums.DivisionCategory;
 import com.growingpots.domain.university.repository.CourseRepository;
 import com.growingpots.domain.university.repository.DepartmentRepository;
+import com.growingpots.domain.university.repository.DivisionRepository;
 import com.growingpots.domain.user.entity.StudentMajor;
 import com.growingpots.domain.user.entity.StudentMajor.MajorType;
 import com.growingpots.domain.user.entity.StudentProfile;
@@ -48,11 +51,21 @@ public class TranscriptPersister {
     private static final Pattern DIGITS_PATTERN = Pattern.compile("\\d+");
     private static final Pattern DECIMAL_PATTERN = Pattern.compile("\\d+(\\.\\d+)?");
 
+    // 교양 4개 표(section 라벨) → Division.category. 코드("02"처럼 배분이수/자유이수가 같은 코드를 쓰는 경우가 있어)
+    // 대신 표 이름으로 직접 매핑한다.
+    private static final Map<String, DivisionCategory> GE_SECTION_CATEGORIES = Map.of(
+            "필수교과", DivisionCategory.GE_REQUIRED,
+            "배분이수", DivisionCategory.GE_DISTRIBUTION,
+            "자유이수", DivisionCategory.GE_FREE,
+            "기타", DivisionCategory.GENERAL_ELECTIVE
+    );
+
     private final StudentProfileRepository studentProfileRepository;
     private final StudentCourseRepository studentCourseRepository;
     private final StudentMajorRepository studentMajorRepository;
     private final DepartmentRepository departmentRepository;
     private final CourseRepository courseRepository;
+    private final DivisionRepository divisionRepository;
     private final GraduationAnalysisSummaryRepository graduationAnalysisSummaryRepository;
     private final CertResultRepository certResultRepository;
 
@@ -68,8 +81,15 @@ public class TranscriptPersister {
         Map<String, Course> coursesByCode = courseRepository.findBySchool(studentProfile.getSchool()).stream()
                 .collect(Collectors.toMap(Course::getCourseCode, c -> c, (a, b) -> a));
 
+        List<Division> divisions = divisionRepository.findBySchool(studentProfile.getSchool());
+        Map<DivisionCategory, Division> divisionsByCategory = divisions.stream()
+                .collect(Collectors.toMap(Division::getCategory, d -> d, (a, b) -> a));
+        Map<String, Division> divisionsByCode = divisions.stream()
+                .collect(Collectors.toMap(Division::getCode, d -> d, (a, b) -> a));
+
         studentCourseRepository.deleteByStudentProfileAndSource(studentProfile, RecordSource.PDF);
-        studentCourseRepository.saveAll(toStudentCourses(studentProfile, parsed.courses(), coursesByCode, now));
+        studentCourseRepository.saveAll(toStudentCourses(
+                studentProfile, parsed.courses(), coursesByCode, divisionsByCategory, divisionsByCode, now));
 
         // 전공이 여러 개(복수전공)여도 학과 목록은 한 번만 조회해서 재사용한다.
         List<Department> departments = departmentRepository.findAll();
@@ -123,14 +143,16 @@ public class TranscriptPersister {
 
     private List<StudentCourse> toStudentCourses(
             StudentProfile studentProfile, List<Map<String, String>> courses, Map<String, Course> coursesByCode,
+            Map<DivisionCategory, Division> divisionsByCategory, Map<String, Division> divisionsByCode,
             LocalDate now) {
         return courses.stream()
-                .map(course -> toStudentCourse(studentProfile, course, coursesByCode, now))
+                .map(course -> toStudentCourse(studentProfile, course, coursesByCode, divisionsByCategory, divisionsByCode, now))
                 .toList();
     }
 
     private StudentCourse toStudentCourse(
             StudentProfile studentProfile, Map<String, String> course, Map<String, Course> coursesByCode,
+            Map<DivisionCategory, Division> divisionsByCategory, Map<String, Division> divisionsByCode,
             LocalDate now) {
         String section = course.get("section");
         String rawClassification = course.get("rawClassification");
@@ -146,17 +168,32 @@ public class TranscriptPersister {
         return StudentCourse.builder()
                 .studentProfile(studentProfile)
                 .course(rawCourseCode == null ? null : coursesByCode.get(rawCourseCode))
+                .appliedDivision(resolveAppliedDivision(section, rawClassification, divisionsByCategory, divisionsByCode))
                 .rawCourseCode(rawCourseCode)
                 .rawCourseName(course.get("courseName"))
                 .credit(Integer.parseInt(course.get("credits")))
                 .takenYear(takenYear)
                 .takenSemester(takenSemester)
-                .section(section)
                 .rawClassification(rawClassification)
                 .isRetake(RETAKE_SECTION.equals(section))
                 .status(inProgress ? CourseStatus.IN_PROGRESS : CourseStatus.COMPLETED)
                 .source(RecordSource.PDF)
                 .build();
+    }
+
+    // 교양 4개 표는 section 라벨로 category를 바로 찾고, "08"이 포함된 코드(금학기수강학점 기타 과목 등)는
+    // 일반선택으로, 그 외엔 전공 코드(04/05/11)로 정확히 일치하는 Division을 찾는다. 매칭 안 되면 null.
+    private Division resolveAppliedDivision(
+            String section, String rawClassification,
+            Map<DivisionCategory, Division> divisionsByCategory, Map<String, Division> divisionsByCode) {
+        DivisionCategory geCategory = GE_SECTION_CATEGORIES.get(section);
+        if (geCategory != null) {
+            return divisionsByCategory.get(geCategory);
+        }
+        if (rawClassification != null && rawClassification.contains("08")) {
+            return divisionsByCode.get("08");
+        }
+        return rawClassification == null ? null : divisionsByCode.get(rawClassification);
     }
 
     // 파서가 내려주는 "yyyy/n" 형식(예: "2023/2")을 분리한다.

@@ -44,22 +44,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class StudentProfileService {
 
-    // 교양 이수구분(section)만 그대로 표시용으로 재사용한다. 전공 과목은 section에 전공/트랙명이 들어있어 여기 해당 안 됨.
-    private static final Set<String> GENERAL_EDUCATION_SECTIONS = Set.of("필수교과", "배분이수", "자유이수", "기타");
-
-    // 검수 화면에서 사용자가 직접 추가한 과목(PDF 출처 없음)의 section placeholder.
-    // appliedDivisionName()은 appliedDivision FK를 우선 참조하므로 이 값 자체가 표시에 쓰이진 않는다.
-    private static final String MANUAL_SECTION = "직접추가";
-
-    // 전공 과목의 raw_classification 코드 → 이수구분명. 실제 PDF의 전공학점 표(이수구분 04/05/11)와
-    // 졸업요건 요약(전필/전선/전기 학점)을 교차검증해서 확인한 값이라, 다른 학과 PDF에서도 같은지는 재검증 필요.
-    // 좌측 교양 표의 "04"(재수강)와는 의미가 다르므로 교양(GENERAL_EDUCATION_SECTIONS) 판정 후에만 사용한다.
-    private static final Map<String, String> MAJOR_DIVISION_NAMES = Map.of(
-            "04", "전공필수",
-            "05", "전공선택",
-            "11", "전공기초"
-    );
-
     private final MemberRepository memberRepository;
     private final StudentProfileRepository studentProfileRepository;
     private final StudentMajorRepository studentMajorRepository;
@@ -190,7 +174,6 @@ public class StudentProfileService {
                         .credit(item.credit())
                         .takenYear(item.takenYear())
                         .takenSemester(item.takenSemester())
-                        .section(MANUAL_SECTION)
                         .isRetake(false)
                         .status(CourseStatus.COMPLETED)
                         .source(RecordSource.MANUAL)
@@ -276,27 +259,19 @@ public class StudentProfileService {
         return isGeneralEducation(course) ? "교양" : null;
     }
 
-    // section이 교양 라벨이거나(정규 이수 표), raw_classification에 "08"이 포함되면("08 05"처럼 다른 코드와 붙어있어도) 교양으로 본다.
+    // appliedDivision의 category가 교양 계열(4개) 중 하나면 교양 과목으로 본다.
     private boolean isGeneralEducation(StudentCourse course) {
-        if (GENERAL_EDUCATION_SECTIONS.contains(course.getSection())) {
-            return true;
+        if (course.getAppliedDivision() == null) {
+            return false;
         }
-        String rawClassification = course.getRawClassification();
-        return rawClassification != null && rawClassification.contains("08");
+        return switch (course.getAppliedDivision().getCategory()) {
+            case GE_REQUIRED, GE_DISTRIBUTION, GE_FREE, GENERAL_ELECTIVE -> true;
+            case MAJOR_BASIC, MAJOR_REQUIRED, MAJOR_ELECTIVE -> false;
+        };
     }
 
     private String appliedDivisionName(StudentCourse course) {
-        if (course.getAppliedDivision() != null) {
-            return divisionCategoryName(course.getAppliedDivision().getCategory());
-        }
-        if (GENERAL_EDUCATION_SECTIONS.contains(course.getSection())) {
-            return course.getSection();
-        }
-        String rawClassification = course.getRawClassification();
-        if (rawClassification != null && rawClassification.contains("08")) {
-            return "기타";
-        }
-        return rawClassification == null ? null : MAJOR_DIVISION_NAMES.get(rawClassification);
+        return course.getAppliedDivision() == null ? null : divisionCategoryName(course.getAppliedDivision().getCategory());
     }
 
     private String divisionCategoryName(DivisionCategory category) {
