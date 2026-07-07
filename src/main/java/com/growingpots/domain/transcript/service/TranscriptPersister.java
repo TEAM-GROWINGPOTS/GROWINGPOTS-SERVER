@@ -174,7 +174,6 @@ public class TranscriptPersister {
                 .credit(Integer.parseInt(course.get("credits")))
                 .takenYear(takenYear)
                 .takenSemester(takenSemester)
-                .rawClassification(rawClassification)
                 .isRetake(RETAKE_SECTION.equals(section))
                 .status(inProgress ? CourseStatus.IN_PROGRESS : CourseStatus.COMPLETED)
                 .source(RecordSource.PDF)

@@ -178,7 +178,6 @@ class StudentCourseListTest {
                 .credit(3)
                 .takenYear(2023)
                 .takenSemester(Semester.FIRST)
-                .rawClassification("04")
                 .status(CourseStatus.COMPLETED)
                 .source(RecordSource.PDF)
                 .build());
@@ -206,7 +205,6 @@ class StudentCourseListTest {
                 .credit(3)
                 .takenYear(2024)
                 .takenSemester(Semester.FIRST)
-                .rawClassification("05")
                 .status(CourseStatus.COMPLETED)
                 .source(RecordSource.PDF)
                 .build());
@@ -218,7 +216,6 @@ class StudentCourseListTest {
                 .credit(3)
                 .takenYear(2023)
                 .takenSemester(Semester.FIRST)
-                .rawClassification("11")
                 .status(CourseStatus.COMPLETED)
                 .source(RecordSource.PDF)
                 .build());
@@ -230,7 +227,6 @@ class StudentCourseListTest {
                 .credit(3)
                 .takenYear(2024)
                 .takenSemester(Semester.SECOND)
-                .rawClassification(null)
                 .status(CourseStatus.COMPLETED)
                 .source(RecordSource.PDF)
                 .build());
@@ -259,7 +255,6 @@ class StudentCourseListTest {
                 .rawCourseCode("BME213")
                 .rawCourseName("기초프로그래밍")
                 .credit(3)
-                .rawClassification("0811")
                 .status(CourseStatus.IN_PROGRESS)
                 .source(RecordSource.PDF)
                 .build());
