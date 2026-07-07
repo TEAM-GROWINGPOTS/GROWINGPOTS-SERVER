@@ -54,9 +54,9 @@ public class TranscriptPersister {
     // 교양 4개 표(section 라벨) → Division.category. 코드("02"처럼 배분이수/자유이수가 같은 코드를 쓰는 경우가 있어)
     // 대신 표 이름으로 직접 매핑한다.
     private static final Map<String, DivisionCategory> GE_SECTION_CATEGORIES = Map.of(
-            "필수교과", DivisionCategory.GE_REQUIRED,
-            "배분이수", DivisionCategory.GE_DISTRIBUTION,
-            "자유이수", DivisionCategory.GE_FREE,
+            "필수교과", DivisionCategory.REQUIRED_GE,
+            "배분이수", DivisionCategory.DISTRIBUTED_GE,
+            "자유이수", DivisionCategory.FREE_GE,
             "기타", DivisionCategory.GENERAL_ELECTIVE
     );
 

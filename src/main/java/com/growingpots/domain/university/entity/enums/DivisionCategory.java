@@ -4,8 +4,8 @@ public enum DivisionCategory {
     MAJOR_BASIC,
     MAJOR_REQUIRED,
     MAJOR_ELECTIVE,
-    GE_REQUIRED,
-    GE_DISTRIBUTION,
-    GE_FREE,
+    REQUIRED_GE,
+    DISTRIBUTED_GE,
+    FREE_GE,
     GENERAL_ELECTIVE
 }

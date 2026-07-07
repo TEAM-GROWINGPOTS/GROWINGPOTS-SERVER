@@ -36,9 +36,10 @@ public enum GraduationConditionType {
 
     // required 컬럼 없음 → required=null, satisfied=true 고정. 원형 차트 8등분에서 제외(chartTarget=false)
     GENERAL_ELECTIVE("일반 선택", "CREDITS", false, false,
-            s -> 0,
+            GraduationAnalysisSummary::getGeneralElectiveCurrent,
             null),
 
+    // Division 기반이 아닌 Course.isEnglish/isSw 플래그로 조회
     ENGLISH_COURSE("영어 강의", "COURSES", false, true,
             GraduationAnalysisSummary::getEnglishCurrent,
             GraduationAnalysisSummary::getEnglishRequired),

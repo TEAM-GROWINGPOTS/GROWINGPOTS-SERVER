@@ -273,7 +273,7 @@ public class StudentProfileService {
             return false;
         }
         return switch (course.getAppliedDivision().getCategory()) {
-            case GE_REQUIRED, GE_DISTRIBUTION, GE_FREE, GENERAL_ELECTIVE -> true;
+            case REQUIRED_GE, DISTRIBUTED_GE, FREE_GE, GENERAL_ELECTIVE -> true;
             case MAJOR_BASIC, MAJOR_REQUIRED, MAJOR_ELECTIVE -> false;
         };
     }
@@ -287,9 +287,9 @@ public class StudentProfileService {
             case MAJOR_BASIC -> "전공기초";
             case MAJOR_REQUIRED -> "전공필수";
             case MAJOR_ELECTIVE -> "전공선택";
-            case GE_REQUIRED -> "필수교과";
-            case GE_DISTRIBUTION -> "배분이수";
-            case GE_FREE -> "자유이수";
+            case REQUIRED_GE -> "필수교과";
+            case DISTRIBUTED_GE -> "배분이수";
+            case FREE_GE -> "자유이수";
             case GENERAL_ELECTIVE -> "일반선택";
         };
     }

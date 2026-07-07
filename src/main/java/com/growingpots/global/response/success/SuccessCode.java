@@ -37,6 +37,7 @@ public enum SuccessCode implements SuccessType {
     // Requirement / Graduation
     REQUIREMENT_FOUND(HttpStatus.OK, "REQ_200", "졸업요건 조회에 성공했습니다."),
     GRADUATION_STATUS_FOUND(HttpStatus.OK, "REQ_200_1", "졸업 현황 조회에 성공했습니다."),
+    GRADUATION_COURSE_FOUND(HttpStatus.OK, "REQ_200_2", "이수구분별 과목을 조회했습니다."),
 
     // Planner
     PLANNER_FOUND(HttpStatus.OK, "PLAN_200", "플래너 조회에 성공했습니다."),

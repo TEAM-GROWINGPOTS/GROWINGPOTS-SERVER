@@ -106,7 +106,7 @@ class StudentCourseListTest {
     void 이수과목_목록을_조회하면_교양은_이수구분명이_전공은_null이_나온다() throws Exception {
         StudentProfile studentProfile = onboardedStudent("1001");
         School school = studentProfile.getSchool();
-        Division freeGe = division(school, "02", DivisionCategory.GE_FREE);
+        Division freeGe = division(school, "02", DivisionCategory.FREE_GE);
 
         studentCourseRepository.save(StudentCourse.builder()
                 .studentProfile(studentProfile)

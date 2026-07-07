@@ -119,12 +119,12 @@ class TranscriptControllerTest {
     }
 
     @Test
-    void 교양_구역의_과목은_학교의_GE_FREE_Division으로_해석되어_저장된다() throws Exception {
+    void 교양_구역의_과목은_학교의_FREE_GE_Division으로_해석되어_저장된다() throws Exception {
         StudentProfile studentProfile = onboardedStudent("1002");
         Division geFree = divisionRepository.save(Division.builder()
                 .school(studentProfile.getSchool())
                 .code("02")
-                .category(DivisionCategory.GE_FREE)
+                .category(DivisionCategory.FREE_GE)
                 .build());
         when(pdfTranscriptParser.parse(any())).thenReturn(sampleParsedTranscript());
 
