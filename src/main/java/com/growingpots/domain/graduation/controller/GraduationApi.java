@@ -29,4 +29,21 @@ public @interface GraduationApi {
     })
     @interface GetGraduationStatus {
     }
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @Operation(
+            summary = "이수구분별 과목 조회",
+            description = "divisionCode(예: MAJOR_REQUIRED)에 해당하는 이수/미이수 과목 목록을 반환한다. "
+                    + "hasRequiredList=true인 경우 미이수 필수과목이 포함된다. "
+                    + "majorType=ALL이면 보유 전공 전부, PRIMARY=본전공, MULTI=복수전공."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 성공 (REQ_200_2)"),
+            @ApiResponse(responseCode = "400", description = "잘못된 divisionCode (CMN_002)"),
+            @ApiResponse(responseCode = "401", description = "인증 실패 (CMN_005)"),
+            @ApiResponse(responseCode = "404", description = "학적 정보 없음(USER_003) / 졸업 분석 데이터 없음(REQ_001) / 복수전공 없음(REQ_002)")
+    })
+    @interface GetDivisionCourses {
+    }
 }
