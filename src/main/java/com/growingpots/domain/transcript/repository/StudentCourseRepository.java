@@ -1,6 +1,7 @@
 package com.growingpots.domain.transcript.repository;
 
 import com.growingpots.domain.transcript.entity.StudentCourse;
+import com.growingpots.domain.transcript.entity.enums.CourseStatus;
 import com.growingpots.domain.transcript.entity.enums.RecordSource;
 import com.growingpots.domain.university.entity.Division;
 import com.growingpots.domain.user.entity.StudentProfile;
@@ -34,4 +35,9 @@ public interface StudentCourseRepository extends JpaRepository<StudentCourse, Lo
             + "WHERE sc.studentProfile = :studentProfile AND c.isSw = true")
     List<StudentCourse> findByStudentProfileAndCourseIsSw(
             @Param("studentProfile") StudentProfile studentProfile);
+
+    @Query("SELECT sc.course.id FROM StudentCourse sc "
+            + "WHERE sc.studentProfile = :studentProfile AND sc.status = :status AND sc.course IS NOT NULL")
+    List<Long> findCourseIdsByStudentProfileAndStatus(
+            @Param("studentProfile") StudentProfile studentProfile, @Param("status") CourseStatus status);
 }
