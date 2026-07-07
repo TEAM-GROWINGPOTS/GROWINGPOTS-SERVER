@@ -44,8 +44,9 @@ public class Course extends BaseTimeEntity {
     @JoinColumn(name = "offering_department_id")
     private Department offeringDepartment;
 
-    // DIVISION 테이블이 아직 없어 FK 대신 원본 id만 보관한다(추후 DIVISION 엔티티 생기면 FK로 전환)
-    private Long defaultDivisionId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "default_division_id")
+    private Division defaultDivision;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "ge_area_id")
@@ -70,7 +71,7 @@ public class Course extends BaseTimeEntity {
             String name,
             int credit,
             Department offeringDepartment,
-            Long defaultDivisionId,
+            Division defaultDivision,
             GeArea geArea,
             String recommendedYear,
             OpenedSemester openedSemester,
@@ -82,7 +83,7 @@ public class Course extends BaseTimeEntity {
         this.name = name;
         this.credit = credit;
         this.offeringDepartment = offeringDepartment;
-        this.defaultDivisionId = defaultDivisionId;
+        this.defaultDivision = defaultDivision;
         this.geArea = geArea;
         this.recommendedYear = recommendedYear;
         this.openedSemester = openedSemester;

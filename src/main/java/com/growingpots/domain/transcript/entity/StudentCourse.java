@@ -3,6 +3,7 @@ package com.growingpots.domain.transcript.entity;
 import com.growingpots.domain.transcript.entity.enums.CourseStatus;
 import com.growingpots.domain.transcript.entity.enums.RecordSource;
 import com.growingpots.domain.university.entity.Course;
+import com.growingpots.domain.university.entity.Division;
 import com.growingpots.domain.user.entity.StudentProfile;
 import com.growingpots.global.entity.BaseTimeEntity;
 import jakarta.persistence.Column;
@@ -38,6 +39,11 @@ public class StudentCourse extends BaseTimeEntity {
     @JoinColumn(name = "course_id")
     private Course course;
 
+    // TranscriptPersister가 rawClassification/section → Division 조회 후 채운다. 미매칭 시 null.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "applied_division_id")
+    private Division appliedDivision;
+
     private String rawCourseCode;
 
     @Column(nullable = false)
@@ -71,6 +77,7 @@ public class StudentCourse extends BaseTimeEntity {
     private StudentCourse(
             StudentProfile studentProfile,
             Course course,
+            Division appliedDivision,
             String rawCourseCode,
             String rawCourseName,
             int credit,
@@ -84,6 +91,7 @@ public class StudentCourse extends BaseTimeEntity {
     ) {
         this.studentProfile = studentProfile;
         this.course = course;
+        this.appliedDivision = appliedDivision;
         this.rawCourseCode = rawCourseCode;
         this.rawCourseName = rawCourseName;
         this.credit = credit;
