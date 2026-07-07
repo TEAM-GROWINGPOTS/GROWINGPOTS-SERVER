@@ -53,8 +53,10 @@ public class Course extends BaseTimeEntity {
     @JoinColumn(name = "ge_area_id")
     private GeArea geArea;
 
-    // erd.md엔 INT로 정의돼 있었지만 실제 데이터에 "1-2", "3-4" 같은 범위 표기가 있어 문자열로 저장한다
-    private String recommendedYear;
+    // 원래 "1-2", "3-4" 같은 범위 문자열이었으나, 과목 검색 필터(학년)에서 매 요청마다 문자열을
+    // 파싱하지 않도록 등록 시점에 한 번만 파싱해 정수 범위로 저장한다. 단일 학년이면 low==high.
+    private Integer recommendedYearLow;
+    private Integer recommendedYearHigh;
 
     @Enumerated(EnumType.STRING)
     private OpenedSemester openedSemester;
@@ -74,7 +76,8 @@ public class Course extends BaseTimeEntity {
             Department offeringDepartment,
             Division defaultDivision,
             GeArea geArea,
-            String recommendedYear,
+            Integer recommendedYearLow,
+            Integer recommendedYearHigh,
             OpenedSemester openedSemester,
             boolean isEnglish,
             boolean isSw
@@ -86,7 +89,8 @@ public class Course extends BaseTimeEntity {
         this.offeringDepartment = offeringDepartment;
         this.defaultDivision = defaultDivision;
         this.geArea = geArea;
-        this.recommendedYear = recommendedYear;
+        this.recommendedYearLow = recommendedYearLow;
+        this.recommendedYearHigh = recommendedYearHigh;
         this.openedSemester = openedSemester;
         this.isEnglish = isEnglish;
         this.isSw = isSw;
