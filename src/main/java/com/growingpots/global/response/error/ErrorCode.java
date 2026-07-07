@@ -47,8 +47,9 @@ public enum ErrorCode implements ErrorType {
 
     // Planner
     COURSE_NOT_FOUND(HttpStatus.NOT_FOUND, "PLAN_001", "존재하지 않는 과목입니다."),
-    PLANNER_COURSE_NOT_FOUND(HttpStatus.NOT_FOUND, "PLAN_002", "플래너에 존재하지 않는 과목입니다."),
-    DUPLICATE_PLANNER_COURSE(HttpStatus.BAD_REQUEST, "PLAN_003", "이미 플래너에 추가된 과목입니다.");
+    PLANNER_NOT_FOUND(HttpStatus.NOT_FOUND, "PLAN_002", "존재하지 않는 플래너입니다."),
+    PLANNER_ACCESS_DENIED(HttpStatus.FORBIDDEN, "PLAN_003", "플래너에 접근 권한이 없습니다."),
+    PLANNER_INVALID_DATA(HttpStatus.BAD_REQUEST, "PLAN_004", "플래너 데이터 정합성 오류입니다.");
 
     private final HttpStatus status;
     private final String code;
