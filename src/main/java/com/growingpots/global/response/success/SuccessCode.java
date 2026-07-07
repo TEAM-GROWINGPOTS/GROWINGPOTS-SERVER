@@ -30,6 +30,7 @@ public enum SuccessCode implements SuccessType {
     UNIVERSITY_LIST_FOUND(HttpStatus.OK, "UNIV_200", "학교 목록 조회에 성공했습니다."),
     MAJOR_LIST_FOUND(HttpStatus.OK, "UNIV_200_1", "학과 목록 조회에 성공했습니다."),
     ONBOARDING_OPTIONS_FOUND(HttpStatus.OK, "UNIV_200_2", "온보딩 옵션 조회에 성공했습니다."),
+    COURSE_SEARCH_FOUND(HttpStatus.OK, "UNIV_200_3", "과목을 조회했습니다."),
 
     // Transcript
     PDF_PARSED(HttpStatus.CREATED, "TRANS_201", "PDF 분석이 완료되었습니다."),
