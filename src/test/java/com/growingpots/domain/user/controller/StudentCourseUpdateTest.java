@@ -255,6 +255,46 @@ class StudentCourseUpdateTest {
     }
 
     @Test
+    void 다른_학교_소속의_department_division_courseId면_400_CMN_002를_반환한다() throws Exception {
+        StudentProfile studentProfile = onboardedStudent("3606");
+        School otherSchool = schoolRepository.save(School.builder().name("다른학교-3606").build());
+        Department otherDepartment = departmentRepository.save(Department.builder()
+                .school(otherSchool)
+                .college("타학교단과대")
+                .name("타학교학과")
+                .build());
+        Division otherDivision = divisionRepository.save(Division.builder()
+                .school(otherSchool)
+                .code("04")
+                .category(DivisionCategory.MAJOR_REQUIRED)
+                .build());
+
+        String requestBody = """
+                {
+                  "courses": [
+                    {
+                      "studentCourseId": null,
+                      "courseId": null,
+                      "rawCourseName": "직접추가",
+                      "departmentId": %d,
+                      "credit": 2,
+                      "appliedDivisionId": %d,
+                      "takenYear": 2024,
+                      "takenSemester": "FIRST"
+                    }
+                  ]
+                }
+                """.formatted(otherDepartment.getId(), otherDivision.getId());
+
+        mockMvc.perform(put("/api/v1/students/me/courses")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId())))
+                        .contentType("application/json")
+                        .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN_002"));
+    }
+
+    @Test
     void 온보딩_전이면_404_USER_003을_반환한다() throws Exception {
         Member member = memberRepository.save(Member.builder()
                 .nickname("온보딩안한유저")

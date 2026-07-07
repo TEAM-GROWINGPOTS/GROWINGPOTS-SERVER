@@ -36,8 +36,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.List;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -151,6 +153,20 @@ public class StudentProfileService {
     public void updateMyCourses(Long memberId, StudentCourseUpdateRequest request) {
         StudentProfile profile = studentProfileRepository.findWithDetailsByMemberId(memberId)
                 .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
+        School school = profile.getSchool();
+        List<CourseUpdateItem> items = request.courses();
+
+        // 항목마다 개별 조회하지 않도록 요청에 나온 id를 모아 한 번씩만 조회하고, 학생의 학교 소속이 아닌 건
+        // 걸러낸다(다른 학교의 course/department/division id가 섞여 들어오는 것 방지).
+        Map<Long, Course> coursesById = courseRepository.findAllById(ids(items, CourseUpdateItem::courseId)).stream()
+                .filter(course -> course.getSchool().getId().equals(school.getId()))
+                .collect(Collectors.toMap(Course::getId, c -> c));
+        Map<Long, Department> departmentsById = departmentRepository.findAllById(ids(items, CourseUpdateItem::departmentId)).stream()
+                .filter(department -> department.getSchool().getId().equals(school.getId()))
+                .collect(Collectors.toMap(Department::getId, d -> d));
+        Map<Long, Division> divisionsById = divisionRepository.findAllById(ids(items, CourseUpdateItem::appliedDivisionId)).stream()
+                .filter(division -> division.getSchool().getId().equals(school.getId()))
+                .collect(Collectors.toMap(Division::getId, d -> d));
 
         Map<Long, StudentCourse> existingById = studentCourseRepository.findByStudentProfile(profile).stream()
                 .collect(Collectors.toMap(StudentCourse::getId, sc -> sc));
@@ -158,10 +174,10 @@ public class StudentProfileService {
         Set<Long> keepIds = new HashSet<>();
         List<StudentCourse> newCourses = new ArrayList<>();
 
-        for (CourseUpdateItem item : request.courses()) {
-            Course course = findCourseOrThrow(item.courseId());
-            Department department = findDepartmentOrThrow(item.departmentId());
-            Division division = findDivisionOrThrow(item.appliedDivisionId());
+        for (CourseUpdateItem item : items) {
+            Course course = requireInMap(coursesById, item.courseId());
+            Department department = requireInMap(departmentsById, item.departmentId());
+            Division division = requireInMap(divisionsById, item.appliedDivisionId());
 
             if (item.studentCourseId() == null) {
                 newCourses.add(StudentCourse.builder()
@@ -198,28 +214,20 @@ public class StudentProfileService {
         studentCourseRepository.saveAll(newCourses);
     }
 
-    private Course findCourseOrThrow(Long courseId) {
-        if (courseId == null) {
-            return null;
-        }
-        return courseRepository.findById(courseId)
-                .orElseThrow(() -> new BaseException(ErrorCode.INVALID_INPUT_VALUE));
+    private Set<Long> ids(List<CourseUpdateItem> items, Function<CourseUpdateItem, Long> extractor) {
+        return items.stream().map(extractor).filter(Objects::nonNull).collect(Collectors.toSet());
     }
 
-    private Department findDepartmentOrThrow(Long departmentId) {
-        if (departmentId == null) {
+    // 요청에 id가 있는데 (다른 학교 소속이라 걸러졌거나 존재하지 않아) 못 찾았으면 잘못된 입력값으로 취급한다.
+    private <T> T requireInMap(Map<Long, T> map, Long id) {
+        if (id == null) {
             return null;
         }
-        return departmentRepository.findById(departmentId)
-                .orElseThrow(() -> new BaseException(ErrorCode.INVALID_INPUT_VALUE));
-    }
-
-    private Division findDivisionOrThrow(Long divisionId) {
-        if (divisionId == null) {
-            return null;
+        T value = map.get(id);
+        if (value == null) {
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
         }
-        return divisionRepository.findById(divisionId)
-                .orElseThrow(() -> new BaseException(ErrorCode.INVALID_INPUT_VALUE));
+        return value;
     }
 
     private StudentCourseListResponse.CourseInfo toCourseInfo(StudentCourse course) {
