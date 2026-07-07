@@ -201,9 +201,14 @@ public class TranscriptPersister {
         return Integer.parseInt(semester.substring(0, semester.indexOf('/')));
     }
 
-    // PDF는 계절학기 구분 없이 "1"/"2"만 내려준다. SUMMER/WINTER는 사용자가 직접 편집할 때만 쓰인다.
+    // 보통 "yyyy/1", "yyyy/2"지만, 계절학기 과목은 학교에 따라 "yyyy/1계절"(하계)/"yyyy/2계절"(동계)처럼
+    // 학기 뒤에 "계절"이 붙어 내려오기도 한다("2계절"을 숫자로 파싱하려다 NumberFormatException 발생 확인됨).
     private Semester takenSemester(String semester) {
-        return toSemester(Integer.parseInt(semester.substring(semester.indexOf('/') + 1)));
+        String term = semester.substring(semester.indexOf('/') + 1);
+        if (term.contains("계절")) {
+            return term.startsWith("1") ? Semester.SUMMER : Semester.WINTER;
+        }
+        return toSemester(Integer.parseInt(term));
     }
 
     private Semester toSemester(int term) {

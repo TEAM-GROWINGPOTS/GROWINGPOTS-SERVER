@@ -139,6 +139,40 @@ class TranscriptControllerTest {
     }
 
     @Test
+    void 계절학기_학기표기는_숫자_파싱_없이_SUMMER_WINTER로_저장된다() throws Exception {
+        StudentProfile studentProfile = onboardedStudent("1003");
+        Map<String, String> summerCourse = Map.of(
+                "section", "자유이수",
+                "courseCode", "CHE3001",
+                "courseName", "화학공학세미나",
+                "credits", "2",
+                "semester", "2024/1계절"
+        );
+        Map<String, String> winterCourse = Map.of(
+                "section", "자유이수",
+                "courseCode", "CHE3002",
+                "courseName", "화학공학특강",
+                "credits", "2",
+                "semester", "2024/2계절"
+        );
+        when(pdfTranscriptParser.parse(any()))
+                .thenReturn(new ParsedTranscript(Map.of(), Map.of(), List.of(), List.of(), List.of(summerCourse, winterCourse)));
+
+        mockMvc.perform(multipart("/api/v1/diagnosis/upload")
+                        .file(new MockMultipartFile("file", "transcript.pdf", "application/pdf", PDF_BYTES))
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isCreated());
+
+        List<StudentCourse> courses = coursesOf(studentProfile);
+        StudentCourse summer = courses.stream().filter(c -> "CHE3001".equals(c.getRawCourseCode())).findFirst().orElseThrow();
+        StudentCourse winter = courses.stream().filter(c -> "CHE3002".equals(c.getRawCourseCode())).findFirst().orElseThrow();
+        assertThat(summer.getTakenSemester()).isEqualTo(Semester.SUMMER);
+        assertThat(summer.getTakenYear()).isEqualTo(2024);
+        assertThat(winter.getTakenSemester()).isEqualTo(Semester.WINTER);
+        assertThat(winter.getTakenYear()).isEqualTo(2024);
+    }
+
+    @Test
     void 재업로드하면_기존_PDF_데이터는_삭제되고_수동입력_데이터는_보존된다() throws Exception {
         StudentProfile studentProfile = onboardedStudent("2002");
         studentCourseRepository.save(StudentCourse.builder()
