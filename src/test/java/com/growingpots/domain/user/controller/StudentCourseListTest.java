@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.growingpots.domain.transcript.entity.StudentCourse;
 import com.growingpots.domain.transcript.entity.enums.CourseStatus;
 import com.growingpots.domain.transcript.entity.enums.RecordSource;
+import com.growingpots.domain.transcript.entity.enums.Semester;
 import com.growingpots.domain.transcript.repository.StudentCourseRepository;
 import com.growingpots.domain.university.entity.Course;
 import com.growingpots.domain.university.entity.Department;
@@ -98,7 +99,7 @@ class StudentCourseListTest {
                 .rawCourseName("World Citizen")
                 .credit(3)
                 .takenYear(2023)
-                .takenSemester("1")
+                .takenSemester(Semester.FIRST)
                 .section("자유이수")
                 .status(CourseStatus.COMPLETED)
                 .source(RecordSource.PDF)
@@ -109,7 +110,7 @@ class StudentCourseListTest {
                 .rawCourseName("연극문헌과연기")
                 .credit(3)
                 .takenYear(2023)
-                .takenSemester("2")
+                .takenSemester(Semester.SECOND)
                 .section("연극영화학")
                 .status(CourseStatus.COMPLETED)
                 .source(RecordSource.PDF)
@@ -160,7 +161,7 @@ class StudentCourseListTest {
                 .rawCourseName("연극문헌과연기")
                 .credit(3)
                 .takenYear(2023)
-                .takenSemester("1")
+                .takenSemester(Semester.FIRST)
                 .section("연극영화학")
                 .rawClassification("04")
                 .status(CourseStatus.COMPLETED)
@@ -184,7 +185,7 @@ class StudentCourseListTest {
                 .rawCourseName("초급영화이론")
                 .credit(3)
                 .takenYear(2024)
-                .takenSemester("1")
+                .takenSemester(Semester.FIRST)
                 .section("연극영화학")
                 .rawClassification("05")
                 .status(CourseStatus.COMPLETED)
@@ -196,7 +197,7 @@ class StudentCourseListTest {
                 .rawCourseName("영화사")
                 .credit(3)
                 .takenYear(2023)
-                .takenSemester("1")
+                .takenSemester(Semester.FIRST)
                 .section("연극영화학")
                 .rawClassification("11")
                 .status(CourseStatus.COMPLETED)
@@ -208,7 +209,7 @@ class StudentCourseListTest {
                 .rawCourseName("프랑스영화예술")
                 .credit(3)
                 .takenYear(2024)
-                .takenSemester("2")
+                .takenSemester(Semester.SECOND)
                 .section("연극영화학")
                 .rawClassification(null)
                 .status(CourseStatus.COMPLETED)

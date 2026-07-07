@@ -1,6 +1,7 @@
 package com.growingpots.domain.user.service;
 
 import com.growingpots.domain.transcript.entity.StudentCourse;
+import com.growingpots.domain.transcript.entity.enums.Semester;
 import com.growingpots.domain.transcript.repository.StudentCourseRepository;
 import com.growingpots.domain.university.entity.Department;
 import com.growingpots.domain.university.entity.School;
@@ -151,8 +152,20 @@ public class StudentProfileService {
                 .credit(course.getCredit())
                 .appliedDivisionName(appliedDivisionName(course))
                 .takenYear(course.getTakenYear())
-                .takenSemester(course.getTakenSemester() == null ? null : course.getTakenSemester() + "학기")
+                .takenSemester(takenSemesterName(course.getTakenSemester()))
                 .build();
+    }
+
+    private String takenSemesterName(Semester takenSemester) {
+        if (takenSemester == null) {
+            return null;
+        }
+        return switch (takenSemester) {
+            case FIRST -> "1학기";
+            case SECOND -> "2학기";
+            case SUMMER -> "여름학기";
+            case WINTER -> "겨울학기";
+        };
     }
 
     // COURSE 매칭이 되면 개설학과명을 그대로 쓰고, 안 됐으면 교양 과목일 때만 "교양"으로 표시한다.

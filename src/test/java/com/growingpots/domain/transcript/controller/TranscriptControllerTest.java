@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.growingpots.domain.transcript.entity.enums.RecordSource;
 import com.growingpots.domain.transcript.entity.enums.CourseStatus;
+import com.growingpots.domain.transcript.entity.enums.Semester;
 import com.growingpots.domain.transcript.entity.StudentCourse;
 import com.growingpots.domain.transcript.parser.ParsedTranscript;
 import com.growingpots.domain.transcript.parser.PdfParsingException;
@@ -105,7 +106,7 @@ class TranscriptControllerTest {
         StudentCourse course = saved.getFirst();
         assertThat(course.getRawCourseCode()).isEqualTo("GEC1104");
         assertThat(course.getTakenYear()).isEqualTo(2023);
-        assertThat(course.getTakenSemester()).isEqualTo("1");
+        assertThat(course.getTakenSemester()).isEqualTo(Semester.FIRST);
         assertThat(course.getStatus()).isEqualTo(CourseStatus.COMPLETED);
         assertThat(course.getSource()).isEqualTo(RecordSource.PDF);
         assertThat(course.isRetake()).isFalse();
@@ -120,7 +121,7 @@ class TranscriptControllerTest {
                 .rawCourseName("옛날 PDF 과목")
                 .credit(3)
                 .takenYear(2020)
-                .takenSemester("1")
+                .takenSemester(Semester.FIRST)
                 .section("기타")
                 .status(CourseStatus.COMPLETED)
                 .source(RecordSource.PDF)
@@ -131,7 +132,7 @@ class TranscriptControllerTest {
                 .rawCourseName("수동으로 추가한 과목")
                 .credit(2)
                 .takenYear(2021)
-                .takenSemester("2")
+                .takenSemester(Semester.SECOND)
                 .section("자유이수")
                 .status(CourseStatus.COMPLETED)
                 .source(RecordSource.MANUAL)
@@ -219,9 +220,9 @@ class TranscriptControllerTest {
 
         java.time.LocalDate now = java.time.LocalDate.now();
         int expectedYear = now.getMonthValue() <= 2 ? now.getYear() - 1 : now.getYear();
-        int expectedTerm = (now.getMonthValue() >= 3 && now.getMonthValue() <= 8) ? 1 : 2;
+        Semester expectedTerm = (now.getMonthValue() >= 3 && now.getMonthValue() <= 8) ? Semester.FIRST : Semester.SECOND;
         assertThat(course.getTakenYear()).isEqualTo(expectedYear);
-        assertThat(course.getTakenSemester()).isEqualTo(String.valueOf(expectedTerm));
+        assertThat(course.getTakenSemester()).isEqualTo(expectedTerm);
     }
 
     @Test

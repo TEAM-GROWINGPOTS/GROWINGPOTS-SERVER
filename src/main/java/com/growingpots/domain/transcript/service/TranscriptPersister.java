@@ -6,6 +6,7 @@ import com.growingpots.domain.transcript.entity.enums.CertType;
 import com.growingpots.domain.transcript.entity.enums.CourseStatus;
 import com.growingpots.domain.transcript.entity.GraduationAnalysisSummary;
 import com.growingpots.domain.transcript.entity.enums.RecordSource;
+import com.growingpots.domain.transcript.entity.enums.Semester;
 import com.growingpots.domain.transcript.entity.StudentCourse;
 import com.growingpots.domain.transcript.parser.ParsedTranscript;
 import com.growingpots.domain.transcript.repository.CertResultRepository;
@@ -139,8 +140,8 @@ public class TranscriptPersister {
 
         // 금학기수강학점(진행 중) 과목은 PDF에 수강년도/학기가 안 찍혀 있어 오늘 날짜 기준으로 채운다.
         Integer takenYear = semester != null ? takenYear(semester) : (inProgress ? computeCurrentAcademicYear(now) : null);
-        String takenSemester = semester != null ? takenSemester(semester)
-                : (inProgress ? String.valueOf(computeCurrentTerm(now)) : null);
+        Semester takenSemester = semester != null ? takenSemester(semester)
+                : (inProgress ? toSemester(computeCurrentTerm(now)) : null);
 
         return StudentCourse.builder()
                 .studentProfile(studentProfile)
@@ -163,8 +164,13 @@ public class TranscriptPersister {
         return Integer.parseInt(semester.substring(0, semester.indexOf('/')));
     }
 
-    private String takenSemester(String semester) {
-        return semester.substring(semester.indexOf('/') + 1);
+    // PDF는 계절학기 구분 없이 "1"/"2"만 내려준다. SUMMER/WINTER는 사용자가 직접 편집할 때만 쓰인다.
+    private Semester takenSemester(String semester) {
+        return toSemester(Integer.parseInt(semester.substring(semester.indexOf('/') + 1)));
+    }
+
+    private Semester toSemester(int term) {
+        return term == 1 ? Semester.FIRST : Semester.SECOND;
     }
 
     // 전공(본전공/복수전공)별로 STUDENT_MAJOR를 찾거나 만들고, GRADUATION_ANALYSIS_SUMMARY는 덮어쓴다.
