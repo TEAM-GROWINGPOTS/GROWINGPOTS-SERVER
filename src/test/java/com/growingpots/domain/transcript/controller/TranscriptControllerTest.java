@@ -10,14 +10,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.growingpots.domain.transcript.entity.enums.RecordSource;
 import com.growingpots.domain.transcript.entity.enums.CourseStatus;
+import com.growingpots.domain.transcript.entity.enums.Semester;
 import com.growingpots.domain.transcript.entity.StudentCourse;
 import com.growingpots.domain.transcript.parser.ParsedTranscript;
 import com.growingpots.domain.transcript.parser.PdfParsingException;
 import com.growingpots.domain.transcript.parser.PdfTranscriptParser;
 import com.growingpots.domain.transcript.repository.StudentCourseRepository;
 import com.growingpots.domain.university.entity.Department;
+import com.growingpots.domain.university.entity.Division;
 import com.growingpots.domain.university.entity.School;
+import com.growingpots.domain.university.entity.enums.DivisionCategory;
 import com.growingpots.domain.university.repository.DepartmentRepository;
+import com.growingpots.domain.university.repository.DivisionRepository;
 import com.growingpots.domain.university.repository.SchoolRepository;
 import com.growingpots.domain.user.entity.Member;
 import com.growingpots.domain.user.entity.StudentProfile;
@@ -64,6 +68,9 @@ class TranscriptControllerTest {
     @Autowired
     private DepartmentRepository departmentRepository;
 
+    @Autowired
+    private DivisionRepository divisionRepository;
+
     @MockitoBean
     private PdfTranscriptParser pdfTranscriptParser;
 
@@ -105,10 +112,64 @@ class TranscriptControllerTest {
         StudentCourse course = saved.getFirst();
         assertThat(course.getRawCourseCode()).isEqualTo("GEC1104");
         assertThat(course.getTakenYear()).isEqualTo(2023);
-        assertThat(course.getTakenSemester()).isEqualTo("1");
+        assertThat(course.getTakenSemester()).isEqualTo(Semester.FIRST);
         assertThat(course.getStatus()).isEqualTo(CourseStatus.COMPLETED);
         assertThat(course.getSource()).isEqualTo(RecordSource.PDF);
         assertThat(course.isRetake()).isFalse();
+    }
+
+    @Test
+    void 교양_구역의_과목은_학교의_FREE_GE_Division으로_해석되어_저장된다() throws Exception {
+        StudentProfile studentProfile = onboardedStudent("1002");
+        Division geFree = divisionRepository.save(Division.builder()
+                .school(studentProfile.getSchool())
+                .code("02")
+                .category(DivisionCategory.FREE_GE)
+                .build());
+        when(pdfTranscriptParser.parse(any())).thenReturn(sampleParsedTranscript());
+
+        mockMvc.perform(multipart("/api/v1/diagnosis/upload")
+                        .file(new MockMultipartFile("file", "transcript.pdf", "application/pdf", PDF_BYTES))
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isCreated());
+
+        StudentCourse course = coursesOf(studentProfile).getFirst();
+        assertThat(course.getAppliedDivision()).isNotNull();
+        assertThat(course.getAppliedDivision().getId()).isEqualTo(geFree.getId());
+    }
+
+    @Test
+    void 계절학기_학기표기는_숫자_파싱_없이_SUMMER_WINTER로_저장된다() throws Exception {
+        StudentProfile studentProfile = onboardedStudent("1003");
+        Map<String, String> summerCourse = Map.of(
+                "section", "자유이수",
+                "courseCode", "CHE3001",
+                "courseName", "화학공학세미나",
+                "credits", "2",
+                "semester", "2024/1계절"
+        );
+        Map<String, String> winterCourse = Map.of(
+                "section", "자유이수",
+                "courseCode", "CHE3002",
+                "courseName", "화학공학특강",
+                "credits", "2",
+                "semester", "2024/2계절"
+        );
+        when(pdfTranscriptParser.parse(any()))
+                .thenReturn(new ParsedTranscript(Map.of(), Map.of(), List.of(), List.of(), List.of(summerCourse, winterCourse)));
+
+        mockMvc.perform(multipart("/api/v1/diagnosis/upload")
+                        .file(new MockMultipartFile("file", "transcript.pdf", "application/pdf", PDF_BYTES))
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isCreated());
+
+        List<StudentCourse> courses = coursesOf(studentProfile);
+        StudentCourse summer = courses.stream().filter(c -> "CHE3001".equals(c.getRawCourseCode())).findFirst().orElseThrow();
+        StudentCourse winter = courses.stream().filter(c -> "CHE3002".equals(c.getRawCourseCode())).findFirst().orElseThrow();
+        assertThat(summer.getTakenSemester()).isEqualTo(Semester.SUMMER);
+        assertThat(summer.getTakenYear()).isEqualTo(2024);
+        assertThat(winter.getTakenSemester()).isEqualTo(Semester.WINTER);
+        assertThat(winter.getTakenYear()).isEqualTo(2024);
     }
 
     @Test
@@ -120,8 +181,7 @@ class TranscriptControllerTest {
                 .rawCourseName("옛날 PDF 과목")
                 .credit(3)
                 .takenYear(2020)
-                .takenSemester("1")
-                .section("기타")
+                .takenSemester(Semester.FIRST)
                 .status(CourseStatus.COMPLETED)
                 .source(RecordSource.PDF)
                 .build());
@@ -131,8 +191,7 @@ class TranscriptControllerTest {
                 .rawCourseName("수동으로 추가한 과목")
                 .credit(2)
                 .takenYear(2021)
-                .takenSemester("2")
-                .section("자유이수")
+                .takenSemester(Semester.SECOND)
                 .status(CourseStatus.COMPLETED)
                 .source(RecordSource.MANUAL)
                 .build());
@@ -219,9 +278,9 @@ class TranscriptControllerTest {
 
         java.time.LocalDate now = java.time.LocalDate.now();
         int expectedYear = now.getMonthValue() <= 2 ? now.getYear() - 1 : now.getYear();
-        int expectedTerm = (now.getMonthValue() >= 3 && now.getMonthValue() <= 8) ? 1 : 2;
+        Semester expectedTerm = (now.getMonthValue() >= 3 && now.getMonthValue() <= 8) ? Semester.FIRST : Semester.SECOND;
         assertThat(course.getTakenYear()).isEqualTo(expectedYear);
-        assertThat(course.getTakenSemester()).isEqualTo(String.valueOf(expectedTerm));
+        assertThat(course.getTakenSemester()).isEqualTo(expectedTerm);
     }
 
     @Test

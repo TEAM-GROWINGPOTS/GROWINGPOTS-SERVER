@@ -13,6 +13,8 @@ public interface StudentCourseRepository extends JpaRepository<StudentCourse, Lo
 
     void deleteByStudentProfileAndSource(StudentProfile studentProfile, RecordSource source);
 
+    List<StudentCourse> findByStudentProfile(StudentProfile studentProfile);
+
     @Query("SELECT sc FROM StudentCourse sc LEFT JOIN FETCH sc.course c LEFT JOIN FETCH c.offeringDepartment "
             + "WHERE sc.studentProfile = :studentProfile")
     List<StudentCourse> findWithCourseByStudentProfile(@Param("studentProfile") StudentProfile studentProfile);

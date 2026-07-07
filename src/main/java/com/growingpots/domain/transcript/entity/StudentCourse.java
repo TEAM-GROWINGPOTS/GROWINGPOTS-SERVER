@@ -2,7 +2,9 @@ package com.growingpots.domain.transcript.entity;
 
 import com.growingpots.domain.transcript.entity.enums.CourseStatus;
 import com.growingpots.domain.transcript.entity.enums.RecordSource;
+import com.growingpots.domain.transcript.entity.enums.Semester;
 import com.growingpots.domain.university.entity.Course;
+import com.growingpots.domain.university.entity.Department;
 import com.growingpots.domain.university.entity.Division;
 import com.growingpots.domain.user.entity.StudentProfile;
 import com.growingpots.global.entity.BaseTimeEntity;
@@ -39,7 +41,12 @@ public class StudentCourse extends BaseTimeEntity {
     @JoinColumn(name = "course_id")
     private Course course;
 
-    // TranscriptPersister가 rawClassification/section → Division 조회 후 채운다. 미매칭 시 null.
+    // 개설학부 override. null이면 course.offeringDepartment를 그대로 쓴다.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "applied_department_id")
+    private Department appliedDepartment;
+
+    // 이 학생에게 확정된 이수구분(사용자 검수/수정 반영). PDF 저장 시 rawClassification을 Division.code와 매칭해 채운다.
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "applied_division_id")
     private Division appliedDivision;
@@ -55,12 +62,8 @@ public class StudentCourse extends BaseTimeEntity {
     // 금학기수강학점(진행 중) 과목은 PDF에 수강년도/학기가 없어 오늘 날짜 기준 학사년도/학기로 채워진다 (status=IN_PROGRESS)
     private Integer takenYear;
 
-    private String takenSemester;
-
-    @Column(nullable = false)
-    private String section;
-
-    private String rawClassification;
+    @Enumerated(EnumType.STRING)
+    private Semester takenSemester;
 
     @Column(nullable = false)
     private boolean isRetake;
@@ -77,30 +80,47 @@ public class StudentCourse extends BaseTimeEntity {
     private StudentCourse(
             StudentProfile studentProfile,
             Course course,
+            Department appliedDepartment,
             Division appliedDivision,
             String rawCourseCode,
             String rawCourseName,
             int credit,
             Integer takenYear,
-            String takenSemester,
-            String section,
-            String rawClassification,
+            Semester takenSemester,
             boolean isRetake,
             CourseStatus status,
             RecordSource source
     ) {
         this.studentProfile = studentProfile;
         this.course = course;
+        this.appliedDepartment = appliedDepartment;
         this.appliedDivision = appliedDivision;
         this.rawCourseCode = rawCourseCode;
         this.rawCourseName = rawCourseName;
         this.credit = credit;
         this.takenYear = takenYear;
         this.takenSemester = takenSemester;
-        this.section = section;
-        this.rawClassification = rawClassification;
         this.isRetake = isRetake;
         this.status = status;
         this.source = source;
+    }
+
+    // 이수 과목 검수/저장 화면(PUT)에서 사용자가 확정한 값으로 덮어쓴다.
+    public void applyEdit(
+            Course course,
+            String rawCourseName,
+            Department appliedDepartment,
+            int credit,
+            Division appliedDivision,
+            Integer takenYear,
+            Semester takenSemester
+    ) {
+        this.course = course;
+        this.rawCourseName = rawCourseName;
+        this.appliedDepartment = appliedDepartment;
+        this.credit = credit;
+        this.appliedDivision = appliedDivision;
+        this.takenYear = takenYear;
+        this.takenSemester = takenSemester;
     }
 }

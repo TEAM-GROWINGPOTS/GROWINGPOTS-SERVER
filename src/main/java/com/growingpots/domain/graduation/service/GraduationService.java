@@ -14,7 +14,9 @@ import com.growingpots.domain.graduation.enums.MajorTypeFilter;
 import com.growingpots.domain.transcript.entity.CertResult;
 import com.growingpots.domain.transcript.entity.GraduationAnalysisSummary;
 import com.growingpots.domain.transcript.entity.StudentCourse;
+import com.growingpots.domain.transcript.entity.enums.Semester;
 import com.growingpots.domain.transcript.repository.CertResultRepository;
+import com.growingpots.domain.university.entity.enums.DivisionCategory;
 import com.growingpots.domain.transcript.repository.GraduationAnalysisSummaryRepository;
 import com.growingpots.domain.transcript.repository.StudentCourseRepository;
 import com.growingpots.domain.university.entity.Division;
@@ -38,6 +40,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -133,12 +136,13 @@ public class GraduationService {
         List<StudentCourse> takenCourses = fetchTakenCourses(profile, conditionType);
 
         int admissionYear = profile.getAdmissionYear();
-        List<Division> divisions = divisionRepository.findBySchoolAndCategory(
-                profile.getSchool(), conditionType.name());
+        Optional<Division> divisionOpt = toDivisionCategory(conditionType)
+                .flatMap(cat -> divisionRepository.findBySchoolAndCategory(profile.getSchool(), cat));
 
-        List<RequirementCourse> requirementCourses = divisions.isEmpty() ? List.of()
-                : requirementCourseRepository.findApplicable(
-                        major.getDepartment(), divisions.get(0), admissionYear, major.getTrack());
+        List<RequirementCourse> requirementCourses = divisionOpt
+                .map(div -> requirementCourseRepository.findApplicable(
+                        major.getDepartment(), div, admissionYear, major.getTrack()))
+                .orElse(List.of());
         boolean hasRequiredList = !requirementCourses.isEmpty();
 
         List<RequirementCourseItem> allItems = hasRequiredList
@@ -185,16 +189,24 @@ public class GraduationService {
     }
 
     private List<StudentCourse> fetchTakenCourses(StudentProfile profile, GraduationConditionType conditionType) {
-        return switch (conditionType) {
-            case ENGLISH_COURSE -> studentCourseRepository.findByStudentProfileAndCourseIsEnglish(profile);
-            case SW_CERT_COURSE -> studentCourseRepository.findByStudentProfileAndCourseIsSw(profile);
-            default -> {
-                List<Division> divisions = divisionRepository.findBySchoolAndCategory(
-                        profile.getSchool(), conditionType.name());
-                yield divisions.isEmpty() ? List.of()
-                        : studentCourseRepository.findByStudentProfileAndAppliedDivisionIn(profile, divisions);
-            }
-        };
+        if (conditionType == GraduationConditionType.ENGLISH_COURSE) {
+            return studentCourseRepository.findByStudentProfileAndCourseIsEnglish(profile);
+        }
+        if (conditionType == GraduationConditionType.SW_CERT_COURSE) {
+            return studentCourseRepository.findByStudentProfileAndCourseIsSw(profile);
+        }
+        return toDivisionCategory(conditionType)
+                .flatMap(cat -> divisionRepository.findBySchoolAndCategory(profile.getSchool(), cat))
+                .map(div -> studentCourseRepository.findByStudentProfileAndAppliedDivisionIn(profile, List.of(div)))
+                .orElse(List.of());
+    }
+
+    private Optional<DivisionCategory> toDivisionCategory(GraduationConditionType conditionType) {
+        try {
+            return Optional.of(DivisionCategory.valueOf(conditionType.name()));
+        } catch (IllegalArgumentException e) {
+            return Optional.empty();
+        }
     }
 
     // REQUIRED(트랙 지정)이 NONE보다 우선. 같은 course가 두 그룹에 모두 속하면 REQUIRED로 덮어쓴다.
@@ -219,7 +231,7 @@ public class GraduationService {
                 .departmentName(departmentName)
                 .credit(sc.getCredit())
                 .grade(sc.getTakenYear() != null ? String.valueOf(sc.getTakenYear()) : null)
-                .semester(sc.getTakenSemester() != null ? sc.getTakenSemester() + "학기" : null)
+                .semester(sc.getTakenSemester() != null ? semesterName(sc.getTakenSemester()) : null)
                 .taken(true)
                 .trackType(trackType)
                 .build();
@@ -235,13 +247,22 @@ public class GraduationService {
                 .departmentName(departmentName)
                 .credit(course.getCredit())
                 .grade(course.getRecommendedYear())
-                .semester(toSemesterDisplay(course.getOpenedSemester()))
+                .semester(openedSemesterName(course.getOpenedSemester()))
                 .taken(false)
                 .trackType(trackType)
                 .build();
     }
 
-    private String toSemesterDisplay(OpenedSemester openedSemester) {
+    private String semesterName(Semester semester) {
+        return switch (semester) {
+            case FIRST -> "1학기";
+            case SECOND -> "2학기";
+            case SUMMER -> "여름학기";
+            case WINTER -> "겨울학기";
+        };
+    }
+
+    private String openedSemesterName(OpenedSemester openedSemester) {
         if (openedSemester == null) return null;
         return switch (openedSemester) {
             case FIRST -> "1학기";

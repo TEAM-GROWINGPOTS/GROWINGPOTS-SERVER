@@ -1,8 +1,11 @@
 package com.growingpots.domain.university.entity;
 
+import com.growingpots.domain.university.entity.enums.DivisionCategory;
 import com.growingpots.global.entity.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -14,6 +17,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+// 이수구분 마스터. 판정/집계 로직은 code(학교별 코드)가 아니라 category로 분기한다.
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -27,16 +31,15 @@ public class Division extends BaseTimeEntity {
     @JoinColumn(name = "school_id", nullable = false)
     private School school;
 
-    // PDF/시스템 내부 코드 (예: "04", "필수교과"). TranscriptPersister에서 Division 매칭에 사용.
     @Column(nullable = false)
     private String code;
 
-    // GraduationConditionType.name()과 매칭되는 값 (예: "MAJOR_REQUIRED"). API divisionCode로 조회.
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private String category;
+    private DivisionCategory category;
 
     @Builder
-    private Division(School school, String code, String category) {
+    private Division(School school, String code, DivisionCategory category) {
         this.school = school;
         this.code = code;
         this.category = category;

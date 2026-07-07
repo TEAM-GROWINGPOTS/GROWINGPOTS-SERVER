@@ -1,11 +1,21 @@
 package com.growingpots.domain.user.service;
 
 import com.growingpots.domain.transcript.entity.StudentCourse;
+import com.growingpots.domain.transcript.entity.enums.CourseStatus;
+import com.growingpots.domain.transcript.entity.enums.RecordSource;
+import com.growingpots.domain.transcript.entity.enums.Semester;
 import com.growingpots.domain.transcript.repository.StudentCourseRepository;
+import com.growingpots.domain.university.entity.Course;
 import com.growingpots.domain.university.entity.Department;
+import com.growingpots.domain.university.entity.Division;
 import com.growingpots.domain.university.entity.School;
+import com.growingpots.domain.university.entity.enums.DivisionCategory;
+import com.growingpots.domain.university.repository.CourseRepository;
 import com.growingpots.domain.university.repository.DepartmentRepository;
+import com.growingpots.domain.university.repository.DivisionRepository;
 import com.growingpots.domain.university.repository.SchoolRepository;
+import com.growingpots.domain.user.dto.request.StudentCourseUpdateRequest;
+import com.growingpots.domain.user.dto.request.StudentCourseUpdateRequest.CourseUpdateItem;
 import com.growingpots.domain.user.dto.request.StudentProfileCreateRequest;
 import com.growingpots.domain.user.dto.response.StudentCourseListResponse;
 import com.growingpots.domain.user.dto.response.StudentProfileCreateResponse;
@@ -23,25 +33,18 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.List;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class StudentProfileService {
-
-    // 교양 이수구분(section)만 그대로 표시용으로 재사용한다. 전공 과목은 section에 전공/트랙명이 들어있어 여기 해당 안 됨.
-    private static final Set<String> GENERAL_EDUCATION_SECTIONS = Set.of("필수교과", "배분이수", "자유이수", "기타");
-
-    // 전공 과목의 raw_classification 코드 → 이수구분명. 실제 PDF의 전공학점 표(이수구분 04/05/11)와
-    // 졸업요건 요약(전필/전선/전기 학점)을 교차검증해서 확인한 값이라, 다른 학과 PDF에서도 같은지는 재검증 필요.
-    // 좌측 교양 표의 "04"(재수강)와는 의미가 다르므로 교양(GENERAL_EDUCATION_SECTIONS) 판정 후에만 사용한다.
-    private static final Map<String, String> MAJOR_DIVISION_NAMES = Map.of(
-            "04", "전공필수",
-            "05", "전공선택",
-            "11", "전공기초"
-    );
 
     private final MemberRepository memberRepository;
     private final StudentProfileRepository studentProfileRepository;
@@ -49,6 +52,8 @@ public class StudentProfileService {
     private final StudentCourseRepository studentCourseRepository;
     private final SchoolRepository schoolRepository;
     private final DepartmentRepository departmentRepository;
+    private final CourseRepository courseRepository;
+    private final DivisionRepository divisionRepository;
 
     @Transactional
     public StudentProfileCreateResponse create(Long memberId, StudentProfileCreateRequest request) {
@@ -142,6 +147,89 @@ public class StudentProfileService {
                 .build();
     }
 
+    // 검수 화면([저장하기])에서 넘어온 전체 목록으로 STUDENT_COURSE를 완전히 교체한다.
+    // studentCourseId가 있으면 수정, 없으면 신규(직접추가), 요청에 없는 기존 항목은 삭제.
+    @Transactional
+    public void updateMyCourses(Long memberId, StudentCourseUpdateRequest request) {
+        StudentProfile profile = studentProfileRepository.findWithDetailsByMemberId(memberId)
+                .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
+        School school = profile.getSchool();
+        List<CourseUpdateItem> items = request.courses();
+
+        // 항목마다 개별 조회하지 않도록 요청에 나온 id를 모아 한 번씩만 조회하고, 학생의 학교 소속이 아닌 건
+        // 걸러낸다(다른 학교의 course/department/division id가 섞여 들어오는 것 방지).
+        Map<Long, Course> coursesById = courseRepository.findAllById(ids(items, CourseUpdateItem::courseId)).stream()
+                .filter(course -> course.getSchool().getId().equals(school.getId()))
+                .collect(Collectors.toMap(Course::getId, c -> c));
+        Map<Long, Department> departmentsById = departmentRepository.findAllById(ids(items, CourseUpdateItem::departmentId)).stream()
+                .filter(department -> department.getSchool().getId().equals(school.getId()))
+                .collect(Collectors.toMap(Department::getId, d -> d));
+        Map<Long, Division> divisionsById = divisionRepository.findAllById(ids(items, CourseUpdateItem::appliedDivisionId)).stream()
+                .filter(division -> division.getSchool().getId().equals(school.getId()))
+                .collect(Collectors.toMap(Division::getId, d -> d));
+
+        Map<Long, StudentCourse> existingById = studentCourseRepository.findByStudentProfile(profile).stream()
+                .collect(Collectors.toMap(StudentCourse::getId, sc -> sc));
+
+        Set<Long> keepIds = new HashSet<>();
+        List<StudentCourse> newCourses = new ArrayList<>();
+
+        for (CourseUpdateItem item : items) {
+            Course course = requireInMap(coursesById, item.courseId());
+            Department department = requireInMap(departmentsById, item.departmentId());
+            Division division = requireInMap(divisionsById, item.appliedDivisionId());
+
+            if (item.studentCourseId() == null) {
+                newCourses.add(StudentCourse.builder()
+                        .studentProfile(profile)
+                        .course(course)
+                        .appliedDepartment(department)
+                        .appliedDivision(division)
+                        .rawCourseCode(course != null ? course.getCourseCode() : null)
+                        .rawCourseName(item.rawCourseName())
+                        .credit(item.credit())
+                        .takenYear(item.takenYear())
+                        .takenSemester(item.takenSemester())
+                        .isRetake(false)
+                        .status(CourseStatus.COMPLETED)
+                        .source(RecordSource.MANUAL)
+                        .build());
+                continue;
+            }
+
+            // 다른 학생의 studentCourseId를 보내거나 존재하지 않는 id면 잘못된 입력값으로 취급한다.
+            StudentCourse existing = existingById.get(item.studentCourseId());
+            if (existing == null) {
+                throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
+            }
+            existing.applyEdit(course, item.rawCourseName(), department, item.credit(), division,
+                    item.takenYear(), item.takenSemester());
+            keepIds.add(existing.getId());
+        }
+
+        List<StudentCourse> toDelete = existingById.values().stream()
+                .filter(sc -> !keepIds.contains(sc.getId()))
+                .toList();
+        studentCourseRepository.deleteAllInBatch(toDelete);
+        studentCourseRepository.saveAll(newCourses);
+    }
+
+    private Set<Long> ids(List<CourseUpdateItem> items, Function<CourseUpdateItem, Long> extractor) {
+        return items.stream().map(extractor).filter(Objects::nonNull).collect(Collectors.toSet());
+    }
+
+    // 요청에 id가 있는데 (다른 학교 소속이라 걸러졌거나 존재하지 않아) 못 찾았으면 잘못된 입력값으로 취급한다.
+    private <T> T requireInMap(Map<Long, T> map, Long id) {
+        if (id == null) {
+            return null;
+        }
+        T value = map.get(id);
+        if (value == null) {
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+        return value;
+    }
+
     private StudentCourseListResponse.CourseInfo toCourseInfo(StudentCourse course) {
         return StudentCourseListResponse.CourseInfo.builder()
                 .studentCourseId(course.getId())
@@ -151,36 +239,58 @@ public class StudentProfileService {
                 .credit(course.getCredit())
                 .appliedDivisionName(appliedDivisionName(course))
                 .takenYear(course.getTakenYear())
-                .takenSemester(course.getTakenSemester() == null ? null : course.getTakenSemester() + "학기")
+                .takenSemester(takenSemesterName(course.getTakenSemester()))
                 .build();
     }
 
-    // COURSE 매칭이 되면 개설학과명을 그대로 쓰고, 안 됐으면 교양 과목일 때만 "교양"으로 표시한다.
-    // 전공 과목인데 COURSE 시드가 없어 매칭 안 된 경우(예: 시드 누락된 타전공 과목)는 "교양"이 아니므로 null로 남긴다.
+    private String takenSemesterName(Semester takenSemester) {
+        if (takenSemester == null) {
+            return null;
+        }
+        return switch (takenSemester) {
+            case FIRST -> "1학기";
+            case SECOND -> "2학기";
+            case SUMMER -> "여름학기";
+            case WINTER -> "겨울학기";
+        };
+    }
+
+    // 사용자가 검수 화면에서 개설학부를 직접 바꿨으면(appliedDepartment) 그 값을 우선한다.
+    // 아니면 COURSE 매칭 결과를 쓰고, 그마저 없으면 교양 과목일 때만 "교양"으로 표시한다.
     private String departmentName(StudentCourse course) {
+        if (course.getAppliedDepartment() != null) {
+            return course.getAppliedDepartment().getName();
+        }
         if (course.getCourse() != null && course.getCourse().getOfferingDepartment() != null) {
             return course.getCourse().getOfferingDepartment().getName();
         }
         return isGeneralEducation(course) ? "교양" : null;
     }
 
-    // section이 교양 라벨이거나(정규 이수 표), raw_classification에 "08"이 포함되면("08 05"처럼 다른 코드와 붙어있어도) 교양으로 본다.
+    // appliedDivision의 category가 교양 계열(4개) 중 하나면 교양 과목으로 본다.
     private boolean isGeneralEducation(StudentCourse course) {
-        if (GENERAL_EDUCATION_SECTIONS.contains(course.getSection())) {
-            return true;
+        if (course.getAppliedDivision() == null) {
+            return false;
         }
-        String rawClassification = course.getRawClassification();
-        return rawClassification != null && rawClassification.contains("08");
+        return switch (course.getAppliedDivision().getCategory()) {
+            case REQUIRED_GE, DISTRIBUTED_GE, FREE_GE, GENERAL_ELECTIVE -> true;
+            case MAJOR_BASIC, MAJOR_REQUIRED, MAJOR_ELECTIVE -> false;
+        };
     }
 
     private String appliedDivisionName(StudentCourse course) {
-        if (GENERAL_EDUCATION_SECTIONS.contains(course.getSection())) {
-            return course.getSection();
-        }
-        String rawClassification = course.getRawClassification();
-        if (rawClassification != null && rawClassification.contains("08")) {
-            return "기타";
-        }
-        return rawClassification == null ? null : MAJOR_DIVISION_NAMES.get(rawClassification);
+        return course.getAppliedDivision() == null ? null : divisionCategoryName(course.getAppliedDivision().getCategory());
+    }
+
+    private String divisionCategoryName(DivisionCategory category) {
+        return switch (category) {
+            case MAJOR_BASIC -> "전공기초";
+            case MAJOR_REQUIRED -> "전공필수";
+            case MAJOR_ELECTIVE -> "전공선택";
+            case REQUIRED_GE -> "필수교과";
+            case DISTRIBUTED_GE -> "배분이수";
+            case FREE_GE -> "자유이수";
+            case GENERAL_ELECTIVE -> "일반선택";
+        };
     }
 }

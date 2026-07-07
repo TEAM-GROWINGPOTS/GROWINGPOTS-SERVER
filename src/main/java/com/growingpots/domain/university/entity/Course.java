@@ -44,6 +44,7 @@ public class Course extends BaseTimeEntity {
     @JoinColumn(name = "offering_department_id")
     private Department offeringDepartment;
 
+    // 이 과목의 일반적 이수구분(예정 과목 시뮬레이션·플래너 미리보기용). 실제 인정 영역은 STUDENT_COURSE.appliedDivision 우선
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "default_division_id")
     private Division defaultDivision;

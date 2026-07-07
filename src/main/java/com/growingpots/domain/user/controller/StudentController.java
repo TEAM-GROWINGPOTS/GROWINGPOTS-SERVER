@@ -1,5 +1,6 @@
 package com.growingpots.domain.user.controller;
 
+import com.growingpots.domain.user.dto.request.StudentCourseUpdateRequest;
 import com.growingpots.domain.user.dto.request.StudentProfileCreateRequest;
 import com.growingpots.domain.user.dto.response.StudentCourseListResponse;
 import com.growingpots.domain.user.dto.response.StudentProfileCreateResponse;
@@ -13,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -50,5 +52,15 @@ public class StudentController {
         Long memberId = Long.parseLong(authentication.getName());
         StudentCourseListResponse response = studentProfileService.getMyCourses(memberId);
         return ResponseEntity.ok(BaseResponse.success(SuccessCode.STUDENT_COURSE_LIST_FOUND, response));
+    }
+
+    @StudentApi.UpdateMyCourses
+    @PutMapping("/me/courses")
+    public ResponseEntity<BaseResponse<Void>> updateMyCourses(
+            @Valid @RequestBody StudentCourseUpdateRequest request,
+            Authentication authentication) {
+        Long memberId = Long.parseLong(authentication.getName());
+        studentProfileService.updateMyCourses(memberId, request);
+        return ResponseEntity.ok(BaseResponse.success(SuccessCode.STUDENT_COURSE_BULK_SAVED));
     }
 }
