@@ -18,6 +18,7 @@ import com.growingpots.domain.user.entity.StudentProfile;
 import com.growingpots.domain.user.repository.StudentProfileRepository;
 import com.growingpots.global.exception.BaseException;
 import com.growingpots.global.response.error.ErrorCode;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -64,7 +65,7 @@ public class CourseService {
             }
         }
 
-        Specification<Course> spec = combine(List.of(
+        Specification<Course> spec = combine(Arrays.asList(
                 CourseSpecifications.withSchool(school),
                 CourseSpecifications.withKeyword(request.keyword()),
                 CourseSpecifications.withCollegeName(request.collegeName()),
