@@ -42,6 +42,7 @@ public enum SuccessCode implements SuccessType {
     // Planner
     PLANNER_FOUND(HttpStatus.OK, "PLAN_200", "플래너 조회에 성공했습니다."),
     PLANNER_SAVED(HttpStatus.OK, "PLAN_200_1", "플래너를 저장했습니다."),
+    PLANNER_VERSION_SELECTED(HttpStatus.OK, "PLAN_200_4", "선택 버전이 변경되었습니다."),
     PLANNER_COURSE_ADDED(HttpStatus.CREATED, "PLAN_201", "플래너에 과목이 추가됐습니다."),
     PLANNER_COURSE_DELETED(HttpStatus.NO_CONTENT, "PLAN_204", "플래너에서 과목이 삭제됐습니다.");
 
