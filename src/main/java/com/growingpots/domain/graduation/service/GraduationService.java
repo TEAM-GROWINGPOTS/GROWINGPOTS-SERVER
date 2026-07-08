@@ -81,7 +81,9 @@ public class GraduationService {
                 .findFirst()
                 .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
 
-        // graduatable은 탭 무관 항상 전체 요건 기준으로 계산
+        // graduatable은 탭 무관 항상 전체 요건 기준으로 계산.
+        // judgeGraduationRequired는 학생 전체 이수내역을 다시 조회하는 비용이 있어, 탭마다(그리고
+        // ALL 탭이면 primary/multi 섹션마다) 매번 다시 부르지 않도록 여기서 한 번씩만 계산해 재사용한다.
         GraduationAnalysisSummary mainSummary = requireSummary(mainMajor);
         Optional<StudentMajor> doubleMajorOpt = majors.stream()
                 .filter(m -> m.getMajorType() == MajorType.DOUBLE)
@@ -89,18 +91,20 @@ public class GraduationService {
         GraduationAnalysisSummary doubleSummary = doubleMajorOpt
                 .flatMap(graduationAnalysisSummaryRepository::findByStudentMajor)
                 .orElse(null);
+        GraduationRequiredJudgement mainJudgement = judgeGraduationRequired(profile, mainMajor.getDepartment());
+        GraduationRequiredJudgement doubleJudgement = doubleMajorOpt
+                .map(dm -> judgeGraduationRequired(profile, dm.getDepartment()))
+                .orElse(null);
         boolean graduatable = computeGraduatable(mainSummary, doubleSummary)
-                && judgeGraduationRequired(profile, mainMajor.getDepartment()).satisfied()
-                && doubleMajorOpt
-                        .map(dm -> judgeGraduationRequired(profile, dm.getDepartment()).satisfied())
-                        .orElse(true);
+                && mainJudgement.satisfied()
+                && (doubleJudgement == null || doubleJudgement.satisfied());
 
         // TODO(planner-source): source=PLANNED 요청 시 플래너 데이터 기반 계산 구현
         return switch (majorTypeFilter) {
             case PRIMARY -> {
                 List<CertResult> certs = certResultRepository.findByStudentMajor(mainMajor);
                 yield buildSingleTabResponse(profile, mainSummary, MajorTypeFilter.PRIMARY,
-                        mainMajor.getDepartment(), graduatable, certs);
+                        mainMajor.getDepartment(), mainJudgement, graduatable, certs);
             }
             case MULTI -> {
                 StudentMajor doubleMajor = doubleMajorOpt
@@ -109,16 +113,16 @@ public class GraduationService {
                         .orElseThrow(() -> new BaseException(ErrorCode.REQUIREMENT_NOT_FOUND));
                 List<CertResult> certs = certResultRepository.findByStudentMajor(doubleMajor);
                 yield buildSingleTabResponse(profile, multiSummary, MajorTypeFilter.MULTI,
-                        doubleMajor.getDepartment(), graduatable, certs);
+                        doubleMajor.getDepartment(), doubleJudgement, graduatable, certs);
             }
             case GE, OTHERS -> {
                 List<CertResult> certs = certResultRepository.findByStudentMajor(mainMajor);
-                yield buildSingleTabResponse(profile, mainSummary, majorTypeFilter, null, graduatable, certs);
+                yield buildSingleTabResponse(profile, mainSummary, majorTypeFilter, null, null, graduatable, certs);
             }
             case ALL -> {
                 List<CertResult> certs = certResultRepository.findByStudentMajor(mainMajor);
-                yield buildAllTabResponse(profile, mainMajor, mainSummary,
-                        doubleMajorOpt.orElse(null), doubleSummary, graduatable, certs);
+                yield buildAllTabResponse(profile, mainMajor, mainSummary, mainJudgement,
+                        doubleMajorOpt.orElse(null), doubleSummary, doubleJudgement, graduatable, certs);
             }
         };
     }
@@ -129,6 +133,7 @@ public class GraduationService {
             GraduationAnalysisSummary summary,
             MajorTypeFilter tab,
             Department department,  // PRIMARY/MULTI: 해당 전공 학과, GE/OTHERS: null
+            GraduationRequiredJudgement judgement,  // PRIMARY/MULTI만 값 있음, GE/OTHERS는 null
             boolean graduatable,
             List<CertResult> certs
     ) {
@@ -136,7 +141,7 @@ public class GraduationService {
                 .summary(buildSummary(profile, summary))
                 .graduatable(graduatable)
                 .conditions(buildConditionsForTab(profile, summary, tab, department))
-                .graduationRequired(department != null ? buildGraduationRequiredSummary(profile, department) : null)
+                .graduationRequired(toGraduationRequiredSummary(judgement))
                 .sections(null)
                 .certs(toCertInfos(certs))
                 .build();
@@ -147,8 +152,10 @@ public class GraduationService {
             StudentProfile profile,
             StudentMajor mainMajor,
             GraduationAnalysisSummary mainSummary,
+            GraduationRequiredJudgement mainJudgement,
             StudentMajor doubleMajor,
             GraduationAnalysisSummary doubleSummary,
+            GraduationRequiredJudgement doubleJudgement,
             boolean graduatable,
             List<CertResult> certs
     ) {
@@ -156,7 +163,7 @@ public class GraduationService {
                 .majorName(mainMajor.getDepartment().getName())
                 .conditions(buildConditionsForTab(profile, mainSummary,
                         MajorTypeFilter.PRIMARY, mainMajor.getDepartment()))
-                .graduationRequired(buildGraduationRequiredSummary(profile, mainMajor.getDepartment()))
+                .graduationRequired(toGraduationRequiredSummary(mainJudgement))
                 .build();
 
         TabSection multiSection = null;
@@ -165,7 +172,7 @@ public class GraduationService {
                     .majorName(doubleMajor.getDepartment().getName())
                     .conditions(buildConditionsForTab(profile, doubleSummary,
                             MajorTypeFilter.MULTI, doubleMajor.getDepartment()))
-                    .graduationRequired(buildGraduationRequiredSummary(profile, doubleMajor.getDepartment()))
+                    .graduationRequired(toGraduationRequiredSummary(doubleJudgement))
                     .build();
         }
 
@@ -446,7 +453,7 @@ public class GraduationService {
         return MajorCourses.builder()
                 .majorType(major.getMajorType().name())
                 .departmentName(major.getDepartment().getName())
-                .current(judgement.totalRequirementCount() - judgement.unmetDescriptions().size())
+                .current(judgement.satisfiedRequirementCount())
                 .required(judgement.totalRequirementCount())
                 .satisfied(judgement.satisfied())
                 .hasRequiredList(hasRequiredList)
@@ -455,11 +462,10 @@ public class GraduationService {
                 .build();
     }
 
-    // 홈 화면 요약용. 해당 학과에 독립 졸업요건 자체가 없으면(대부분의 학과) null을 반환해
-    // FE가 이 섹션을 아예 안 보여줄 수 있게 한다.
-    private GraduationRequiredSummary buildGraduationRequiredSummary(StudentProfile profile, Department department) {
-        GraduationRequiredJudgement judgement = judgeGraduationRequired(profile, department);
-        if (judgement.items().isEmpty()) {
+    // judgeGraduationRequired 결과를 홈 화면 요약 DTO로 변환한다. judgement가 없거나(GE/OTHERS처럼
+    // 학과 자체가 없는 탭) 해당 학과에 독립 졸업요건이 없으면 null을 반환해 FE가 섹션을 안 보여줄 수 있게 한다.
+    private GraduationRequiredSummary toGraduationRequiredSummary(GraduationRequiredJudgement judgement) {
+        if (judgement == null || judgement.items().isEmpty()) {
             return null;
         }
         return GraduationRequiredSummary.builder()
@@ -475,7 +481,7 @@ public class GraduationService {
         List<RequirementCourse> requirementCourses = requirementCourseRepository
                 .findGraduationRequiredByDepartment(department, profile.getAdmissionYear());
         if (requirementCourses.isEmpty()) {
-            return new GraduationRequiredJudgement(true, List.of(), 0, 0, List.of(), List.of());
+            return new GraduationRequiredJudgement(true, List.of(), 0, 0, 0, List.of(), List.of());
         }
 
         List<RequirementCourseItem> allItems =
@@ -500,6 +506,7 @@ public class GraduationService {
         // 안내 문구(unmetDescriptions)는 학점 기준 조건만 담는다. 과목수 기준 조건(예: 맨손체조)은
         // 어차피 과목 자체가 이수/미이수 카드로 리스트에 나오기 때문에 문구로 중복해서 보여줄 필요가 없다.
         boolean satisfied = true;
+        int satisfiedCount = 0;
         List<String> unmetDescriptions = new ArrayList<>();
         for (RequirementCourse rc : requirementCourses) {
             List<RequirementCourseItem> items = itemsByRequirement.getOrDefault(rc.getId(), List.of());
@@ -517,18 +524,23 @@ public class GraduationService {
                 if (byCredit) {
                     unmetDescriptions.add("[" + rc.getName() + "] " + current + "/" + required + "학점 이수완료");
                 }
+            } else {
+                satisfiedCount++;
             }
         }
 
         int totalCredit = takenCourses.stream().mapToInt(StudentCourse::getCredit).sum();
-        return new GraduationRequiredJudgement(
-                satisfied, unmetDescriptions, totalCredit, requirementCourses.size(), allItems, takenCourses);
+        return new GraduationRequiredJudgement(satisfied, unmetDescriptions, totalCredit,
+                satisfiedCount, requirementCourses.size(), allItems, takenCourses);
     }
 
+    // satisfiedRequirementCount/totalRequirementCount는 학점/과목수 조건 전부(unmetDescriptions에
+    // 안 담기는 과목수 조건 포함)를 센 값이라, current==required면 항상 satisfied=true와 일치한다.
     private record GraduationRequiredJudgement(
             boolean satisfied,
             List<String> unmetDescriptions,
             int totalCredit,
+            int satisfiedRequirementCount,
             int totalRequirementCount,
             List<RequirementCourseItem> items,
             List<StudentCourse> takenCourses

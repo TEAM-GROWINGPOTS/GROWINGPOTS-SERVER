@@ -186,6 +186,33 @@ class GraduationRequiredTest {
                 .andExpect(jsonPath("$.data.graduationRequired.unmetDescriptions.length()").value(1));
     }
 
+    // 학점 기준 조건(전문실기)은 만족했지만 과목수 기준 조건(맨손체조)만 미충족인 경우.
+    // unmetDescriptions는 학점 조건만 담아서 비어있어도 current(만족한 조건 수)는 그대로
+    // 반영돼 satisfied=false와 모순되지 않아야 한다(1/2, unmetDescriptions는 빈 리스트).
+    @Test
+    void 전문실기는_만족하고_맨손체조만_미이수면_current_required가_만족여부와_모순되지_않는다() throws Exception {
+        StudentProfile profile = setUpSportsScienceStudent("9204");
+        completeCourse(profile, "CPE201", 2);
+        completeCourse(profile, "CPE202", 2);
+
+        mockMvc.perform(get("/api/v1/students/me/graduation/GRADUATION_REQUIRED/courses")
+                        .param("majorType", "PRIMARY")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.majors[0].satisfied").value(false))
+                .andExpect(jsonPath("$.data.majors[0].current").value(1))
+                .andExpect(jsonPath("$.data.majors[0].required").value(2))
+                .andExpect(jsonPath("$.data.majors[0].unmetDescriptions.length()").value(0));
+
+        mockMvc.perform(get("/api/v1/students/me/graduation")
+                        .param("majorType", "PRIMARY")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.graduatable").value(false))
+                .andExpect(jsonPath("$.data.graduationRequired.satisfied").value(false))
+                .andExpect(jsonPath("$.data.graduationRequired.unmetDescriptions.length()").value(0));
+    }
+
     @Test
     void 졸업필수_요건이_없는_학과는_해당_섹션이_비어있다() throws Exception {
         School school = schoolRepository.save(School.builder().name("경희대학교-9203").build());
