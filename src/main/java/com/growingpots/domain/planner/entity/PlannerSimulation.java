@@ -24,8 +24,9 @@ public class PlannerSimulation extends BaseTimeEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // 학생당 시뮬레이션(플래너)은 1개만 존재한다.
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "student_profile_id", nullable = false)
+    @JoinColumn(name = "student_profile_id", nullable = false, unique = true)
     private StudentProfile studentProfile;
 
     @Column(nullable = false)

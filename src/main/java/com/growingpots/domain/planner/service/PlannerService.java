@@ -11,13 +11,17 @@ import com.growingpots.domain.planner.repository.PlannerTermRepository;
 import com.growingpots.domain.planner.repository.PlannerTermVersionRepository;
 import com.growingpots.domain.planner.repository.PlannerVersionItemRepository;
 import com.growingpots.domain.university.entity.Course;
+import com.growingpots.domain.university.entity.CrossMajorRecognizedCourse;
+import com.growingpots.domain.university.entity.Division;
 import com.growingpots.domain.university.entity.enums.OpenedSemester;
 import com.growingpots.domain.university.repository.CourseRepository;
+import com.growingpots.domain.university.repository.CrossMajorRecognizedCourseRepository;
 import com.growingpots.domain.user.entity.StudentProfile;
 import com.growingpots.domain.user.repository.StudentProfileRepository;
 import com.growingpots.global.exception.BaseException;
 import com.growingpots.global.response.error.ErrorCode;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +42,7 @@ public class PlannerService {
     private final PlannerTermVersionRepository plannerTermVersionRepository;
     private final PlannerVersionItemRepository plannerVersionItemRepository;
     private final CourseRepository courseRepository;
+    private final CrossMajorRecognizedCourseRepository crossMajorRecognizedCourseRepository;
 
     @Transactional
     public PlannerSaveResponse savePlanner(Long memberId, PlannerSaveRequest request) {
@@ -54,17 +59,20 @@ public class PlannerService {
 
         deleteExistingData(simulation.getId());
 
-        return buildAndSave(simulation, request, courseMap);
+        return buildAndSave(simulation, request, courseMap, profile);
     }
 
+    // 학생당 시뮬레이션은 1개뿐이라, id 없이 저장 요청이 오면 새로 만들기 전에 기존 걸 먼저 찾는다
+    // (안 그러면 두 번째 저장부터 studentProfile 유니크 제약에 걸린다).
     private PlannerSimulation resolveSimulation(Long simulationId, StudentProfile profile) {
         if (simulationId == null) {
-            return plannerSimulationRepository.save(
-                    PlannerSimulation.builder()
-                            .studentProfile(profile)
-                            .name("내 플래너")
-                            .build()
-            );
+            return plannerSimulationRepository.findByStudentProfile(profile)
+                    .orElseGet(() -> plannerSimulationRepository.save(
+                            PlannerSimulation.builder()
+                                    .studentProfile(profile)
+                                    .name("내 플래너")
+                                    .build()
+                    ));
         }
         PlannerSimulation simulation = plannerSimulationRepository.findById(simulationId)
                 .orElseThrow(() -> new BaseException(ErrorCode.PLANNER_NOT_FOUND));
@@ -72,6 +80,18 @@ public class PlannerService {
             throw new BaseException(ErrorCode.PLANNER_ACCESS_DENIED);
         }
         return simulation;
+    }
+
+    // 학생 학과 기준 타전공 인정 이수구분이 있으면 그걸, 없으면 과목 자체의 기본 이수구분을 쓴다
+    // (CourseService.searchCourses의 인정 이수구분 조회 로직과 동일).
+    private Map<Long, Division> loadRecognizedDivisionByCourseId(StudentProfile profile) {
+        List<CrossMajorRecognizedCourse> recognized =
+                crossMajorRecognizedCourseRepository.findByTargetDepartment(profile.getDepartment());
+        Map<Long, Division> recognizedDivisionByCourseId = new HashMap<>();
+        for (CrossMajorRecognizedCourse r : recognized) {
+            recognizedDivisionByCourseId.put(r.getCourse().getId(), r.getRecognizedDivision());
+        }
+        return recognizedDivisionByCourseId;
     }
 
     private void validateVersions(PlannerSaveRequest request) {
@@ -149,8 +169,10 @@ public class PlannerService {
     private PlannerSaveResponse buildAndSave(
             PlannerSimulation simulation,
             PlannerSaveRequest request,
-            Map<Long, Course> courseMap
+            Map<Long, Course> courseMap,
+            StudentProfile profile
     ) {
+        Map<Long, Division> recognizedDivisionByCourseId = loadRecognizedDivisionByCourseId(profile);
         List<PlannerSaveResponse.TermResponse> termResponses = new ArrayList<>();
 
         for (PlannerSaveRequest.TermRequest termReq : request.terms()) {
@@ -180,10 +202,13 @@ public class PlannerService {
 
                 for (PlannerSaveRequest.ItemRequest itemReq : items) {
                     Course course = courseMap.get(itemReq.courseId());
+                    Division plannedDivision = recognizedDivisionByCourseId
+                            .getOrDefault(course.getId(), course.getDefaultDivision());
                     PlannerVersionItem item = plannerVersionItemRepository.save(
                             PlannerVersionItem.builder()
                                     .plannerTermVersion(version)
                                     .course(course)
+                                    .plannedDivision(plannedDivision)
                                     .credit(course.getCredit())
                                     .positionOrder(itemReq.positionOrder())
                                     .build()
