@@ -28,6 +28,9 @@ public @interface PlannerApi {
                     - completedTerms는 STUDENT_COURSE를 (수강년도, 수강학기)로 그룹핑해 구성한다.
                       여름학기는 1학기, 겨울학기는 2학기 묶음에 합산된다. status가 IN_PROGRESS인
                       학기가 "이수 중", COMPLETED인 학기가 "이수 완료"다.
+                    - completedTerms[].plannerTermVersionId는 실제 PLANNER_TERM_VERSION row가 없어
+                      만든 합성 값이라 항상 음수다(plannedTerms 쪽 plannerTermVersionId는 실제 PK라
+                      항상 양수). 다른 API에 넘기는 용도로 쓰면 안 된다.
                     - plannedTerms는 PLANNER_SIMULATION → PLANNER_TERM → PLANNER_TERM_VERSION →
                       PLANNER_VERSION_ITEM 트리를 그대로 반환한다. 한 번도 저장한 적 없는 학생은
                       빈 배열이 내려간다. isSelected=true인 버전이 노드뷰에 연결되는 폴더다.
@@ -53,7 +56,7 @@ public @interface PlannerApi {
                                           {
                                             "yearLevel": 1,
                                             "semester": 1,
-                                            "plannerTermVersionId": 11,
+                                            "plannerTermVersionId": -11,
                                             "name": "1학년 1학기",
                                             "status": "COMPLETED",
                                             "totalCredit": 3,

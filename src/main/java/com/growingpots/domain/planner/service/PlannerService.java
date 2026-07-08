@@ -183,7 +183,10 @@ public class PlannerService {
         return PlannerResponse.CompletedTerm.builder()
                 .yearLevel(yearLevel)
                 .semester(semester)
-                .plannerTermVersionId(yearLevel * 10L + semester)
+                // completedTerms엔 실제 PLANNER_TERM_VERSION row가 없어 합성 ID를 만들어 넣는다.
+                // AUTO_INCREMENT PK(항상 양수)와 절대 안 겹치도록 음수로 둔다 — 실수로 진짜 PK처럼
+                // 다른 API에 넘겨져도(예: 저장/삭제) DB에 없는 값이라 즉시 실패하도록 하기 위함.
+                .plannerTermVersionId(-(yearLevel * 10L + semester))
                 .name(yearLevel + "학년 " + semester + "학기")
                 .status(inProgress ? "IN_PROGRESS" : "COMPLETED")
                 .totalCredit(totalCredit)
