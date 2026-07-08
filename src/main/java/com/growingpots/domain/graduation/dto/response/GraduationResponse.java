@@ -11,7 +11,12 @@ import lombok.Getter;
 public class GraduationResponse {
 
     private final Summary summary;
+    // 모든 졸업요건(required가 있는 항목 전부)을 충족한 경우 true. 탭 구분 없이 항상 전체 기준으로 계산됨.
+    private final boolean graduatable;
+    // PRIMARY/MULTI/GE/OTHERS 탭: conditions 사용, sections=null
     private final List<ConditionInfo> conditions;
+    // ALL 탭: sections 사용, conditions=null
+    private final AllSections sections;
     private final List<CertInfo> certs;
 
     @Getter
@@ -53,5 +58,22 @@ public class GraduationResponse {
     public static class CertInfo {
         private final String certType;
         private final String result;
+    }
+
+    // ALL 탭 전용: 4개 섹션을 분리해서 반환
+    @Getter
+    @Builder
+    public static class AllSections {
+        private final TabSection primary;
+        private final TabSection multi;   // 복수전공 없으면 null
+        private final TabSection ge;
+        private final TabSection others;
+    }
+
+    @Getter
+    @Builder
+    public static class TabSection {
+        private final String majorName; // 전공 섹션(primary/multi)만 채워짐, ge/others는 null
+        private final List<ConditionInfo> conditions;
     }
 }

@@ -18,8 +18,13 @@ public @interface GraduationApi {
     @Retention(RetentionPolicy.RUNTIME)
     @Operation(
             summary = "졸업 현황 조회",
-            description = "PDF 스냅샷 기반 졸업 현황(요약 / 조건 9개 / 비학점 인증)을 반환한다. "
-                    + "majorType=ALL이면 본전공 기준에 복수전공 전공 학점을 합산. PRIMARY/MULTI는 해당 스냅샷 단건 반환. "
+            description = "PDF 스냅샷 기반 졸업 현황을 반환한다. "
+                    + "majorType=ALL: 본전공/복수전공/교양/기타 4개 섹션 분리(sections 필드, conditions=null). "
+                    + "majorType=PRIMARY: 본전공 MAJOR_* 조건 + 전공 이수구분 영어/SW. "
+                    + "majorType=MULTI: 복수전공 MAJOR_* 조건 + 전공 이수구분 영어/SW. "
+                    + "majorType=GE: REQUIRED_GE/DISTRIBUTED_GE/FREE_GE + 교양 이수구분 영어/SW. "
+                    + "majorType=OTHERS: GENERAL_ELECTIVE + 기타 이수구분 영어/SW. "
+                    + "영어/SW 강의는 appliedDivision.category 기준으로 해당 탭에 배치된다. "
                     + "source=PLANNED는 미구현(추후 플래너 연동)."
     )
     @ApiResponses({
@@ -36,7 +41,8 @@ public @interface GraduationApi {
             summary = "이수구분별 과목 조회",
             description = "divisionCode(예: MAJOR_REQUIRED)에 해당하는 이수/미이수 과목 목록을 반환한다. "
                     + "hasRequiredList=true인 경우 미이수 필수과목이 포함된다. "
-                    + "majorType=ALL이면 보유 전공 전부, PRIMARY=본전공, MULTI=복수전공."
+                    + "majorType=ALL: 보유 전공 전부. PRIMARY: 본전공. MULTI: 복수전공. GE/OTHERS: 본전공 스냅샷 기준. "
+                    + "ENGLISH_COURSE/SW_CERT_COURSE 요청 시 majorType에 따라 해당 이수구분 과목만 반환된다."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "조회 성공 (REQ_200_2)"),
