@@ -36,6 +36,24 @@ public @interface PlannerApi {
     @Target(ElementType.METHOD)
     @Retention(RetentionPolicy.RUNTIME)
     @Operation(
+            summary = "선수과목 검사",
+            description = "요청한 courseId 목록에 대해 미이수 선수과목을 반환한다. "
+                    + "COMPLETED/IN_PROGRESS 과목은 이수한 것으로 간주한다. "
+                    + "학과 특정 선수과목 규칙이 공통(null) 규칙보다 우선 적용된다. "
+                    + "선수과목이 없거나 모두 이수한 과목은 결과에 포함되지 않는다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "검사 성공 (PLAN_200_2)"),
+            @ApiResponse(responseCode = "400", description = "요청 형식 오류 (CMN_002)"),
+            @ApiResponse(responseCode = "401", description = "인증 실패 (CMN_005)"),
+            @ApiResponse(responseCode = "404", description = "학적 정보 없음 (USER_003)")
+    })
+    @interface CheckPrerequisites {
+    }
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @Operation(
             summary = "선택 버전(폴더) 변경",
             description = "지정한 학기(plannerTermId)의 선택 버전을 변경한다. "
                     + "한 트랜잭션 안에서 해당 학기의 모든 버전 isSelected=false → 지정 버전만 true로 전환한다. "
