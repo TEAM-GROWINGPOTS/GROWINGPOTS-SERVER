@@ -3,7 +3,9 @@ package com.growingpots.domain.transcript.repository;
 import com.growingpots.domain.transcript.entity.StudentCourse;
 import com.growingpots.domain.transcript.entity.enums.CourseStatus;
 import com.growingpots.domain.transcript.entity.enums.RecordSource;
+import com.growingpots.domain.university.entity.Department;
 import com.growingpots.domain.university.entity.Division;
+import com.growingpots.domain.university.entity.enums.DivisionCategory;
 import com.growingpots.domain.user.entity.StudentProfile;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -35,6 +37,45 @@ public interface StudentCourseRepository extends JpaRepository<StudentCourse, Lo
             + "WHERE sc.studentProfile = :studentProfile AND c.isSw = true")
     List<StudentCourse> findByStudentProfileAndCourseIsSw(
             @Param("studentProfile") StudentProfile studentProfile);
+
+    // 영어강의 중 특정 이수구분 카테고리에 해당하는 것만 조회 (GE/OTHERS 탭용)
+    @Query("SELECT sc FROM StudentCourse sc JOIN FETCH sc.course c LEFT JOIN FETCH c.offeringDepartment "
+            + "WHERE sc.studentProfile = :studentProfile AND c.isEnglish = true "
+            + "AND sc.appliedDivision IS NOT NULL AND sc.appliedDivision.category IN :categories")
+    List<StudentCourse> findByStudentProfileAndCourseIsEnglishAndDivisionCategoryIn(
+            @Param("studentProfile") StudentProfile studentProfile,
+            @Param("categories") List<DivisionCategory> categories);
+
+    // SW인증강의 중 특정 이수구분 카테고리에 해당하는 것만 조회 (GE/OTHERS 탭용)
+    @Query("SELECT sc FROM StudentCourse sc JOIN FETCH sc.course c LEFT JOIN FETCH c.offeringDepartment "
+            + "WHERE sc.studentProfile = :studentProfile AND c.isSw = true "
+            + "AND sc.appliedDivision IS NOT NULL AND sc.appliedDivision.category IN :categories")
+    List<StudentCourse> findByStudentProfileAndCourseIsSwAndDivisionCategoryIn(
+            @Param("studentProfile") StudentProfile studentProfile,
+            @Param("categories") List<DivisionCategory> categories);
+
+    // 영어강의 중 특정 이수구분 + 개설학과 기준 조회 (PRIMARY/MULTI 탭 구분용)
+    // appliedDepartment가 있으면 우선 적용, 없으면 course.offeringDepartment로 판별
+    @Query("SELECT sc FROM StudentCourse sc JOIN FETCH sc.course c LEFT JOIN FETCH c.offeringDepartment "
+            + "WHERE sc.studentProfile = :studentProfile AND c.isEnglish = true "
+            + "AND sc.appliedDivision IS NOT NULL AND sc.appliedDivision.category IN :categories "
+            + "AND (sc.appliedDepartment = :department "
+            + "     OR (sc.appliedDepartment IS NULL AND c.offeringDepartment = :department))")
+    List<StudentCourse> findByStudentProfileAndCourseIsEnglishAndDivisionCategoryInAndDepartment(
+            @Param("studentProfile") StudentProfile studentProfile,
+            @Param("categories") List<DivisionCategory> categories,
+            @Param("department") Department department);
+
+    // SW인증강의 중 특정 이수구분 + 개설학과 기준 조회 (PRIMARY/MULTI 탭 구분용)
+    @Query("SELECT sc FROM StudentCourse sc JOIN FETCH sc.course c LEFT JOIN FETCH c.offeringDepartment "
+            + "WHERE sc.studentProfile = :studentProfile AND c.isSw = true "
+            + "AND sc.appliedDivision IS NOT NULL AND sc.appliedDivision.category IN :categories "
+            + "AND (sc.appliedDepartment = :department "
+            + "     OR (sc.appliedDepartment IS NULL AND c.offeringDepartment = :department))")
+    List<StudentCourse> findByStudentProfileAndCourseIsSwAndDivisionCategoryInAndDepartment(
+            @Param("studentProfile") StudentProfile studentProfile,
+            @Param("categories") List<DivisionCategory> categories,
+            @Param("department") Department department);
 
     @Query("SELECT sc.course.id FROM StudentCourse sc "
             + "WHERE sc.studentProfile = :studentProfile AND sc.status = :status AND sc.course IS NOT NULL")
