@@ -48,7 +48,7 @@ public class PlannerService {
 
         validateVersions(request);
 
-        Map<Long, Course> courseMap = loadCourseMap(request);
+        Map<Long, Course> courseMap = loadCourseMap(request, profile);
 
         validateSemesterCompatibility(request, courseMap);
 
@@ -75,7 +75,11 @@ public class PlannerService {
     }
 
     private void validateVersions(PlannerSaveRequest request) {
+        Set<String> termKeys = new HashSet<>();
         for (PlannerSaveRequest.TermRequest termReq : request.terms()) {
+            if (!termKeys.add(termReq.yearLevel() + "_" + termReq.semester())) {
+                throw new BaseException(ErrorCode.PLANNER_INVALID_DATA);
+            }
             long selectedCount = termReq.versions().stream()
                     .filter(v -> Boolean.TRUE.equals(v.isSelected()))
                     .count();
@@ -91,7 +95,7 @@ public class PlannerService {
         }
     }
 
-    private Map<Long, Course> loadCourseMap(PlannerSaveRequest request) {
+    private Map<Long, Course> loadCourseMap(PlannerSaveRequest request, StudentProfile profile) {
         Set<Long> courseIds = request.terms().stream()
                 .flatMap(t -> t.versions().stream())
                 .flatMap(v -> v.items() == null ? java.util.stream.Stream.empty() : v.items().stream())
@@ -101,8 +105,13 @@ public class PlannerService {
         Map<Long, Course> map = courseRepository.findAllById(courseIds).stream()
                 .collect(Collectors.toMap(Course::getId, Function.identity()));
 
+        Long schoolId = profile.getSchool().getId();
         for (Long id : courseIds) {
-            if (!map.containsKey(id)) throw new BaseException(ErrorCode.COURSE_NOT_FOUND);
+            Course course = map.get(id);
+            if (course == null) throw new BaseException(ErrorCode.COURSE_NOT_FOUND);
+            if (!course.getSchool().getId().equals(schoolId)) {
+                throw new BaseException(ErrorCode.COURSE_NOT_FOUND);
+            }
         }
         return map;
     }
