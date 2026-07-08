@@ -77,40 +77,40 @@ public class GraduationService {
                 .findFirst()
                 .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
 
+        // graduatable은 탭 무관 항상 전체 요건 기준으로 계산
+        GraduationAnalysisSummary mainSummary = requireSummary(mainMajor);
+        Optional<StudentMajor> doubleMajorOpt = majors.stream()
+                .filter(m -> m.getMajorType() == MajorType.DOUBLE)
+                .findFirst();
+        GraduationAnalysisSummary doubleSummary = doubleMajorOpt
+                .flatMap(graduationAnalysisSummaryRepository::findByStudentMajor)
+                .orElse(null);
+        boolean graduatable = computeGraduatable(mainSummary, doubleSummary);
+
         // TODO(planner-source): source=PLANNED 요청 시 플래너 데이터 기반 계산 구현
         return switch (majorTypeFilter) {
             case PRIMARY -> {
-                GraduationAnalysisSummary summary = requireSummary(mainMajor);
                 List<CertResult> certs = certResultRepository.findByStudentMajor(mainMajor);
-                yield buildSingleTabResponse(profile, summary, MajorTypeFilter.PRIMARY,
-                        mainMajor.getDepartment(), certs);
+                yield buildSingleTabResponse(profile, mainSummary, MajorTypeFilter.PRIMARY,
+                        mainMajor.getDepartment(), graduatable, certs);
             }
             case MULTI -> {
-                StudentMajor doubleMajor = majors.stream()
-                        .filter(m -> m.getMajorType() == MajorType.DOUBLE)
-                        .findFirst()
+                StudentMajor doubleMajor = doubleMajorOpt
                         .orElseThrow(() -> new BaseException(ErrorCode.DOUBLE_MAJOR_NOT_FOUND));
-                GraduationAnalysisSummary summary = requireSummary(doubleMajor);
+                GraduationAnalysisSummary multiSummary = Optional.ofNullable(doubleSummary)
+                        .orElseThrow(() -> new BaseException(ErrorCode.REQUIREMENT_NOT_FOUND));
                 List<CertResult> certs = certResultRepository.findByStudentMajor(doubleMajor);
-                yield buildSingleTabResponse(profile, summary, MajorTypeFilter.MULTI,
-                        doubleMajor.getDepartment(), certs);
+                yield buildSingleTabResponse(profile, multiSummary, MajorTypeFilter.MULTI,
+                        doubleMajor.getDepartment(), graduatable, certs);
             }
             case GE, OTHERS -> {
-                GraduationAnalysisSummary summary = requireSummary(mainMajor);
                 List<CertResult> certs = certResultRepository.findByStudentMajor(mainMajor);
-                yield buildSingleTabResponse(profile, summary, majorTypeFilter, null, certs);
+                yield buildSingleTabResponse(profile, mainSummary, majorTypeFilter, null, graduatable, certs);
             }
             case ALL -> {
-                GraduationAnalysisSummary mainSummary = requireSummary(mainMajor);
-                Optional<StudentMajor> doubleMajorOpt = majors.stream()
-                        .filter(m -> m.getMajorType() == MajorType.DOUBLE)
-                        .findFirst();
-                GraduationAnalysisSummary doubleSummary = doubleMajorOpt
-                        .flatMap(graduationAnalysisSummaryRepository::findByStudentMajor)
-                        .orElse(null);
                 List<CertResult> certs = certResultRepository.findByStudentMajor(mainMajor);
                 yield buildAllTabResponse(profile, mainMajor, mainSummary,
-                        doubleMajorOpt.orElse(null), doubleSummary, certs);
+                        doubleMajorOpt.orElse(null), doubleSummary, graduatable, certs);
             }
         };
     }
@@ -121,10 +121,12 @@ public class GraduationService {
             GraduationAnalysisSummary summary,
             MajorTypeFilter tab,
             Department department,  // PRIMARY/MULTI: 해당 전공 학과, GE/OTHERS: null
+            boolean graduatable,
             List<CertResult> certs
     ) {
         return GraduationResponse.builder()
                 .summary(buildSummary(profile, summary))
+                .graduatable(graduatable)
                 .conditions(buildConditionsForTab(profile, summary, tab, department))
                 .sections(null)
                 .certs(toCertInfos(certs))
@@ -138,6 +140,7 @@ public class GraduationService {
             GraduationAnalysisSummary mainSummary,
             StudentMajor doubleMajor,
             GraduationAnalysisSummary doubleSummary,
+            boolean graduatable,
             List<CertResult> certs
     ) {
         TabSection primarySection = TabSection.builder()
@@ -165,6 +168,7 @@ public class GraduationService {
 
         return GraduationResponse.builder()
                 .summary(buildSummary(profile, mainSummary))
+                .graduatable(graduatable)
                 .conditions(null)
                 .sections(AllSections.builder()
                         .primary(primarySection)
@@ -506,6 +510,36 @@ public class GraduationService {
             case ALL -> majors;
             case GE, OTHERS -> majors.stream().filter(m -> m.getMajorType() == MajorType.MAIN).toList();
         };
+    }
+
+    // 졸업 가능 여부: required가 있는 모든 항목이 충족됐는지 스냅샷 기준으로 확인
+    // 전공 요건은 각 전공별 독립 확인, 교양/영어/SW는 공통 기준(mainSummary)
+    private boolean computeGraduatable(
+            GraduationAnalysisSummary mainSummary,
+            GraduationAnalysisSummary doubleSummary
+    ) {
+        if (!isMajorRequirementMet(mainSummary)) return false;
+        if (doubleSummary != null && !isMajorRequirementMet(doubleSummary)) return false;
+
+        if (mainSummary.getRequiredGeCurrent() < mainSummary.getRequiredGeRequired()) return false;
+        if (mainSummary.getDistributedGeCurrent() < mainSummary.getDistributedGeRequired()) return false;
+        if (mainSummary.getFreeGeCurrent() < mainSummary.getFreeGeRequired()) return false;
+
+        if (mainSummary.getEnglishCurrent() < mainSummary.getEnglishRequired()) return false;
+
+        Integer swRequired = mainSummary.getSwCertRequired();
+        if (swRequired != null) {
+            int swCurrent = mainSummary.getSwCertCurrent() != null ? mainSummary.getSwCertCurrent() : 0;
+            if (swCurrent < swRequired) return false;
+        }
+
+        return true;
+    }
+
+    private boolean isMajorRequirementMet(GraduationAnalysisSummary summary) {
+        return summary.getMajorBasicCurrent() >= summary.getMajorBasicRequired()
+                && summary.getMajorRequiredCurrent() >= summary.getMajorRequiredRequired()
+                && summary.getMajorElectiveCurrent() >= summary.getMajorElectiveRequired();
     }
 
     private GraduationAnalysisSummary requireSummary(StudentMajor studentMajor) {

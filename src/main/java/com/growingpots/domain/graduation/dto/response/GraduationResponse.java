@@ -11,6 +11,8 @@ import lombok.Getter;
 public class GraduationResponse {
 
     private final Summary summary;
+    // 모든 졸업요건(required가 있는 항목 전부)을 충족한 경우 true. 탭 구분 없이 항상 전체 기준으로 계산됨.
+    private final boolean graduatable;
     // PRIMARY/MULTI/GE/OTHERS 탭: conditions 사용, sections=null
     private final List<ConditionInfo> conditions;
     // ALL 탭: sections 사용, conditions=null
