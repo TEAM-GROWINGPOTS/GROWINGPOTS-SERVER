@@ -1,5 +1,6 @@
 package com.growingpots.domain.planner.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -75,7 +76,7 @@ class SelectVersionTest {
     }
 
     @Test
-    void 정상_전환_성공_응답에_termId와_selectedVersionId가_반환된다() throws Exception {
+    void 정상_전환_성공_응답에_termId와_selectedVersionId가_반환되고_DB_isSelected가_전환된다() throws Exception {
         StudentProfile student = createStudent("SV001");
         PlannerSimulation sim = plannerSimulationRepository.save(
                 PlannerSimulation.builder().studentProfile(student).name("내 플래너").build());
@@ -91,16 +92,19 @@ class SelectVersionTest {
                 .andExpect(jsonPath("$.code").value("PLAN_200_4"))
                 .andExpect(jsonPath("$.data.plannerTermId").value(term.getId()))
                 .andExpect(jsonPath("$.data.selectedVersionId").value(v2.getId()));
+
+        assertThat(plannerTermVersionRepository.findById(v1.getId()).orElseThrow().isSelected()).isFalse();
+        assertThat(plannerTermVersionRepository.findById(v2.getId()).orElseThrow().isSelected()).isTrue();
     }
 
     @Test
-    void 이미_선택된_버전을_다시_지정해도_200_멱등() throws Exception {
+    void 이미_선택된_버전을_다시_지정해도_200_멱등_DB_상태_유지() throws Exception {
         StudentProfile student = createStudent("SV002");
         PlannerSimulation sim = plannerSimulationRepository.save(
                 PlannerSimulation.builder().studentProfile(student).name("내 플래너").build());
         PlannerTerm term = createTerm(sim, 1, 1);
         PlannerTermVersion v1 = createVersion(term, 1, true);
-        createVersion(term, 2, false);
+        PlannerTermVersion v2 = createVersion(term, 2, false);
 
         mockMvc.perform(patch("/api/v1/planner/terms/{termId}/selected-version", term.getId())
                         .contentType(MediaType.APPLICATION_JSON)
@@ -109,6 +113,9 @@ class SelectVersionTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("PLAN_200_4"))
                 .andExpect(jsonPath("$.data.selectedVersionId").value(v1.getId()));
+
+        assertThat(plannerTermVersionRepository.findById(v1.getId()).orElseThrow().isSelected()).isTrue();
+        assertThat(plannerTermVersionRepository.findById(v2.getId()).orElseThrow().isSelected()).isFalse();
     }
 
     @Test
