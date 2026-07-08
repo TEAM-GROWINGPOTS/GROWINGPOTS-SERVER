@@ -23,8 +23,8 @@ public @interface GraduationApi {
                     + "majorType=PRIMARY: 본전공 MAJOR_* 조건 + 전공 이수구분 영어/SW. "
                     + "majorType=MULTI: 복수전공 MAJOR_* 조건 + 전공 이수구분 영어/SW. "
                     + "majorType=GE: REQUIRED_GE/DISTRIBUTED_GE/FREE_GE + 교양 이수구분 영어/SW. "
-                    + "majorType=OTHERS: GENERAL_ELECTIVE + 기타 이수구분 영어/SW. "
-                    + "영어/SW 강의는 appliedDivision.category 기준으로 해당 탭에 배치된다. "
+                    + "majorType=OTHERS: GENERAL_ELECTIVE(기타) 조건 하나만 반환, 영어/SW 미포함. "
+                    + "영어/SW 강의는 appliedDivision.category 기준으로 전공·교양 탭에만 배치된다. "
                     + "source=PLANNED는 미구현(추후 플래너 연동)."
     )
     @ApiResponses({
