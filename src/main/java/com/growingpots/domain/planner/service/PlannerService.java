@@ -242,6 +242,17 @@ public class PlannerService {
         return false;
     }
 
+    private void validateCoursesOwnedBySchool(List<Long> courseIds, Long schoolId) {
+        Map<Long, Course> courseMap = courseRepository.findAllById(courseIds).stream()
+                .collect(Collectors.toMap(Course::getId, Function.identity()));
+        for (Long id : courseIds) {
+            Course course = courseMap.get(id);
+            if (course == null || !course.getSchool().getId().equals(schoolId)) {
+                throw new BaseException(ErrorCode.COURSE_NOT_FOUND);
+            }
+        }
+    }
+
     @Transactional(readOnly = true)
     public PrerequisiteCheckResponse checkPrerequisites(Long memberId, PrerequisiteCheckRequest request) {
         StudentProfile profile = studentProfileRepository.findWithDetailsByMemberId(memberId)
@@ -249,6 +260,8 @@ public class PlannerService {
 
         Long departmentId = profile.getDepartment().getId();
         List<Long> courseIds = request.courseIds();
+
+        validateCoursesOwnedBySchool(courseIds, profile.getSchool().getId());
 
         // Query 1: prerequisites with course/requiredCourse names via JOIN FETCH
         List<CoursePrerequisite> prerequisites =

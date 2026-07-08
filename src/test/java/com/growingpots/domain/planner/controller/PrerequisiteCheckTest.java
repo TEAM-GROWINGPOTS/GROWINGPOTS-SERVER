@@ -286,6 +286,36 @@ class PrerequisiteCheckTest {
     }
 
     @Test
+    void 존재하지_않는_courseId_요청시_404_PLAN_001() throws Exception {
+        School school = createSchool("PC011");
+        Department dept = createDept(school, "PC011");
+        StudentProfile student = createStudent("PC011", school, dept);
+
+        mockMvc.perform(post(URL)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body(999999L))
+                        .with(authentication(authOf(student.getMember().getId()))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PLAN_001"));
+    }
+
+    @Test
+    void 타학교_courseId_요청시_404_PLAN_001() throws Exception {
+        School mySchool = createSchool("PC012-mine");
+        School otherSchool = createSchool("PC012-other");
+        Department myDept = createDept(mySchool, "PC012");
+        StudentProfile student = createStudent("PC012", mySchool, myDept);
+        Course otherCourse = createCourse(otherSchool, "CS999", "타교과목");
+
+        mockMvc.perform(post(URL)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body(otherCourse.getId()))
+                        .with(authentication(authOf(student.getMember().getId()))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PLAN_001"));
+    }
+
+    @Test
     void 미인증_요청시_401_CMN_005() throws Exception {
         mockMvc.perform(post(URL)
                         .contentType(MediaType.APPLICATION_JSON)
