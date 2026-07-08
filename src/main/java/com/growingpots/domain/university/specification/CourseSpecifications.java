@@ -21,9 +21,7 @@ public class CourseSpecifications {
         return (root, query, cb) -> cb.equal(root.get("school"), school);
     }
 
-    // 검색(플래너-과목 추가)은 항상 현재 교육과정 과목만 노출한다. 폐지/개정된 옛날 과목은 DB엔
-    // 남아있지만(과거 학번 학생의 이수 과목 매칭용) 검색엔 안 보여야 하므로 선택 필터가 아니라
-    // withSchool처럼 무조건 적용한다.
+    // 검색(플래너-과목 추가)은 항상 현재 교육과정 과목만 노출한다. 폐지/개정된 옛날 과목은 DB엔 남아있지만(과거 학번 학생의 이수 과목 매칭용) 검색엔 안 보임
     public static Specification<Course> withActiveOnly() {
         return (root, query, cb) -> cb.isTrue(root.get("isActive"));
     }
