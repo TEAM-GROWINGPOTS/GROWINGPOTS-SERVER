@@ -99,7 +99,7 @@ class CourseSearchTest {
                 .school(school).courseCode("CS101").name("컴퓨터구조론").credit(3)
                 .offeringDepartment(cs).defaultDivision(majorRequired)
                 .recommendedYearLow(2).recommendedYearHigh(2).openedSemester(OpenedSemester.FIRST)
-                .isEnglish(false).isSw(false).build());
+                .isEnglish(false).isSw(false).isActive(true).build());
         StudentProfile studentProfile = onboardedStudent("9101", cs);
 
         mockMvc.perform(get("/api/v1/courses")
@@ -113,6 +113,28 @@ class CourseSearchTest {
     }
 
     @Test
+    void isActive가_false인_과목은_검색_결과에서_빠진다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-9111").build());
+        Department cs = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과").build());
+        courseRepository.save(Course.builder()
+                .school(school).courseCode("CS101").name("현재교육과정과목").credit(3)
+                .offeringDepartment(cs).recommendedYearLow(1).recommendedYearHigh(1)
+                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).isActive(true).build());
+        courseRepository.save(Course.builder()
+                .school(school).courseCode("CS099").name("폐지된옛날과목").credit(3)
+                .offeringDepartment(cs).recommendedYearLow(1).recommendedYearHigh(1)
+                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).isActive(false).build());
+        StudentProfile studentProfile = onboardedStudent("9111", cs);
+
+        mockMvc.perform(get("/api/v1/courses")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.courses.length()").value(1))
+                .andExpect(jsonPath("$.data.courses[0].courseCode").value("CS101"));
+    }
+
+    @Test
     void keyword로_과목명과_학수번호_부분일치_검색이_된다() throws Exception {
         School school = schoolRepository.save(School.builder().name("경희대학교-9102").build());
         Department cs = departmentRepository.save(Department.builder()
@@ -120,15 +142,15 @@ class CourseSearchTest {
         courseRepository.save(Course.builder()
                 .school(school).courseCode("CS102").name("논리회로실습").credit(3)
                 .offeringDepartment(cs).recommendedYearLow(1).recommendedYearHigh(1)
-                .openedSemester(OpenedSemester.SECOND).isEnglish(false).isSw(false).build());
+                .openedSemester(OpenedSemester.SECOND).isEnglish(false).isSw(false).isActive(true).build());
         courseRepository.save(Course.builder()
                 .school(school).courseCode("LOG201").name("논리학과사고").credit(4)
                 .offeringDepartment(cs).recommendedYearLow(3).recommendedYearHigh(3)
-                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).build());
+                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).isActive(true).build());
         courseRepository.save(Course.builder()
                 .school(school).courseCode("CS101").name("컴퓨터구조론").credit(3)
                 .offeringDepartment(cs).recommendedYearLow(2).recommendedYearHigh(2)
-                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).build());
+                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).isActive(true).build());
         StudentProfile studentProfile = onboardedStudent("9102", cs);
 
         mockMvc.perform(get("/api/v1/courses")
@@ -161,25 +183,25 @@ class CourseSearchTest {
                 .school(school).courseCode("CS101").name("컴퓨터구조론").credit(3)
                 .offeringDepartment(cs).defaultDivision(majorRequired)
                 .recommendedYearLow(2).recommendedYearHigh(2).openedSemester(OpenedSemester.FIRST)
-                .isEnglish(false).isSw(false).build());
+                .isEnglish(false).isSw(false).isActive(true).build());
         // 전공선택, 1학년 -> year=[2] 조건에 안 걸림
         courseRepository.save(Course.builder()
                 .school(school).courseCode("CS102").name("논리회로실습").credit(3)
                 .offeringDepartment(cs).defaultDivision(majorElective)
                 .recommendedYearLow(1).recommendedYearHigh(1).openedSemester(OpenedSemester.SECOND)
-                .isEnglish(false).isSw(false).build());
+                .isEnglish(false).isSw(false).isActive(true).build());
         // 전공선택, 1~2학년 범위 -> 2학년 포함이라 매칭
         courseRepository.save(Course.builder()
                 .school(school).courseCode("DES101").name("설계입문").credit(2)
                 .offeringDepartment(cs).defaultDivision(majorElective)
                 .recommendedYearLow(1).recommendedYearHigh(2).openedSemester(OpenedSemester.FIRST)
-                .isEnglish(false).isSw(false).build());
+                .isEnglish(false).isSw(false).isActive(true).build());
         // 이수영역 자체가 필터에 없는 필수교과, 2학년 -> 이수영역 조건에 안 걸림
         courseRepository.save(Course.builder()
                 .school(school).courseCode("GE101").name("대학영어").credit(2)
                 .defaultDivision(geRequired)
                 .recommendedYearLow(2).recommendedYearHigh(2).openedSemester(OpenedSemester.BOTH)
-                .isEnglish(true).isSw(false).build());
+                .isEnglish(true).isSw(false).isActive(true).build());
         StudentProfile studentProfile = onboardedStudent("9103", cs);
 
         mockMvc.perform(get("/api/v1/courses")
@@ -200,15 +222,15 @@ class CourseSearchTest {
         courseRepository.save(Course.builder()
                 .school(school).courseCode("A1").name("과목A").credit(3)
                 .offeringDepartment(cs).recommendedYearLow(1).recommendedYearHigh(1)
-                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).build());
+                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).isActive(true).build());
         courseRepository.save(Course.builder()
                 .school(school).courseCode("A2").name("과목B").credit(4)
                 .offeringDepartment(cs).recommendedYearLow(1).recommendedYearHigh(1)
-                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).build());
+                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).isActive(true).build());
         courseRepository.save(Course.builder()
                 .school(school).courseCode("A3").name("과목C").credit(5)
                 .offeringDepartment(cs).recommendedYearLow(1).recommendedYearHigh(1)
-                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).build());
+                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).isActive(true).build());
         StudentProfile studentProfile = onboardedStudent("9104", cs);
 
         mockMvc.perform(get("/api/v1/courses")
@@ -228,11 +250,11 @@ class CourseSearchTest {
         courseRepository.save(Course.builder()
                 .school(school).courseCode("B1").name("권장학년있음").credit(3)
                 .offeringDepartment(cs).recommendedYearLow(2).recommendedYearHigh(2)
-                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).build());
+                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).isActive(true).build());
         courseRepository.save(Course.builder()
                 .school(school).courseCode("B2").name("권장학년없음").credit(3)
                 .offeringDepartment(cs)
-                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).build());
+                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).isActive(true).build());
         StudentProfile studentProfile = onboardedStudent("9109", cs);
 
         mockMvc.perform(get("/api/v1/courses")
@@ -286,12 +308,12 @@ class CourseSearchTest {
                 .school(school).courseCode("MAT201").name("신소재공학개론").credit(3)
                 .offeringDepartment(newMat).defaultDivision(chemMajorRequired)
                 .recommendedYearLow(2).recommendedYearHigh(2).openedSemester(OpenedSemester.FIRST)
-                .isEnglish(false).isSw(false).build());
+                .isEnglish(false).isSw(false).isActive(true).build());
         courseRepository.save(Course.builder()
                 .school(school).courseCode("CHEM101").name("화학공학기초").credit(3)
                 .offeringDepartment(chem).defaultDivision(chemMajorRequired)
                 .recommendedYearLow(1).recommendedYearHigh(1).openedSemester(OpenedSemester.FIRST)
-                .isEnglish(false).isSw(false).build());
+                .isEnglish(false).isSw(false).isActive(true).build());
 
         // 화학공학과가 신소재공학과 과목을 "전공선택"으로 인정
         crossMajorRecognizedCourseRepository.save(CrossMajorRecognizedCourse.builder()
@@ -316,11 +338,11 @@ class CourseSearchTest {
         Course completed = courseRepository.save(Course.builder()
                 .school(school).courseCode("CS101").name("컴퓨터구조론").credit(3)
                 .offeringDepartment(cs).recommendedYearLow(2).recommendedYearHigh(2)
-                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).build());
+                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).isActive(true).build());
         courseRepository.save(Course.builder()
                 .school(school).courseCode("CS102").name("논리회로실습").credit(3)
                 .offeringDepartment(cs).recommendedYearLow(1).recommendedYearHigh(1)
-                .openedSemester(OpenedSemester.SECOND).isEnglish(false).isSw(false).build());
+                .openedSemester(OpenedSemester.SECOND).isEnglish(false).isSw(false).isActive(true).build());
         StudentProfile studentProfile = onboardedStudent("9106", cs);
 
         studentCourseRepository.save(StudentCourse.builder()
@@ -352,7 +374,7 @@ class CourseSearchTest {
             courseRepository.save(Course.builder()
                     .school(school).courseCode("CS10" + i).name("과목" + i).credit(3)
                     .offeringDepartment(cs).recommendedYearLow(1).recommendedYearHigh(1)
-                    .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).build());
+                    .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).isActive(true).build());
         }
         StudentProfile studentProfile = onboardedStudent("9107", cs);
 

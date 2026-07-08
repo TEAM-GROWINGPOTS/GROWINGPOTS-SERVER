@@ -67,6 +67,13 @@ public class Course extends BaseTimeEntity {
     @Column(nullable = false)
     private boolean isSw;
 
+    // 현재 교육과정(검색 가능)인지 여부. 폐지/개정된 옛날 과목은 false로 남겨둬서 과거 학번 학생의
+    // 이수 과목 매칭(학과명/권장학년 등 표시)엔 계속 쓰이되, 과목 검색(플래너-과목 추가)엔 노출되지
+    // 않는다. 기존 row가 있는 테이블에 컬럼을 추가하는 거라 DB 기본값도 true로 맞춰 마이그레이션이
+    // 안전하게 되도록 한다.
+    @Column(nullable = false, columnDefinition = "TINYINT(1) DEFAULT 1")
+    private boolean isActive;
+
     @Builder
     private Course(
             School school,
@@ -80,7 +87,8 @@ public class Course extends BaseTimeEntity {
             Integer recommendedYearHigh,
             OpenedSemester openedSemester,
             boolean isEnglish,
-            boolean isSw
+            boolean isSw,
+            boolean isActive
     ) {
         this.school = school;
         this.courseCode = courseCode;
@@ -94,5 +102,6 @@ public class Course extends BaseTimeEntity {
         this.openedSemester = openedSemester;
         this.isEnglish = isEnglish;
         this.isSw = isSw;
+        this.isActive = isActive;
     }
 }

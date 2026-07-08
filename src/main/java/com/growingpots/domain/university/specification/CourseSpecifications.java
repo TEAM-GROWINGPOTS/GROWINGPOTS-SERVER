@@ -21,6 +21,11 @@ public class CourseSpecifications {
         return (root, query, cb) -> cb.equal(root.get("school"), school);
     }
 
+    // 검색(플래너-과목 추가)은 항상 현재 교육과정 과목만 노출한다. 폐지/개정된 옛날 과목은 DB엔 남아있지만(과거 학번 학생의 이수 과목 매칭용) 검색엔 안 보임
+    public static Specification<Course> withActiveOnly() {
+        return (root, query, cb) -> cb.isTrue(root.get("isActive"));
+    }
+
     // offeringDepartment/defaultDivision은 LAZY라 fetch join 없이 응답 매핑 시 접근하면 페이지당 N+1이
     // 발생한다. count 쿼리(결과 타입이 Long)에는 fetch join을 걸면 안 되므로 content 쿼리에만 적용한다.
     // to-one 연관관계라 페이지네이션과 같이 써도 안전하다(컬렉션 fetch join과 달리 행이 늘어나지 않음).

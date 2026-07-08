@@ -67,6 +67,7 @@ public class CourseService {
 
         Specification<Course> spec = combine(Arrays.asList(
                 CourseSpecifications.withSchool(school),
+                CourseSpecifications.withActiveOnly(),
                 CourseSpecifications.withKeyword(request.keyword()),
                 CourseSpecifications.withCollegeName(request.collegeName()),
                 CourseSpecifications.withDepartmentId(request.departmentId()),
