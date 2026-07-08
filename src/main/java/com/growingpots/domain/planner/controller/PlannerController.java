@@ -3,6 +3,7 @@ package com.growingpots.domain.planner.controller;
 import com.growingpots.domain.planner.dto.request.PlannerSaveRequest;
 import com.growingpots.domain.planner.dto.request.PrerequisiteCheckRequest;
 import com.growingpots.domain.planner.dto.request.SelectVersionRequest;
+import com.growingpots.domain.planner.dto.response.PlannerResponse;
 import com.growingpots.domain.planner.dto.response.PlannerSaveResponse;
 import com.growingpots.domain.planner.dto.response.PrerequisiteCheckResponse;
 import com.growingpots.domain.planner.dto.response.SelectVersionResponse;
@@ -13,6 +14,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,6 +30,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class PlannerController {
 
     private final PlannerService plannerService;
+
+    @PlannerApi.GetPlanner
+    @GetMapping
+    public ResponseEntity<BaseResponse<PlannerResponse>> getPlanner(Authentication authentication) {
+        Long memberId = Long.parseLong(authentication.getName());
+        PlannerResponse response = plannerService.getPlanner(memberId);
+        return ResponseEntity.ok(BaseResponse.success(SuccessCode.PLANNER_FOUND, response));
+    }
 
     @PlannerApi.SavePlanner
     @PutMapping

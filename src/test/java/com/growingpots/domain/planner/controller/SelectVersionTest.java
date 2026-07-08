@@ -193,5 +193,6 @@ class SelectVersionTest {
                 .andExpect(jsonPath("$.code").value("PLAN_005"));
     }
 
-    // TODO(#GET-planner): locked 학기 400 PLAN_006 테스트 — isTermLocked() 구현 시 추가 필요
+    // PLAN_006(locked 학기) 케이스는 테스트 안 함 — isTermLocked()가 항상 false라 트리거할 방법이
+    // 없다(PlannerService.isTermLocked 주석 참고: 정상 흐름에서 PLANNER_TERM은 항상 미래 학기뿐).
 }

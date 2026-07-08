@@ -3,6 +3,7 @@ package com.growingpots.domain.planner.service;
 import com.growingpots.domain.planner.dto.request.PlannerSaveRequest;
 import com.growingpots.domain.planner.dto.request.PrerequisiteCheckRequest;
 import com.growingpots.domain.planner.dto.request.SelectVersionRequest;
+import com.growingpots.domain.planner.dto.response.PlannerResponse;
 import com.growingpots.domain.planner.dto.response.PlannerSaveResponse;
 import com.growingpots.domain.planner.dto.response.PrerequisiteCheckResponse;
 import com.growingpots.domain.planner.dto.response.SelectVersionResponse;
@@ -14,23 +15,30 @@ import com.growingpots.domain.planner.repository.PlannerSimulationRepository;
 import com.growingpots.domain.planner.repository.PlannerTermRepository;
 import com.growingpots.domain.planner.repository.PlannerTermVersionRepository;
 import com.growingpots.domain.planner.repository.PlannerVersionItemRepository;
+import com.growingpots.domain.transcript.entity.StudentCourse;
 import com.growingpots.domain.transcript.entity.enums.CourseStatus;
+import com.growingpots.domain.transcript.entity.enums.Semester;
 import com.growingpots.domain.transcript.repository.StudentCourseRepository;
 import com.growingpots.domain.university.entity.Course;
 import com.growingpots.domain.university.entity.CoursePrerequisite;
+import com.growingpots.domain.university.entity.CrossMajorRecognizedCourse;
+import com.growingpots.domain.university.entity.Division;
 import com.growingpots.domain.university.entity.enums.OpenedSemester;
 import com.growingpots.domain.university.repository.CoursePrerequisiteRepository;
 import com.growingpots.domain.university.repository.CourseRepository;
+import com.growingpots.domain.university.repository.CrossMajorRecognizedCourseRepository;
 import com.growingpots.domain.user.entity.StudentProfile;
 import com.growingpots.domain.user.repository.StudentProfileRepository;
 import com.growingpots.global.exception.BaseException;
 import com.growingpots.global.response.error.ErrorCode;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -42,13 +50,191 @@ import org.springframework.transaction.annotation.Transactional;
 public class PlannerService {
 
     private final StudentProfileRepository studentProfileRepository;
+    private final StudentCourseRepository studentCourseRepository;
     private final PlannerSimulationRepository plannerSimulationRepository;
     private final PlannerTermRepository plannerTermRepository;
     private final PlannerTermVersionRepository plannerTermVersionRepository;
     private final PlannerVersionItemRepository plannerVersionItemRepository;
     private final CourseRepository courseRepository;
+    private final CrossMajorRecognizedCourseRepository crossMajorRecognizedCourseRepository;
     private final CoursePrerequisiteRepository coursePrerequisiteRepository;
-    private final StudentCourseRepository studentCourseRepository;
+
+    @Transactional(readOnly = true)
+    public PlannerResponse getPlanner(Long memberId) {
+        StudentProfile profile = studentProfileRepository.findWithDetailsByMemberId(memberId)
+                .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
+
+        return PlannerResponse.builder()
+                .completedTerms(buildCompletedTerms(profile))
+                .plannedTerms(buildPlannedTerms(profile))
+                .build();
+    }
+
+    // 아직 한 번도 저장 안 한 학생은 PLANNER_SIMULATION 자체가 없어서 빈 배열을 반환한다.
+    private List<PlannerResponse.PlannedTerm> buildPlannedTerms(StudentProfile profile) {
+        PlannerSimulation simulation = plannerSimulationRepository.findByStudentProfile(profile).orElse(null);
+        if (simulation == null) {
+            return List.of();
+        }
+
+        List<PlannerTerm> terms = plannerTermRepository.findByPlannerSimulationOrderByTermOrder(simulation);
+        if (terms.isEmpty()) {
+            return List.of();
+        }
+
+        List<PlannerTermVersion> versions = plannerTermVersionRepository.findByPlannerTermIn(terms);
+        List<PlannerVersionItem> items = versions.isEmpty()
+                ? List.of()
+                : plannerVersionItemRepository.findWithDetailsByPlannerTermVersionIn(versions);
+
+        Map<Long, List<PlannerVersionItem>> itemsByVersionId = items.stream()
+                .collect(Collectors.groupingBy(item -> item.getPlannerTermVersion().getId()));
+        Map<Long, List<PlannerTermVersion>> versionsByTermId = versions.stream()
+                .collect(Collectors.groupingBy(v -> v.getPlannerTerm().getId()));
+
+        return terms.stream()
+                .map(term -> toPlannedTerm(term, versionsByTermId.getOrDefault(term.getId(), List.of()), itemsByVersionId))
+                .toList();
+    }
+
+    private PlannerResponse.PlannedTerm toPlannedTerm(
+            PlannerTerm term, List<PlannerTermVersion> versions, Map<Long, List<PlannerVersionItem>> itemsByVersionId) {
+        List<PlannerResponse.Version> versionResponses = versions.stream()
+                .sorted(Comparator.comparingInt(PlannerTermVersion::getVersionNo))
+                .map(version -> toVersion(version, itemsByVersionId.getOrDefault(version.getId(), List.of())))
+                .toList();
+
+        return PlannerResponse.PlannedTerm.builder()
+                .plannerTermId(term.getId())
+                .yearLevel(term.getYearLevel())
+                .semester(term.getSemester())
+                .termOrder(term.getTermOrder())
+                .locked(false)
+                .versions(versionResponses)
+                .build();
+    }
+
+    private PlannerResponse.Version toVersion(PlannerTermVersion version, List<PlannerVersionItem> items) {
+        int totalCredit = items.stream().mapToInt(PlannerVersionItem::getCredit).sum();
+        return PlannerResponse.Version.builder()
+                .plannerTermVersionId(version.getId())
+                .versionNo(version.getVersionNo())
+                .name(version.getName())
+                .isSelected(version.isSelected())
+                .totalCredit(totalCredit)
+                .courses(items.stream().map(this::toPlannedCourse).toList())
+                .build();
+    }
+
+    private PlannerResponse.PlannedCourse toPlannedCourse(PlannerVersionItem item) {
+        Course course = item.getCourse();
+        Division division = item.getPlannedDivision();
+
+        return PlannerResponse.PlannedCourse.builder()
+                .plannerVersionItemId(item.getId())
+                .courseId(course.getId())
+                .courseName(course.getName())
+                .departmentName(departmentName(course))
+                .divisionCategory(division != null ? division.getCategory().name() : null)
+                .divisionName(division != null ? division.getCategory().getDisplayName() : null)
+                .recommendedYearLow(course.getRecommendedYearLow())
+                .recommendedYearHigh(course.getRecommendedYearHigh())
+                .openedSemester(course.getOpenedSemester() != null ? course.getOpenedSemester().name() : null)
+                .credit(item.getCredit())
+                .positionOrder(item.getPositionOrder())
+                .build();
+    }
+
+    // 실제로 과목을 들은 (수강년도, 수강학기) 묶음만 달력 순으로 줄 세워서 몇 번째 학기인지로
+    // 학년/학기를 매긴다. "입학년도 - 수강년도" 같은 달력 계산은 휴학/유급 등으로 공백이 생기면
+    // 틀어지지만(예: 1년 휴학하면 실제 3학년 2학기가 4학년 1학기로 밀림), 이 방식은 휴학한 학기엔
+    // 애초에 STUDENT_COURSE 기록 자체가 없어서 순서에서 자동으로 빠지므로 안전하다.
+    private List<PlannerResponse.CompletedTerm> buildCompletedTerms(StudentProfile profile) {
+        List<StudentCourse> courses = studentCourseRepository.findWithCourseAndDivisionByStudentProfile(profile);
+
+        Map<RawTermKey, List<StudentCourse>> grouped = new TreeMap<>();
+        for (StudentCourse course : courses) {
+            RawTermKey key = toRawTermKey(course);
+            // 수강년도/학기 정보가 없어 학기를 특정할 수 없는 과목은 플래너에 배치할 수 없어 제외한다.
+            if (key == null) {
+                continue;
+            }
+            grouped.computeIfAbsent(key, k -> new ArrayList<>()).add(course);
+        }
+
+        List<PlannerResponse.CompletedTerm> result = new ArrayList<>();
+        int sequence = 0;
+        for (List<StudentCourse> termCourses : grouped.values()) {
+            sequence++;
+            int yearLevel = (sequence - 1) / 2 + 1;
+            int semester = (sequence - 1) % 2 + 1;
+            result.add(toCompletedTerm(yearLevel, semester, termCourses));
+        }
+        return result;
+    }
+
+    private RawTermKey toRawTermKey(StudentCourse course) {
+        Integer takenYear = course.getTakenYear();
+        Semester takenSemester = course.getTakenSemester();
+        if (takenYear == null || takenSemester == null) {
+            return null;
+        }
+        int semesterBucket = (takenSemester == Semester.FIRST || takenSemester == Semester.SUMMER) ? 1 : 2;
+        return new RawTermKey(takenYear, semesterBucket);
+    }
+
+    private PlannerResponse.CompletedTerm toCompletedTerm(int yearLevel, int semester, List<StudentCourse> courses) {
+        boolean inProgress = courses.stream().anyMatch(c -> c.getStatus() == CourseStatus.IN_PROGRESS);
+        int totalCredit = courses.stream().mapToInt(StudentCourse::getCredit).sum();
+
+        return PlannerResponse.CompletedTerm.builder()
+                .yearLevel(yearLevel)
+                .semester(semester)
+                // completedTerms엔 실제 PLANNER_TERM_VERSION row가 없어 합성 ID를 만들어 넣는다.
+                // AUTO_INCREMENT PK(항상 양수)와 절대 안 겹치도록 음수로 둔다 — 실수로 진짜 PK처럼
+                // 다른 API에 넘겨져도(예: 저장/삭제) DB에 없는 값이라 즉시 실패하도록 하기 위함.
+                .plannerTermVersionId(-(yearLevel * 10L + semester))
+                .name(yearLevel + "학년 " + semester + "학기")
+                .status(inProgress ? "IN_PROGRESS" : "COMPLETED")
+                .totalCredit(totalCredit)
+                .locked(true)
+                .courses(courses.stream().map(this::toCompletedCourse).toList())
+                .build();
+    }
+
+    private PlannerResponse.CompletedCourse toCompletedCourse(StudentCourse studentCourse) {
+        Course course = studentCourse.getCourse();
+        Division division = studentCourse.getAppliedDivision();
+
+        return PlannerResponse.CompletedCourse.builder()
+                .studentCourseId(studentCourse.getId())
+                .courseId(course != null ? course.getId() : null)
+                .courseName(course != null ? course.getName() : studentCourse.getRawCourseName())
+                .departmentName(departmentName(course))
+                .divisionCategory(division.getCategory().name())
+                .divisionName(division.getCategory().getDisplayName())
+                .recommendedYearLow(course != null ? course.getRecommendedYearLow() : null)
+                .recommendedYearHigh(course != null ? course.getRecommendedYearHigh() : null)
+                .openedSemester(course != null && course.getOpenedSemester() != null ? course.getOpenedSemester().name() : null)
+                .credit(studentCourse.getCredit())
+                .build();
+    }
+
+    private String departmentName(Course course) {
+        if (course == null || course.getOfferingDepartment() == null) {
+            return null;
+        }
+        return course.getOfferingDepartment().getName();
+    }
+
+    // 달력 기준 수강년도/학기 묶음. 학년/학기 표시값이 아니라 정렬 순서를 정하기 위한 원시 키다.
+    private record RawTermKey(int takenYear, int semesterBucket) implements Comparable<RawTermKey> {
+        @Override
+        public int compareTo(RawTermKey other) {
+            int byYear = Integer.compare(takenYear, other.takenYear);
+            return byYear != 0 ? byYear : Integer.compare(semesterBucket, other.semesterBucket);
+        }
+    }
 
     @Transactional
     public PlannerSaveResponse savePlanner(Long memberId, PlannerSaveRequest request) {
@@ -65,17 +251,20 @@ public class PlannerService {
 
         deleteExistingData(simulation.getId());
 
-        return buildAndSave(simulation, request, courseMap);
+        return buildAndSave(simulation, request, courseMap, profile);
     }
 
+    // 학생당 시뮬레이션은 1개뿐이라, id 없이 저장 요청이 오면 새로 만들기 전에 기존 걸 먼저 찾는다
+    // (안 그러면 두 번째 저장부터 studentProfile 유니크 제약에 걸린다).
     private PlannerSimulation resolveSimulation(Long simulationId, StudentProfile profile) {
         if (simulationId == null) {
-            return plannerSimulationRepository.save(
-                    PlannerSimulation.builder()
-                            .studentProfile(profile)
-                            .name("내 플래너")
-                            .build()
-            );
+            return plannerSimulationRepository.findByStudentProfile(profile)
+                    .orElseGet(() -> plannerSimulationRepository.save(
+                            PlannerSimulation.builder()
+                                    .studentProfile(profile)
+                                    .name("내 플래너")
+                                    .build()
+                    ));
         }
         PlannerSimulation simulation = plannerSimulationRepository.findById(simulationId)
                 .orElseThrow(() -> new BaseException(ErrorCode.PLANNER_NOT_FOUND));
@@ -83,6 +272,18 @@ public class PlannerService {
             throw new BaseException(ErrorCode.PLANNER_ACCESS_DENIED);
         }
         return simulation;
+    }
+
+    // 학생 학과 기준 타전공 인정 이수구분이 있으면 그걸, 없으면 과목 자체의 기본 이수구분을 쓴다
+    // (CourseService.searchCourses의 인정 이수구분 조회 로직과 동일).
+    private Map<Long, Division> loadRecognizedDivisionByCourseId(StudentProfile profile) {
+        List<CrossMajorRecognizedCourse> recognized =
+                crossMajorRecognizedCourseRepository.findByTargetDepartment(profile.getDepartment());
+        Map<Long, Division> recognizedDivisionByCourseId = new HashMap<>();
+        for (CrossMajorRecognizedCourse r : recognized) {
+            recognizedDivisionByCourseId.put(r.getCourse().getId(), r.getRecognizedDivision());
+        }
+        return recognizedDivisionByCourseId;
     }
 
     private void validateVersions(PlannerSaveRequest request) {
@@ -160,8 +361,10 @@ public class PlannerService {
     private PlannerSaveResponse buildAndSave(
             PlannerSimulation simulation,
             PlannerSaveRequest request,
-            Map<Long, Course> courseMap
+            Map<Long, Course> courseMap,
+            StudentProfile profile
     ) {
+        Map<Long, Division> recognizedDivisionByCourseId = loadRecognizedDivisionByCourseId(profile);
         List<PlannerSaveResponse.TermResponse> termResponses = new ArrayList<>();
 
         for (PlannerSaveRequest.TermRequest termReq : request.terms()) {
@@ -191,10 +394,13 @@ public class PlannerService {
 
                 for (PlannerSaveRequest.ItemRequest itemReq : items) {
                     Course course = courseMap.get(itemReq.courseId());
+                    Division plannedDivision = recognizedDivisionByCourseId
+                            .getOrDefault(course.getId(), course.getDefaultDivision());
                     PlannerVersionItem item = plannerVersionItemRepository.save(
                             PlannerVersionItem.builder()
                                     .plannerTermVersion(version)
                                     .course(course)
+                                    .plannedDivision(plannedDivision)
                                     .credit(course.getCredit())
                                     .positionOrder(itemReq.positionOrder())
                                     .build()
@@ -237,7 +443,12 @@ public class PlannerService {
         return new SelectVersionResponse(plannerTermId, versionId);
     }
 
-    // TODO(#GET-planner): GET /planner 구현 시 실제 locked 판정 로직으로 교체 필요
+    // plannedTerms(PLANNER_TERM)는 정상 흐름에서 항상 미래 학기만 존재한다 — 이미 지난/진행중인
+    // 학기는 STUDENT_COURSE 기반 GET /planner의 completedTerms로 빠지고 PLANNER_TERM으로 안
+    // 남는다(GET /planner 구현 완료, PlannerService.getPlanner 참고). 그래서 원칙적으론 "잠글"
+    // 대상 자체가 없어 false 고정이 맞다. 다만 저장 API가 과거 학기 저장을 막지 않아 예외적으로
+    // 그런 PlannerTerm이 남을 수 있는데, 필요해지면 그때 StudentProfile.currentGrade/currentTerm과
+    // 비교해서 판정하면 된다.
     private boolean isTermLocked(PlannerTerm term) {
         return false;
     }

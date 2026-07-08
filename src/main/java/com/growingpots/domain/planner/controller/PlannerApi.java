@@ -1,6 +1,10 @@
 package com.growingpots.domain.planner.controller;
 
+import com.growingpots.domain.planner.dto.response.PlannerResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -13,6 +17,140 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Tag(name = "Planner", description = "학기 플래너 API")
 public @interface PlannerApi {
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @Operation(
+            summary = "학기 플래너 전체 조회 (카드뷰/노드뷰)",
+            description = """
+                    completedTerms(이수완료/이수중, 조회전용)와 plannedTerms(계획, 편집대상)를 함께 반환한다.
+
+                    - completedTerms는 STUDENT_COURSE를 (수강년도, 수강학기)로 그룹핑해 구성한다.
+                      여름학기는 1학기, 겨울학기는 2학기 묶음에 합산된다. status가 IN_PROGRESS인
+                      학기가 "이수 중", COMPLETED인 학기가 "이수 완료"다.
+                    - completedTerms[].plannerTermVersionId는 실제 PLANNER_TERM_VERSION row가 없어
+                      만든 합성 값이라 항상 음수다(plannedTerms 쪽 plannerTermVersionId는 실제 PK라
+                      항상 양수). 다른 API에 넘기는 용도로 쓰면 안 된다.
+                    - completedTerms[].locked는 조회전용이라 항상 true, plannedTerms[].locked는
+                      항상 false다. 두 배열을 하나의 카드 리스트로 합쳐서 다룰 때 배열 출처를 안
+                      따지고 이 값 하나로 편집 아이콘 노출 여부를 정할 수 있게 두 쪽 다 내려준다.
+                    - plannedTerms는 PLANNER_SIMULATION → PLANNER_TERM → PLANNER_TERM_VERSION →
+                      PLANNER_VERSION_ITEM 트리를 그대로 반환한다. 한 번도 저장한 적 없는 학생은
+                      빈 배열이 내려간다. isSelected=true인 버전이 노드뷰에 연결되는 폴더다.
+                    - plannedTerms의 과목은 직접추가를 지원하지 않아 courseId가 항상 존재한다.
+                    - divisionCategory/divisionName은 completedTerms에선 항상 값이 있지만,
+                      plannedTerms에선 과목 자체에 기본 이수구분이 없으면 null일 수 있다.
+                    """
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "플래너 조회 성공",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = PlannerResponse.class),
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "success": true,
+                                      "code": "PLAN_200",
+                                      "message": "플래너 조회에 성공했습니다.",
+                                      "data": {
+                                        "completedTerms": [
+                                          {
+                                            "yearLevel": 1,
+                                            "semester": 1,
+                                            "plannerTermVersionId": -11,
+                                            "name": "1학년 1학기",
+                                            "status": "COMPLETED",
+                                            "totalCredit": 3,
+                                            "locked": true,
+                                            "courses": [
+                                              {
+                                                "studentCourseId": 7001,
+                                                "courseId": 12,
+                                                "courseName": "미디어와사회",
+                                                "departmentName": "미디어학과",
+                                                "divisionCategory": "MAJOR_REQUIRED",
+                                                "divisionName": "전공필수",
+                                                "recommendedYearLow": 1,
+                                                "recommendedYearHigh": 1,
+                                                "openedSemester": "FIRST",
+                                                "credit": 3
+                                              }
+                                            ]
+                                          }
+                                        ],
+                                        "plannedTerms": [
+                                          {
+                                            "plannerTermId": 3003,
+                                            "yearLevel": 2,
+                                            "semester": 1,
+                                            "termOrder": 3,
+                                            "locked": false,
+                                            "versions": [
+                                              {
+                                                "plannerTermVersionId": 4003,
+                                                "versionNo": 1,
+                                                "name": "폴더 1",
+                                                "isSelected": true,
+                                                "totalCredit": 3,
+                                                "courses": [
+                                                  {
+                                                    "plannerVersionItemId": 5002,
+                                                    "courseId": 78,
+                                                    "courseName": "경영정보시스템",
+                                                    "departmentName": "산업경영공학과",
+                                                    "divisionCategory": "MAJOR_REQUIRED",
+                                                    "divisionName": "전공필수",
+                                                    "recommendedYearLow": 2,
+                                                    "recommendedYearHigh": 2,
+                                                    "openedSemester": "FIRST",
+                                                    "credit": 3,
+                                                    "positionOrder": 0
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    }
+                                    """)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "인증 실패",
+                    content = @Content(
+                            mediaType = "application/json",
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "success": false,
+                                      "code": "CMN_005",
+                                      "message": "인증이 필요합니다.",
+                                      "data": null
+                                    }
+                                    """)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "학적 정보 없음(온보딩 미완료)",
+                    content = @Content(
+                            mediaType = "application/json",
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "success": false,
+                                      "code": "USER_003",
+                                      "message": "온보딩이 완료되지 않은 사용자입니다.",
+                                      "data": null
+                                    }
+                                    """)
+                    )
+            )
+    })
+    @interface GetPlanner {
+    }
 
     @Target(ElementType.METHOD)
     @Retention(RetentionPolicy.RUNTIME)
