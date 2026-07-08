@@ -38,21 +38,15 @@ public class RequirementCourse extends BaseTimeEntity {
     @Column(nullable = false)
     private int baseYear;
 
-    // null이면 트랙 무관(전체 적용), 지정되면 해당 트랙 학생에게만 적용
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "track_id")
-    private Track track;
-
     private int minCount;
     private int minCredit;
 
     @Builder
-    private RequirementCourse(Department department, Division division, String name, int baseYear, Track track, int minCount, int minCredit) {
+    private RequirementCourse(Department department, Division division, String name, int baseYear, int minCount, int minCredit) {
         this.department = department;
         this.division = division;
         this.name = name;
         this.baseYear = baseYear;
-        this.track = track;
         this.minCount = minCount;
         this.minCredit = minCredit;
     }
