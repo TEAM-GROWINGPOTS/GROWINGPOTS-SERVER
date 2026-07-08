@@ -1,9 +1,11 @@
 package com.growingpots.domain.planner.service;
 
 import com.growingpots.domain.planner.dto.request.PlannerSaveRequest;
+import com.growingpots.domain.planner.dto.request.PrerequisiteCheckRequest;
 import com.growingpots.domain.planner.dto.request.SelectVersionRequest;
 import com.growingpots.domain.planner.dto.response.PlannerResponse;
 import com.growingpots.domain.planner.dto.response.PlannerSaveResponse;
+import com.growingpots.domain.planner.dto.response.PrerequisiteCheckResponse;
 import com.growingpots.domain.planner.dto.response.SelectVersionResponse;
 import com.growingpots.domain.planner.entity.PlannerSimulation;
 import com.growingpots.domain.planner.entity.PlannerTerm;
@@ -18,9 +20,11 @@ import com.growingpots.domain.transcript.entity.enums.CourseStatus;
 import com.growingpots.domain.transcript.entity.enums.Semester;
 import com.growingpots.domain.transcript.repository.StudentCourseRepository;
 import com.growingpots.domain.university.entity.Course;
+import com.growingpots.domain.university.entity.CoursePrerequisite;
 import com.growingpots.domain.university.entity.CrossMajorRecognizedCourse;
 import com.growingpots.domain.university.entity.Division;
 import com.growingpots.domain.university.entity.enums.OpenedSemester;
+import com.growingpots.domain.university.repository.CoursePrerequisiteRepository;
 import com.growingpots.domain.university.repository.CourseRepository;
 import com.growingpots.domain.university.repository.CrossMajorRecognizedCourseRepository;
 import com.growingpots.domain.user.entity.StudentProfile;
@@ -53,6 +57,7 @@ public class PlannerService {
     private final PlannerVersionItemRepository plannerVersionItemRepository;
     private final CourseRepository courseRepository;
     private final CrossMajorRecognizedCourseRepository crossMajorRecognizedCourseRepository;
+    private final CoursePrerequisiteRepository coursePrerequisiteRepository;
 
     @Transactional(readOnly = true)
     public PlannerResponse getPlanner(Long memberId) {
@@ -446,5 +451,68 @@ public class PlannerService {
     // 비교해서 판정하면 된다.
     private boolean isTermLocked(PlannerTerm term) {
         return false;
+    }
+
+    private void validateCoursesOwnedBySchool(List<Long> courseIds, Long schoolId) {
+        Map<Long, Course> courseMap = courseRepository.findAllById(courseIds).stream()
+                .collect(Collectors.toMap(Course::getId, Function.identity()));
+        for (Long id : courseIds) {
+            Course course = courseMap.get(id);
+            if (course == null || !course.getSchool().getId().equals(schoolId)) {
+                throw new BaseException(ErrorCode.COURSE_NOT_FOUND);
+            }
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public PrerequisiteCheckResponse checkPrerequisites(Long memberId, PrerequisiteCheckRequest request) {
+        StudentProfile profile = studentProfileRepository.findWithDetailsByMemberId(memberId)
+                .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
+
+        Long departmentId = profile.getDepartment().getId();
+        List<Long> courseIds = request.courseIds();
+
+        validateCoursesOwnedBySchool(courseIds, profile.getSchool().getId());
+
+        // Query 1: prerequisites with course/requiredCourse names via JOIN FETCH
+        List<CoursePrerequisite> prerequisites =
+                coursePrerequisiteRepository.findByCourseIdsAndDepartment(courseIds, departmentId);
+
+        // 같은 (course, requiredCourse) 쌍에서 학과 특정 규칙이 공통(null) 규칙보다 우선
+        Map<String, CoursePrerequisite> bestByPair = prerequisites.stream()
+                .collect(Collectors.toMap(
+                        cp -> cp.getCourse().getId() + "_" + cp.getRequiredCourse().getId(),
+                        cp -> cp,
+                        (a, b) -> a.getDepartment() != null ? a : b
+                ));
+
+        // Query 2: COMPLETED + IN_PROGRESS 과목 ID → 이수로 간주
+        Set<Long> takenCourseIds = new HashSet<>(studentCourseRepository
+                .findCourseIdsByStudentProfileAndStatusIn(
+                        profile, List.of(CourseStatus.COMPLETED, CourseStatus.IN_PROGRESS)));
+
+        // 미이수 선수과목만 필터링 후 과목별 그룹핑
+        Map<Long, List<CoursePrerequisite>> missingByCourseId = bestByPair.values().stream()
+                .filter(cp -> !takenCourseIds.contains(cp.getRequiredCourse().getId()))
+                .collect(Collectors.groupingBy(cp -> cp.getCourse().getId()));
+
+        List<PrerequisiteCheckResponse.CourseResult> results = missingByCourseId.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(entry -> {
+                    CoursePrerequisite first = entry.getValue().get(0);
+                    List<PrerequisiteCheckResponse.MissingPrerequisite> missing = entry.getValue().stream()
+                            .sorted(Comparator.comparing(cp -> cp.getRequiredCourse().getId()))
+                            .map(cp -> new PrerequisiteCheckResponse.MissingPrerequisite(
+                                    cp.getRequiredCourse().getId(),
+                                    cp.getRequiredCourse().getName(),
+                                    cp.getPrerequisiteType()
+                            ))
+                            .toList();
+                    return new PrerequisiteCheckResponse.CourseResult(
+                            entry.getKey(), first.getCourse().getName(), missing);
+                })
+                .toList();
+
+        return new PrerequisiteCheckResponse(results);
     }
 }

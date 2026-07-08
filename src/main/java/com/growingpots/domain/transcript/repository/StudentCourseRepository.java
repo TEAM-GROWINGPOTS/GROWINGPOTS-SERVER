@@ -46,4 +46,12 @@ public interface StudentCourseRepository extends JpaRepository<StudentCourse, Lo
     @Query("SELECT sc FROM StudentCourse sc LEFT JOIN FETCH sc.course c LEFT JOIN FETCH c.offeringDepartment "
             + "JOIN FETCH sc.appliedDivision WHERE sc.studentProfile = :studentProfile")
     List<StudentCourse> findWithCourseAndDivisionByStudentProfile(@Param("studentProfile") StudentProfile studentProfile);
+
+    @Query("SELECT sc.course.id FROM StudentCourse sc "
+            + "WHERE sc.studentProfile = :studentProfile "
+            + "AND sc.status IN :statuses "
+            + "AND sc.course IS NOT NULL")
+    List<Long> findCourseIdsByStudentProfileAndStatusIn(
+            @Param("studentProfile") StudentProfile studentProfile,
+            @Param("statuses") List<CourseStatus> statuses);
 }
