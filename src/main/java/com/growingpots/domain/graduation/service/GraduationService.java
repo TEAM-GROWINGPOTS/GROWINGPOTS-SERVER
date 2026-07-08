@@ -37,10 +37,8 @@ import com.growingpots.global.response.error.ErrorCode;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
@@ -142,15 +140,13 @@ public class GraduationService {
 
         List<RequirementCourse> requirementCourses = divisionOpt
                 .map(div -> requirementCourseRepository.findApplicable(
-                        major.getDepartment(), div, admissionYear, major.getTrack()))
+                        major.getDepartment(), div, admissionYear))
                 .orElse(List.of());
         boolean hasRequiredList = !requirementCourses.isEmpty();
 
         List<RequirementCourseItem> allItems = hasRequiredList
                 ? requirementCourseItemRepository.findWithCourseByRequirementCourseIn(requirementCourses)
                 : List.of();
-
-        Map<Long, String> trackTypeMap = buildTrackTypeMap(allItems);
 
         Set<Long> takenCourseIds = new HashSet<>();
         List<CourseInfo> courses = new ArrayList<>();
@@ -159,9 +155,7 @@ public class GraduationService {
             if (sc.getCourse() != null) {
                 takenCourseIds.add(sc.getCourse().getId());
             }
-            String trackType = sc.getCourse() != null
-                    ? trackTypeMap.getOrDefault(sc.getCourse().getId(), "NONE") : "NONE";
-            courses.add(toTakenCourseInfo(sc, trackType));
+            courses.add(toTakenCourseInfo(sc));
         }
 
         // 미이수 과목: RequirementCourseItem 중 이수하지 않은 것. courseId 기준 중복 제거.
@@ -170,8 +164,7 @@ public class GraduationService {
             for (RequirementCourseItem item : allItems) {
                 Long courseId = item.getCourse().getId();
                 if (!takenCourseIds.contains(courseId) && addedIds.add(courseId)) {
-                    String trackType = trackTypeMap.getOrDefault(courseId, "NONE");
-                    courses.add(toNotTakenCourseInfo(item, trackType));
+                    courses.add(toNotTakenCourseInfo(item));
                 }
             }
         }
@@ -210,20 +203,7 @@ public class GraduationService {
         }
     }
 
-    // REQUIRED(트랙 지정)이 NONE보다 우선. 같은 course가 두 그룹에 모두 속하면 REQUIRED로 덮어쓴다.
-    private Map<Long, String> buildTrackTypeMap(List<RequirementCourseItem> items) {
-        Map<Long, String> map = new HashMap<>();
-        for (RequirementCourseItem item : items) {
-            Long courseId = item.getCourse().getId();
-            boolean isTrackSpecific = item.getRequirementCourse().getTrack() != null;
-            if (isTrackSpecific || !map.containsKey(courseId)) {
-                map.put(courseId, isTrackSpecific ? "REQUIRED" : "NONE");
-            }
-        }
-        return map;
-    }
-
-    private CourseInfo toTakenCourseInfo(StudentCourse sc, String trackType) {
+    private CourseInfo toTakenCourseInfo(StudentCourse sc) {
         String departmentName = sc.getCourse() != null && sc.getCourse().getOfferingDepartment() != null
                 ? sc.getCourse().getOfferingDepartment().getName() : null;
         return CourseInfo.builder()
@@ -234,11 +214,10 @@ public class GraduationService {
                 .grade(sc.getTakenYear() != null ? String.valueOf(sc.getTakenYear()) : null)
                 .semester(sc.getTakenSemester() != null ? semesterName(sc.getTakenSemester()) : null)
                 .taken(true)
-                .trackType(trackType)
                 .build();
     }
 
-    private CourseInfo toNotTakenCourseInfo(RequirementCourseItem item, String trackType) {
+    private CourseInfo toNotTakenCourseInfo(RequirementCourseItem item) {
         var course = item.getCourse();
         String departmentName = course.getOfferingDepartment() != null
                 ? course.getOfferingDepartment().getName() : null;
@@ -250,7 +229,6 @@ public class GraduationService {
                 .grade(recommendedYearDisplay(course))
                 .semester(openedSemesterName(course.getOpenedSemester()))
                 .taken(false)
-                .trackType(trackType)
                 .build();
     }
 

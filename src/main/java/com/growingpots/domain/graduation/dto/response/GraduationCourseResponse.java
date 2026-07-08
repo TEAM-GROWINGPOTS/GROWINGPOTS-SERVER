@@ -36,7 +36,5 @@ public class GraduationCourseResponse {
         // 이수: takenSemester + "학기", 미이수: openedSemester 표시용 문자열(FIRST→"1학기" 등)
         private final String semester;
         private final boolean taken;
-        // NONE: 트랙 무관 / REQUIRED: 트랙 지정 필수 그룹 소속
-        private final String trackType;
     }
 }
