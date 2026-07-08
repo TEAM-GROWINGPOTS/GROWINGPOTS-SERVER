@@ -147,6 +147,34 @@ class PlannerGetTest {
                 .andExpect(jsonPath("$.data.completedTerms[1].courses[0].courseName").value("연극문헌과연기"));
     }
 
+    // course가 매칭돼도 course.getName()이 아니라 rawCourseName을 그대로 보여줘야 한다.
+    // rawCourseName은 PDF 임포트 시 COURSE 이름으로 정리되거나 사용자가 편집한 값이라, 여기서
+    // course.getName()으로 다시 덮어쓰면 사용자의 편집이 무시된다.
+    @Test
+    void 완료된_과목은_course가_매칭돼도_rawCourseName을_그대로_보여준다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-7708").build());
+        Department media = departmentRepository.save(Department.builder()
+                .school(school).college("문화대학").name("미디어학과").build());
+        Division majorRequired = divisionRepository.save(Division.builder()
+                .school(school).code("04").category(DivisionCategory.MAJOR_REQUIRED).build());
+        Course course = courseRepository.save(Course.builder()
+                .school(school).courseCode("MED201").name("미디어와사회").credit(3)
+                .offeringDepartment(media).recommendedYearLow(1).recommendedYearHigh(1)
+                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).build());
+        StudentProfile profile = onboardedStudent("7708", media, 2023);
+
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(course).appliedDivision(majorRequired)
+                .rawCourseCode("MED201").rawCourseName("미디어와사회(편집됨)").credit(3)
+                .takenYear(2023).takenSemester(Semester.FIRST)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).isRetake(false).build());
+
+        mockMvc.perform(get("/api/v1/planner")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.completedTerms[0].courses[0].courseName").value("미디어와사회(편집됨)"));
+    }
+
     @Test
     void 검수가_끝나지_않아_이수구분이_없는_과목은_completedTerms에서_빠진다() throws Exception {
         School school = schoolRepository.save(School.builder().name("경희대학교-7702").build());
