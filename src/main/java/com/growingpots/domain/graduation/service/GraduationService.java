@@ -16,6 +16,7 @@ import com.growingpots.domain.graduation.enums.MajorTypeFilter;
 import com.growingpots.domain.transcript.entity.CertResult;
 import com.growingpots.domain.transcript.entity.GraduationAnalysisSummary;
 import com.growingpots.domain.transcript.entity.StudentCourse;
+import com.growingpots.domain.transcript.entity.enums.CertJudgement;
 import com.growingpots.domain.transcript.entity.enums.Semester;
 import com.growingpots.domain.transcript.repository.CertResultRepository;
 import com.growingpots.domain.university.entity.Department;
@@ -85,33 +86,31 @@ public class GraduationService {
         GraduationAnalysisSummary doubleSummary = doubleMajorOpt
                 .flatMap(graduationAnalysisSummaryRepository::findByStudentMajor)
                 .orElse(null);
-        boolean graduatable = computeGraduatable(mainSummary, doubleSummary);
+
+        // certs를 미리 수집해 graduatable 계산과 탭 응답에 재사용
+        List<CertResult> mainCerts = certResultRepository.findByStudentMajor(mainMajor);
+        List<CertResult> doubleCerts = doubleMajorOpt
+                .map(certResultRepository::findByStudentMajor)
+                .orElse(List.of());
+        List<CertResult> allCerts = new ArrayList<>(mainCerts);
+        allCerts.addAll(doubleCerts);
+        boolean graduatable = computeGraduatable(mainSummary, doubleSummary, allCerts);
 
         // TODO(planner-source): source=PLANNED 요청 시 플래너 데이터 기반 계산 구현
         return switch (majorTypeFilter) {
-            case PRIMARY -> {
-                List<CertResult> certs = certResultRepository.findByStudentMajor(mainMajor);
-                yield buildSingleTabResponse(profile, mainSummary, MajorTypeFilter.PRIMARY,
-                        mainMajor.getDepartment(), graduatable, certs);
-            }
+            case PRIMARY -> buildSingleTabResponse(profile, mainSummary, MajorTypeFilter.PRIMARY,
+                    mainMajor.getDepartment(), graduatable, mainCerts);
             case MULTI -> {
                 StudentMajor doubleMajor = doubleMajorOpt
                         .orElseThrow(() -> new BaseException(ErrorCode.DOUBLE_MAJOR_NOT_FOUND));
                 GraduationAnalysisSummary multiSummary = Optional.ofNullable(doubleSummary)
                         .orElseThrow(() -> new BaseException(ErrorCode.REQUIREMENT_NOT_FOUND));
-                List<CertResult> certs = certResultRepository.findByStudentMajor(doubleMajor);
                 yield buildSingleTabResponse(profile, multiSummary, MajorTypeFilter.MULTI,
-                        doubleMajor.getDepartment(), graduatable, certs);
+                        doubleMajor.getDepartment(), graduatable, doubleCerts);
             }
-            case GE, OTHERS -> {
-                List<CertResult> certs = certResultRepository.findByStudentMajor(mainMajor);
-                yield buildSingleTabResponse(profile, mainSummary, majorTypeFilter, null, graduatable, certs);
-            }
-            case ALL -> {
-                List<CertResult> certs = certResultRepository.findByStudentMajor(mainMajor);
-                yield buildAllTabResponse(profile, mainMajor, mainSummary,
-                        doubleMajorOpt.orElse(null), doubleSummary, graduatable, certs);
-            }
+            case GE, OTHERS -> buildSingleTabResponse(profile, mainSummary, majorTypeFilter, null, graduatable, mainCerts);
+            case ALL -> buildAllTabResponse(profile, mainMajor, mainSummary,
+                    doubleMajorOpt.orElse(null), doubleSummary, graduatable, mainCerts);
         };
     }
 
@@ -183,7 +182,7 @@ public class GraduationService {
     // 탭별 조건 목록 생성
     // - 전공 탭(PRIMARY/MULTI): MAJOR_* + 영어/SW(전공 이수구분 + 해당 학과 개설 과목)
     // - 교양 탭(GE): REQUIRED_GE/DISTRIBUTED_GE/FREE_GE + 영어/SW(교양 이수구분)
-    // - 기타 탭(OTHERS): GENERAL_ELECTIVE + 영어/SW(GENERAL_ELECTIVE 이수구분)
+    // - 기타 탭(OTHERS): GENERAL_ELECTIVE (영어·SW 미포함)
     private List<ConditionInfo> buildConditionsForTab(
             StudentProfile profile,
             GraduationAnalysisSummary summary,
@@ -210,9 +209,12 @@ public class GraduationService {
 
         // 영어/SW: 이수구분 기준으로 탭 배치.
         // 전공 탭은 offeringDepartment(appliedDepartment 우선)로 본전공/복수전공 구분
-        List<DivisionCategory> cats = getDivisionCategoriesForTab(tab);
-        result.add(buildEnglishConditionInfo(profile, cats, summary, department));
-        result.add(buildSwConditionInfo(profile, cats, summary, department));
+        // OTHERS(기타) 탭에는 포함하지 않음 - 영어·SW는 기타 이수구분이 아님
+        if (tab != MajorTypeFilter.OTHERS) {
+            List<DivisionCategory> cats = getDivisionCategoriesForTab(tab);
+            result.add(buildEnglishConditionInfo(profile, cats, summary, department));
+            result.add(buildSwConditionInfo(profile, cats, summary, department));
+        }
 
         return result;
     }
@@ -512,12 +514,14 @@ public class GraduationService {
         };
     }
 
-    // 졸업 가능 여부: required가 있는 모든 항목이 충족됐는지 스냅샷 기준으로 확인
+    // 졸업 가능 여부: 학점 요건 + 비학점 요건(평점, 논문/졸업능력인정 등 인증) 전부 충족 시 true
     // 전공 요건은 각 전공별 독립 확인, 교양/영어/SW는 공통 기준(mainSummary)
     private boolean computeGraduatable(
             GraduationAnalysisSummary mainSummary,
-            GraduationAnalysisSummary doubleSummary
+            GraduationAnalysisSummary doubleSummary,
+            List<CertResult> allCerts
     ) {
+        // 학점 요건
         if (!isMajorRequirementMet(mainSummary)) return false;
         if (doubleSummary != null && !isMajorRequirementMet(doubleSummary)) return false;
 
@@ -531,6 +535,16 @@ public class GraduationService {
         if (swRequired != null) {
             int swCurrent = mainSummary.getSwCertCurrent() != null ? mainSummary.getSwCertCurrent() : 0;
             if (swCurrent < swRequired) return false;
+        }
+
+        // 평점 요건
+        if (mainSummary.getGpaRequired() != null && mainSummary.getGpaCurrent() != null
+                && mainSummary.getGpaCurrent().compareTo(mainSummary.getGpaRequired()) < 0) return false;
+
+        // 비학점 인증 요건: 논문·졸업능력인정·영어인증·SW인증·TOPIK 등 FAIL이면 졸업 불가
+        // PASS·EXEMPT·NONE(해당없음)은 통과로 간주
+        for (CertResult cert : allCerts) {
+            if (cert.getResult() == CertJudgement.FAIL) return false;
         }
 
         return true;
