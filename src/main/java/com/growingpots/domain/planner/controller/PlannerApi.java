@@ -166,4 +166,22 @@ public @interface PlannerApi {
     })
     @interface SavePlanner {
     }
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @Operation(
+            summary = "선택 버전(폴더) 변경",
+            description = "지정한 학기(plannerTermId)의 선택 버전을 변경한다. "
+                    + "한 트랜잭션 안에서 해당 학기의 모든 버전 isSelected=false → 지정 버전만 true로 전환한다. "
+                    + "이미 선택된 버전을 다시 지정해도 200을 반환한다(멱등). "
+                    + "다른 학기에 속한 versionId를 지정하면 404를 반환한다."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "버전 변경 성공 (PLAN_200_4)"),
+            @ApiResponse(responseCode = "400", description = "요청 형식 오류 (CMN_002) / 이수 완료 학기 (PLAN_006)"),
+            @ApiResponse(responseCode = "401", description = "인증 실패 (CMN_005)"),
+            @ApiResponse(responseCode = "404", description = "학적 정보 없음 (USER_003) / 학기·버전 없음 또는 소유 아님 (PLAN_005)")
+    })
+    @interface SelectVersion {
+    }
 }

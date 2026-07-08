@@ -1,8 +1,10 @@
 package com.growingpots.domain.planner.service;
 
 import com.growingpots.domain.planner.dto.request.PlannerSaveRequest;
+import com.growingpots.domain.planner.dto.request.SelectVersionRequest;
 import com.growingpots.domain.planner.dto.response.PlannerResponse;
 import com.growingpots.domain.planner.dto.response.PlannerSaveResponse;
+import com.growingpots.domain.planner.dto.response.SelectVersionResponse;
 import com.growingpots.domain.planner.entity.PlannerSimulation;
 import com.growingpots.domain.planner.entity.PlannerTerm;
 import com.growingpots.domain.planner.entity.PlannerTermVersion;
@@ -409,5 +411,34 @@ public class PlannerService {
         }
 
         return new PlannerSaveResponse(simulation.getId(), termResponses);
+    }
+
+    @Transactional
+    public SelectVersionResponse selectVersion(Long memberId, Long plannerTermId, SelectVersionRequest request) {
+        StudentProfile profile = studentProfileRepository.findWithDetailsByMemberId(memberId)
+                .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
+
+        PlannerTerm term = plannerTermRepository.findWithOwnerById(plannerTermId)
+                .filter(t -> t.getPlannerSimulation().getStudentProfile().getId().equals(profile.getId()))
+                .orElseThrow(() -> new BaseException(ErrorCode.PLANNER_TERM_NOT_FOUND));
+
+        if (isTermLocked(term)) {
+            throw new BaseException(ErrorCode.PLANNER_TERM_LOCKED);
+        }
+
+        Long versionId = request.plannerTermVersionId();
+        if (!plannerTermVersionRepository.existsByIdAndPlannerTermId(versionId, plannerTermId)) {
+            throw new BaseException(ErrorCode.PLANNER_TERM_NOT_FOUND);
+        }
+
+        plannerTermVersionRepository.deselectAllByTermId(plannerTermId);
+        plannerTermVersionRepository.selectById(versionId);
+
+        return new SelectVersionResponse(plannerTermId, versionId);
+    }
+
+    // TODO(#GET-planner): GET /planner 구현 시 실제 locked 판정 로직으로 교체 필요
+    private boolean isTermLocked(PlannerTerm term) {
+        return false;
     }
 }
