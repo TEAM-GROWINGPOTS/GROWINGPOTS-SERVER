@@ -16,10 +16,12 @@ import com.growingpots.domain.transcript.parser.ParsedTranscript;
 import com.growingpots.domain.transcript.parser.PdfParsingException;
 import com.growingpots.domain.transcript.parser.PdfTranscriptParser;
 import com.growingpots.domain.transcript.repository.StudentCourseRepository;
+import com.growingpots.domain.university.entity.Course;
 import com.growingpots.domain.university.entity.Department;
 import com.growingpots.domain.university.entity.Division;
 import com.growingpots.domain.university.entity.School;
 import com.growingpots.domain.university.entity.enums.DivisionCategory;
+import com.growingpots.domain.university.repository.CourseRepository;
 import com.growingpots.domain.university.repository.DepartmentRepository;
 import com.growingpots.domain.university.repository.DivisionRepository;
 import com.growingpots.domain.university.repository.SchoolRepository;
@@ -71,6 +73,9 @@ class TranscriptControllerTest {
     @Autowired
     private DivisionRepository divisionRepository;
 
+    @Autowired
+    private CourseRepository courseRepository;
+
     @MockitoBean
     private PdfTranscriptParser pdfTranscriptParser;
 
@@ -116,6 +121,51 @@ class TranscriptControllerTest {
         assertThat(course.getStatus()).isEqualTo(CourseStatus.COMPLETED);
         assertThat(course.getSource()).isEqualTo(RecordSource.PDF);
         assertThat(course.isRetake()).isFalse();
+    }
+
+    @Test
+    void courseCode가_매칭되면_영어강의_마커가_빠진_COURSE_이름으로_저장된다() throws Exception {
+        StudentProfile studentProfile = onboardedStudent("1004");
+        courseRepository.save(Course.builder()
+                .school(studentProfile.getSchool())
+                .courseCode("GEC1104")
+                .name("World Citizen")
+                .credit(3)
+                .isEnglish(true)
+                .isSw(false)
+                .isActive(true)
+                .build());
+        Map<String, String> parsedCourse = Map.of(
+                "section", "자유이수",
+                "courseCode", "GEC1104",
+                "courseName", "eWorld Citizen",
+                "credits", "3",
+                "semester", "2023/1"
+        );
+        when(pdfTranscriptParser.parse(any()))
+                .thenReturn(new ParsedTranscript(Map.of(), Map.of(), List.of(), List.of(), List.of(parsedCourse)));
+
+        mockMvc.perform(multipart("/api/v1/diagnosis/upload")
+                        .file(new MockMultipartFile("file", "transcript.pdf", "application/pdf", PDF_BYTES))
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isCreated());
+
+        StudentCourse course = coursesOf(studentProfile).getFirst();
+        assertThat(course.getRawCourseName()).isEqualTo("World Citizen");
+    }
+
+    @Test
+    void courseCode가_매칭되지_않으면_파싱된_원문_이름을_그대로_저장한다() throws Exception {
+        StudentProfile studentProfile = onboardedStudent("1005");
+        when(pdfTranscriptParser.parse(any())).thenReturn(sampleParsedTranscript());
+
+        mockMvc.perform(multipart("/api/v1/diagnosis/upload")
+                        .file(new MockMultipartFile("file", "transcript.pdf", "application/pdf", PDF_BYTES))
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isCreated());
+
+        StudentCourse course = coursesOf(studentProfile).getFirst();
+        assertThat(course.getRawCourseName()).isEqualTo("World Citizen");
     }
 
     @Test
