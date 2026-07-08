@@ -46,7 +46,14 @@ public enum GraduationConditionType {
 
     SW_CERT_COURSE("SW 인증 강의", "CREDITS", false, true,
             s -> s.getSwCertCurrent() != null ? s.getSwCertCurrent() : 0,
-            s -> s.getSwCertRequired() != null ? s.getSwCertRequired() : 0);
+            s -> s.getSwCertRequired() != null ? s.getSwCertRequired() : 0),
+
+    // 학과 자체의 독립 졸업요건(division 기반 아님, GraduationAnalysisSummary 스냅샷도 없음).
+    // 해당 학과에만 존재하고(예: 스포츠의학과 졸업필수), RequirementCourse(division=null)로 정의된
+    // 하위조건들을 학생 이수내역과 실시간 대조해 판정한다. current/requiredExtractor는 이 타입에서는
+    // GraduationService가 완전히 별도 처리해서 호출되지 않는 자리표시자다.
+    GRADUATION_REQUIRED("졸업필수", "CONDITIONS", false, false,
+            s -> 0, s -> 0);
 
     private final String displayName;
     private final String unit;

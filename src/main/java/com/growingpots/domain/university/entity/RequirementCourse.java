@@ -27,8 +27,11 @@ public class RequirementCourse extends BaseTimeEntity {
     @JoinColumn(name = "department_id", nullable = false)
     private Department department;
 
+    // null이면 이수구분(전공기초/필수/선택 등)과 무관한, 학과 자체의 독립적인 졸업요건이다
+    // (예: 스포츠의학과 졸업필수 - 전문실기/맨손체조). 이 경우 division 기반 조회에는 안 걸리고,
+    // GraduationConditionType.GRADUATION_REQUIRED 조회에서 department로만 찾는다.
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "division_id", nullable = false)
+    @JoinColumn(name = "division_id")
     private Division division;
 
     // 이 요건이 적용되기 시작하는 입학년도. baseYear <= 학생 입학년도 조건으로 조회.
