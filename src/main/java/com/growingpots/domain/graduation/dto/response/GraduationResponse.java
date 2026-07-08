@@ -87,6 +87,8 @@ public class GraduationResponse {
     @Builder
     public static class GraduationRequiredSummary {
         private final boolean satisfied;
+        // 이 졸업요건에 연결된 과목들 중 이수(COMPLETED)한 것들의 학점 합계
+        private final int totalCredit;
         private final List<String> unmetDescriptions;
     }
 }

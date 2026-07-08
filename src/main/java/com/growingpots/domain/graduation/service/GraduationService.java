@@ -464,6 +464,7 @@ public class GraduationService {
         }
         return GraduationRequiredSummary.builder()
                 .satisfied(judgement.satisfied())
+                .totalCredit(judgement.totalCredit())
                 .unmetDescriptions(judgement.unmetDescriptions())
                 .build();
     }
@@ -474,7 +475,7 @@ public class GraduationService {
         List<RequirementCourse> requirementCourses = requirementCourseRepository
                 .findGraduationRequiredByDepartment(department, profile.getAdmissionYear());
         if (requirementCourses.isEmpty()) {
-            return new GraduationRequiredJudgement(true, List.of(), 0, List.of(), List.of());
+            return new GraduationRequiredJudgement(true, List.of(), 0, 0, List.of(), List.of());
         }
 
         List<RequirementCourseItem> allItems =
@@ -496,6 +497,9 @@ public class GraduationService {
 
         // minCredit이 있으면 학점 합으로, minCount가 있으면 이수 과목 수로 판정한다(둘 다 있는 행은
         // 현재 데이터엔 없지만, minCredit을 우선한다).
+        // 안내 문구(unmetDescriptions)는 학점 기준 조건만 담는다. 과목수 기준 조건(예: 맨손체조)은
+        // 어차피 과목 자체가 이수/미이수 카드로 리스트에 나오기 때문에 문구로 중복해서 보여줄 필요가 없다.
+        boolean satisfied = true;
         List<String> unmetDescriptions = new ArrayList<>();
         for (RequirementCourse rc : requirementCourses) {
             List<RequirementCourseItem> items = itemsByRequirement.getOrDefault(rc.getId(), List.of());
@@ -509,18 +513,22 @@ public class GraduationService {
                             .count();
             int required = byCredit ? rc.getMinCredit() : rc.getMinCount();
             if (current < required) {
-                String unit = byCredit ? "학점" : "과목";
-                unmetDescriptions.add("[" + rc.getName() + "] " + current + "/" + required + unit + " 이수완료");
+                satisfied = false;
+                if (byCredit) {
+                    unmetDescriptions.add("[" + rc.getName() + "] " + current + "/" + required + "학점 이수완료");
+                }
             }
         }
 
+        int totalCredit = takenCourses.stream().mapToInt(StudentCourse::getCredit).sum();
         return new GraduationRequiredJudgement(
-                unmetDescriptions.isEmpty(), unmetDescriptions, requirementCourses.size(), allItems, takenCourses);
+                satisfied, unmetDescriptions, totalCredit, requirementCourses.size(), allItems, takenCourses);
     }
 
     private record GraduationRequiredJudgement(
             boolean satisfied,
             List<String> unmetDescriptions,
+            int totalCredit,
             int totalRequirementCount,
             List<RequirementCourseItem> items,
             List<StudentCourse> takenCourses

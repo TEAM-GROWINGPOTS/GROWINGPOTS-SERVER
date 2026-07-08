@@ -155,7 +155,8 @@ class GraduationRequiredTest {
                         .with(authentication(authenticationOf(profile.getMember().getId()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.graduatable").value(true))
-                .andExpect(jsonPath("$.data.graduationRequired.satisfied").value(true));
+                .andExpect(jsonPath("$.data.graduationRequired.satisfied").value(true))
+                .andExpect(jsonPath("$.data.graduationRequired.totalCredit").value(5));
     }
 
     @Test
@@ -168,7 +169,9 @@ class GraduationRequiredTest {
                         .with(authentication(authenticationOf(profile.getMember().getId()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.majors[0].satisfied").value(false))
-                .andExpect(jsonPath("$.data.majors[0].unmetDescriptions.length()").value(2))
+                .andExpect(jsonPath("$.data.majors[0].unmetDescriptions.length()").value(1))
+                .andExpect(jsonPath("$.data.majors[0].unmetDescriptions[0]")
+                        .value("[졸업필수(전문실기 2과목만 인정)] 2/4학점 이수완료"))
                 .andExpect(jsonPath("$.data.majors[0].courses[?(@.name=='전문실기1')].taken").value(true))
                 .andExpect(jsonPath("$.data.majors[0].courses[?(@.name=='전문실기2')].taken").value(false))
                 .andExpect(jsonPath("$.data.majors[0].courses[?(@.name=='맨손체조')].taken").value(false));
@@ -179,7 +182,8 @@ class GraduationRequiredTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.graduatable").value(false))
                 .andExpect(jsonPath("$.data.graduationRequired.satisfied").value(false))
-                .andExpect(jsonPath("$.data.graduationRequired.unmetDescriptions.length()").value(2));
+                .andExpect(jsonPath("$.data.graduationRequired.totalCredit").value(2))
+                .andExpect(jsonPath("$.data.graduationRequired.unmetDescriptions.length()").value(1));
     }
 
     @Test
