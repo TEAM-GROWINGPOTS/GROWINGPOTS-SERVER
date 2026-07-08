@@ -1,6 +1,7 @@
 package com.growingpots.domain.planner.service;
 
 import com.growingpots.domain.planner.dto.request.PlannerSaveRequest;
+import com.growingpots.domain.planner.dto.response.PlannerResponse;
 import com.growingpots.domain.planner.dto.response.PlannerSaveResponse;
 import com.growingpots.domain.planner.entity.PlannerSimulation;
 import com.growingpots.domain.planner.entity.PlannerTerm;
@@ -10,6 +11,10 @@ import com.growingpots.domain.planner.repository.PlannerSimulationRepository;
 import com.growingpots.domain.planner.repository.PlannerTermRepository;
 import com.growingpots.domain.planner.repository.PlannerTermVersionRepository;
 import com.growingpots.domain.planner.repository.PlannerVersionItemRepository;
+import com.growingpots.domain.transcript.entity.StudentCourse;
+import com.growingpots.domain.transcript.entity.enums.CourseStatus;
+import com.growingpots.domain.transcript.entity.enums.Semester;
+import com.growingpots.domain.transcript.repository.StudentCourseRepository;
 import com.growingpots.domain.university.entity.Course;
 import com.growingpots.domain.university.entity.CrossMajorRecognizedCourse;
 import com.growingpots.domain.university.entity.Division;
@@ -26,6 +31,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -37,12 +43,106 @@ import org.springframework.transaction.annotation.Transactional;
 public class PlannerService {
 
     private final StudentProfileRepository studentProfileRepository;
+    private final StudentCourseRepository studentCourseRepository;
     private final PlannerSimulationRepository plannerSimulationRepository;
     private final PlannerTermRepository plannerTermRepository;
     private final PlannerTermVersionRepository plannerTermVersionRepository;
     private final PlannerVersionItemRepository plannerVersionItemRepository;
     private final CourseRepository courseRepository;
     private final CrossMajorRecognizedCourseRepository crossMajorRecognizedCourseRepository;
+
+    @Transactional(readOnly = true)
+    public PlannerResponse getPlanner(Long memberId) {
+        StudentProfile profile = studentProfileRepository.findWithDetailsByMemberId(memberId)
+                .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
+
+        return PlannerResponse.builder()
+                .completedTerms(buildCompletedTerms(profile))
+                .plannedTerms(List.of())
+                .build();
+    }
+
+    // (학년, 학기) 단위로 묶는다. 여름학기는 1학기, 겨울학기는 2학기 묶음에 합산한다.
+    private List<PlannerResponse.CompletedTerm> buildCompletedTerms(StudentProfile profile) {
+        List<StudentCourse> courses = studentCourseRepository.findWithCourseAndDivisionByStudentProfile(profile);
+
+        Map<TermKey, List<StudentCourse>> grouped = new TreeMap<>();
+        for (StudentCourse course : courses) {
+            TermKey key = toTermKey(profile.getAdmissionYear(), course);
+            // 수강년도/학기 정보가 없어 학기를 특정할 수 없는 과목은 플래너에 배치할 수 없어 제외한다.
+            if (key == null) {
+                continue;
+            }
+            grouped.computeIfAbsent(key, k -> new ArrayList<>()).add(course);
+        }
+
+        return grouped.entrySet().stream()
+                .map(entry -> toCompletedTerm(entry.getKey(), entry.getValue()))
+                .toList();
+    }
+
+    private TermKey toTermKey(int admissionYear, StudentCourse course) {
+        Integer takenYear = course.getTakenYear();
+        Semester takenSemester = course.getTakenSemester();
+        if (takenYear == null || takenSemester == null) {
+            return null;
+        }
+        int yearLevel = takenYear - admissionYear + 1;
+        int semester = (takenSemester == Semester.FIRST || takenSemester == Semester.SUMMER) ? 1 : 2;
+        return new TermKey(yearLevel, semester);
+    }
+
+    private PlannerResponse.CompletedTerm toCompletedTerm(TermKey key, List<StudentCourse> courses) {
+        boolean inProgress = courses.stream().anyMatch(c -> c.getStatus() == CourseStatus.IN_PROGRESS);
+        int totalCredit = courses.stream().mapToInt(StudentCourse::getCredit).sum();
+
+        return PlannerResponse.CompletedTerm.builder()
+                .yearLevel(key.yearLevel())
+                .semester(key.semester())
+                .plannerTermVersionId(key.syntheticVersionId())
+                .name(key.yearLevel() + "학년 " + key.semester() + "학기")
+                .status(inProgress ? "IN_PROGRESS" : "COMPLETED")
+                .totalCredit(totalCredit)
+                .courses(courses.stream().map(this::toCompletedCourse).toList())
+                .build();
+    }
+
+    private PlannerResponse.CompletedCourse toCompletedCourse(StudentCourse studentCourse) {
+        Course course = studentCourse.getCourse();
+        Division division = studentCourse.getAppliedDivision();
+
+        return PlannerResponse.CompletedCourse.builder()
+                .studentCourseId(studentCourse.getId())
+                .courseId(course != null ? course.getId() : null)
+                .courseName(course != null ? course.getName() : studentCourse.getRawCourseName())
+                .departmentName(departmentName(course))
+                .divisionCategory(division.getCategory().name())
+                .divisionName(division.getCategory().getDisplayName())
+                .recommendedYearLow(course != null ? course.getRecommendedYearLow() : null)
+                .recommendedYearHigh(course != null ? course.getRecommendedYearHigh() : null)
+                .openedSemester(course != null && course.getOpenedSemester() != null ? course.getOpenedSemester().name() : null)
+                .credit(studentCourse.getCredit())
+                .build();
+    }
+
+    private String departmentName(Course course) {
+        if (course == null || course.getOfferingDepartment() == null) {
+            return null;
+        }
+        return course.getOfferingDepartment().getName();
+    }
+
+    private record TermKey(int yearLevel, int semester) implements Comparable<TermKey> {
+        long syntheticVersionId() {
+            return yearLevel * 10L + semester;
+        }
+
+        @Override
+        public int compareTo(TermKey other) {
+            int byYear = Integer.compare(yearLevel, other.yearLevel);
+            return byYear != 0 ? byYear : Integer.compare(semester, other.semester);
+        }
+    }
 
     @Transactional
     public PlannerSaveResponse savePlanner(Long memberId, PlannerSaveRequest request) {

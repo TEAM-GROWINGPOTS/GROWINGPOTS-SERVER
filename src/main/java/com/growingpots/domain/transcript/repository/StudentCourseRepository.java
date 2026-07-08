@@ -40,4 +40,10 @@ public interface StudentCourseRepository extends JpaRepository<StudentCourse, Lo
             + "WHERE sc.studentProfile = :studentProfile AND sc.status = :status AND sc.course IS NOT NULL")
     List<Long> findCourseIdsByStudentProfileAndStatus(
             @Param("studentProfile") StudentProfile studentProfile, @Param("status") CourseStatus status);
+
+    // 학기 플래너 조회용. appliedDivision을 INNER JOIN FETCH하므로 이수구분 검수가 끝나지 않은
+    // (appliedDivision == null) 과목은 결과에서 빠진다 — 플래너엔 검수 완료된 과목만 노출된다는 전제.
+    @Query("SELECT sc FROM StudentCourse sc LEFT JOIN FETCH sc.course c LEFT JOIN FETCH c.offeringDepartment "
+            + "JOIN FETCH sc.appliedDivision WHERE sc.studentProfile = :studentProfile")
+    List<StudentCourse> findWithCourseAndDivisionByStudentProfile(@Param("studentProfile") StudentProfile studentProfile);
 }
