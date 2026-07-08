@@ -174,6 +174,45 @@ class GraduationAnalysisUploadTest {
         assertThat(certResults).hasSize(5);
     }
 
+    // 학과가 다른 PDF를 재업로드하면, 예전 학과의 STUDENT_MAJOR/GRADUATION_ANALYSIS_SUMMARY가
+    // 지워지고 새 학과 것만 남아야 한다(안 지우면 MAIN 타입 STUDENT_MAJOR가 계속 쌓이는 버그).
+    @Test
+    void 학과가_다른_PDF를_재업로드하면_예전_학과의_STUDENT_MAJOR가_삭제된다() throws Exception {
+        Department sportsScience = department("스포츠의학과");
+        Department digitalContents = department("디지털콘텐츠학과");
+        StudentProfile studentProfile = onboardedStudent("9004", sportsScience);
+        when(pdfTranscriptParser.parse(any())).thenReturn(singleMajorTranscript());
+        upload(studentProfile.getMember().getId());
+
+        Map<String, String> newMajorRequirement = Map.ofEntries(
+                Map.entry("majorType", "단일전공"),
+                Map.entry("majorName", "디지털콘텐츠학"),
+                Map.entry("standardYear", "2024"),
+                Map.entry("basicEarned", "8"), Map.entry("basicRequired", "8"),
+                Map.entry("requiredEarned", "6"), Map.entry("requiredRequired", "6"),
+                Map.entry("electiveEarned", "12"), Map.entry("electiveRequired", "45"),
+                Map.entry("requiredPlusElectiveEarned", "18"), Map.entry("requiredPlusElectiveRequired", "51")
+        );
+        ParsedTranscript newDeptTranscript = new ParsedTranscript(
+                Map.of(), graduationSummary(), generalEducation(), List.of(newMajorRequirement), List.of());
+        when(pdfTranscriptParser.parse(any())).thenReturn(newDeptTranscript);
+
+        upload(studentProfile.getMember().getId());
+
+        List<StudentMajor> remainingMajors = studentMajorRepository.findAll().stream()
+                .filter(m -> studentProfile.getId().equals(m.getStudentProfile().getId()))
+                .toList();
+        assertThat(remainingMajors).hasSize(1);
+        assertThat(remainingMajors.getFirst().getDepartment().getId()).isEqualTo(digitalContents.getId());
+        assertThat(studentMajorRepository.findByStudentProfileAndDepartment(studentProfile, sportsScience)).isEmpty();
+
+        StudentMajor newMajor = remainingMajors.getFirst();
+        assertThat(graduationAnalysisSummaryRepository.findByStudentMajor(newMajor)).isPresent();
+        assertThat(graduationAnalysisSummaryRepository.findAll().stream()
+                .filter(s -> s.getStudentMajor().getStudentProfile().getId().equals(studentProfile.getId())))
+                .hasSize(1);
+    }
+
     @Test
     void 복수전공이면_교양값이_전공별로_동일하게_복제된다() throws Exception {
         Department physicalEducation = department("체육학과");
