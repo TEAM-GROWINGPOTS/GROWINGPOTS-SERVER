@@ -5,6 +5,7 @@ import com.growingpots.domain.university.dto.response.CourseSearchResponse;
 import com.growingpots.domain.university.service.CourseService;
 import com.growingpots.global.response.BaseResponse;
 import com.growingpots.global.response.success.SuccessCode;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.ResponseEntity;
@@ -25,7 +26,7 @@ public class CourseController {
     @CourseApi.SearchCourses
     @GetMapping
     public ResponseEntity<BaseResponse<CourseSearchResponse>> searchCourses(
-            @ParameterObject @ModelAttribute CourseSearchRequest request, Authentication authentication) {
+            @Valid @ParameterObject @ModelAttribute CourseSearchRequest request, Authentication authentication) {
         Long memberId = Long.parseLong(authentication.getName());
         CourseSearchResponse response = courseService.searchCourses(memberId, request);
         return ResponseEntity.ok(BaseResponse.success(SuccessCode.COURSE_SEARCH_FOUND, response));

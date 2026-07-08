@@ -221,6 +221,56 @@ class CourseSearchTest {
     }
 
     @Test
+    void 권장학년이_없는_과목은_학년_필터를_걸어도_제외되지_않는다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-9109").build());
+        Department cs = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과").build());
+        courseRepository.save(Course.builder()
+                .school(school).courseCode("B1").name("권장학년있음").credit(3)
+                .offeringDepartment(cs).recommendedYearLow(2).recommendedYearHigh(2)
+                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).build());
+        courseRepository.save(Course.builder()
+                .school(school).courseCode("B2").name("권장학년없음").credit(3)
+                .offeringDepartment(cs)
+                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).build());
+        StudentProfile studentProfile = onboardedStudent("9109", cs);
+
+        mockMvc.perform(get("/api/v1/courses")
+                        .param("year", "2")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.courses.length()").value(2))
+                .andExpect(jsonPath("$.data.courses[*].courseCode")
+                        .value(org.hamcrest.Matchers.containsInAnyOrder("B1", "B2")));
+    }
+
+    @Test
+    void size가_0이하이거나_100을_초과하면_400_CMN_002를_반환한다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-9110").build());
+        Department cs = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과").build());
+        StudentProfile studentProfile = onboardedStudent("9110", cs);
+
+        mockMvc.perform(get("/api/v1/courses")
+                        .param("size", "0")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN_002"));
+
+        mockMvc.perform(get("/api/v1/courses")
+                        .param("size", "101")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN_002"));
+
+        mockMvc.perform(get("/api/v1/courses")
+                        .param("page", "-1")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CMN_002"));
+    }
+
+    @Test
     void CROSS_MAJOR로_필터링하면_학생_학과_기준_인정_과목만_나오고_인정_이수구분으로_표시된다() throws Exception {
         School school = schoolRepository.save(School.builder().name("경희대학교-9105").build());
         Department chem = departmentRepository.save(Department.builder()

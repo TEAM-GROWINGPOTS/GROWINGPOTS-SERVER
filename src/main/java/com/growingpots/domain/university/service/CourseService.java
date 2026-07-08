@@ -107,7 +107,9 @@ public class CourseService {
 
     private CourseSearchResponse.CourseInfo toCourseInfo(
             Course course, Set<Long> completedCourseIds, Map<Long, Division> recognizedDivisionByCourseId) {
-        // 학생 학과 기준 타전공 인정 이수구분이 있으면 과목 자체의 기본 이수구분보다 우선한다.
+        // recognizedDivisionByCourseId는 요청에 CROSS_MAJOR가 포함된 경우에만 채워진다(searchCourses 참고).
+        // 즉 이 과목이 "타전공 인정 대상"으로 조회된 경우에만, 과목 자체의 기본 이수구분보다 인정받은
+        // 이수구분(학과마다 다를 수 있음)을 우선해서 보여준다. CROSS_MAJOR 없이 검색하면 이 분기는 타지 않는다.
         Division recognizedDivision = recognizedDivisionByCourseId.get(course.getId());
         String defaultDivisionName;
         if (recognizedDivision != null) {

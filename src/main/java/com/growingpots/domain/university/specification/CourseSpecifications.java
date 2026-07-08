@@ -59,17 +59,21 @@ public class CourseSpecifications {
         return (root, query, cb) -> cb.equal(root.get("offeringDepartment").get("id"), departmentId);
     }
 
+    // recommendedYearLow/High가 null인 과목(권장 학년 자체가 없는 과목)은 SQL의 NULL 비교가 전부
+    // UNKNOWN으로 처리되어 아래 range 비교에 그대로 걸리면 학년 필터를 걸 때마다 결과에서 빠진다.
+    // "권장 학년 제한 없음"으로 보고 어떤 학년으로 필터링해도 항상 매칭되게 한다.
     public static Specification<Course> withYears(List<Integer> years) {
         if (years == null || years.isEmpty()) {
             return null;
         }
         return (root, query, cb) -> {
-            Predicate[] predicates = years.stream()
+            Predicate noRestriction = cb.isNull(root.get("recommendedYearLow"));
+            Predicate[] rangePredicates = years.stream()
                     .map(year -> cb.and(
                             cb.lessThanOrEqualTo(root.get("recommendedYearLow"), year),
                             cb.greaterThanOrEqualTo(root.get("recommendedYearHigh"), year)))
                     .toArray(Predicate[]::new);
-            return cb.or(predicates);
+            return cb.or(noRestriction, cb.or(rangePredicates));
         };
     }
 
