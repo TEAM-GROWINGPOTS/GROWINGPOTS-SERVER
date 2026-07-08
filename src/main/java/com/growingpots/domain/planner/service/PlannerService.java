@@ -26,6 +26,7 @@ import com.growingpots.domain.user.repository.StudentProfileRepository;
 import com.growingpots.global.exception.BaseException;
 import com.growingpots.global.response.error.ErrorCode;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -58,7 +59,82 @@ public class PlannerService {
 
         return PlannerResponse.builder()
                 .completedTerms(buildCompletedTerms(profile))
-                .plannedTerms(List.of())
+                .plannedTerms(buildPlannedTerms(profile))
+                .build();
+    }
+
+    // 아직 한 번도 저장 안 한 학생은 PLANNER_SIMULATION 자체가 없어서 빈 배열을 반환한다.
+    private List<PlannerResponse.PlannedTerm> buildPlannedTerms(StudentProfile profile) {
+        PlannerSimulation simulation = plannerSimulationRepository.findByStudentProfile(profile).orElse(null);
+        if (simulation == null) {
+            return List.of();
+        }
+
+        List<PlannerTerm> terms = plannerTermRepository.findByPlannerSimulationOrderByTermOrder(simulation);
+        if (terms.isEmpty()) {
+            return List.of();
+        }
+
+        List<PlannerTermVersion> versions = plannerTermVersionRepository.findByPlannerTermIn(terms);
+        List<PlannerVersionItem> items = versions.isEmpty()
+                ? List.of()
+                : plannerVersionItemRepository.findWithDetailsByPlannerTermVersionIn(versions);
+
+        Map<Long, List<PlannerVersionItem>> itemsByVersionId = items.stream()
+                .collect(Collectors.groupingBy(item -> item.getPlannerTermVersion().getId()));
+        Map<Long, List<PlannerTermVersion>> versionsByTermId = versions.stream()
+                .collect(Collectors.groupingBy(v -> v.getPlannerTerm().getId()));
+
+        return terms.stream()
+                .map(term -> toPlannedTerm(term, versionsByTermId.getOrDefault(term.getId(), List.of()), itemsByVersionId))
+                .toList();
+    }
+
+    private PlannerResponse.PlannedTerm toPlannedTerm(
+            PlannerTerm term, List<PlannerTermVersion> versions, Map<Long, List<PlannerVersionItem>> itemsByVersionId) {
+        List<PlannerResponse.Version> versionResponses = versions.stream()
+                .sorted(Comparator.comparingInt(PlannerTermVersion::getVersionNo))
+                .map(version -> toVersion(version, itemsByVersionId.getOrDefault(version.getId(), List.of())))
+                .toList();
+
+        return PlannerResponse.PlannedTerm.builder()
+                .plannerTermId(term.getId())
+                .yearLevel(term.getYearLevel())
+                .semester(term.getSemester())
+                .termOrder(term.getTermOrder())
+                .locked(false)
+                .versions(versionResponses)
+                .build();
+    }
+
+    private PlannerResponse.Version toVersion(PlannerTermVersion version, List<PlannerVersionItem> items) {
+        int totalCredit = items.stream().mapToInt(PlannerVersionItem::getCredit).sum();
+        return PlannerResponse.Version.builder()
+                .plannerTermVersionId(version.getId())
+                .versionNo(version.getVersionNo())
+                .name(version.getName())
+                .isSelected(version.isSelected())
+                .totalCredit(totalCredit)
+                .courses(items.stream().map(this::toPlannedCourse).toList())
+                .build();
+    }
+
+    private PlannerResponse.PlannedCourse toPlannedCourse(PlannerVersionItem item) {
+        Course course = item.getCourse();
+        Division division = item.getPlannedDivision();
+
+        return PlannerResponse.PlannedCourse.builder()
+                .plannerVersionItemId(item.getId())
+                .courseId(course.getId())
+                .courseName(course.getName())
+                .departmentName(departmentName(course))
+                .divisionCategory(division != null ? division.getCategory().name() : null)
+                .divisionName(division != null ? division.getCategory().getDisplayName() : null)
+                .recommendedYearLow(course.getRecommendedYearLow())
+                .recommendedYearHigh(course.getRecommendedYearHigh())
+                .openedSemester(course.getOpenedSemester() != null ? course.getOpenedSemester().name() : null)
+                .credit(item.getCredit())
+                .positionOrder(item.getPositionOrder())
                 .build();
     }
 
