@@ -1,8 +1,10 @@
 package com.growingpots.domain.planner.controller;
 
 import com.growingpots.domain.planner.dto.request.PlannerSaveRequest;
+import com.growingpots.domain.planner.dto.request.PrerequisiteCheckRequest;
 import com.growingpots.domain.planner.dto.request.SelectVersionRequest;
 import com.growingpots.domain.planner.dto.response.PlannerSaveResponse;
+import com.growingpots.domain.planner.dto.response.PrerequisiteCheckResponse;
 import com.growingpots.domain.planner.dto.response.SelectVersionResponse;
 import com.growingpots.domain.planner.service.PlannerService;
 import com.growingpots.global.response.BaseResponse;
@@ -13,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -35,6 +38,17 @@ public class PlannerController {
         Long memberId = Long.parseLong(authentication.getName());
         PlannerSaveResponse response = plannerService.savePlanner(memberId, request);
         return ResponseEntity.ok(BaseResponse.success(SuccessCode.PLANNER_SAVED, response));
+    }
+
+    @PlannerApi.CheckPrerequisites
+    @PostMapping("/prerequisite-check")
+    public ResponseEntity<BaseResponse<PrerequisiteCheckResponse>> checkPrerequisites(
+            @Valid @RequestBody PrerequisiteCheckRequest request,
+            Authentication authentication
+    ) {
+        Long memberId = Long.parseLong(authentication.getName());
+        PrerequisiteCheckResponse response = plannerService.checkPrerequisites(memberId, request);
+        return ResponseEntity.ok(BaseResponse.success(SuccessCode.PREREQUISITE_CHECK_DONE, response));
     }
 
     @PlannerApi.SelectVersion
