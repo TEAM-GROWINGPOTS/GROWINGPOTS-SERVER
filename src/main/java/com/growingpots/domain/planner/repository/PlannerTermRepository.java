@@ -2,6 +2,7 @@ package com.growingpots.domain.planner.repository;
 
 import com.growingpots.domain.planner.entity.PlannerTerm;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -12,6 +13,12 @@ public interface PlannerTermRepository extends JpaRepository<PlannerTerm, Long> 
 
     @Query("SELECT pt.id FROM PlannerTerm pt WHERE pt.plannerSimulation.id = :simulationId")
     List<Long> findIdsByPlannerSimulationId(@Param("simulationId") Long simulationId);
+
+    @Query("SELECT pt FROM PlannerTerm pt "
+            + "JOIN FETCH pt.plannerSimulation ps "
+            + "JOIN FETCH ps.studentProfile sp "
+            + "WHERE pt.id = :termId")
+    Optional<PlannerTerm> findWithOwnerById(@Param("termId") Long termId);
 
     @Transactional
     @Modifying
