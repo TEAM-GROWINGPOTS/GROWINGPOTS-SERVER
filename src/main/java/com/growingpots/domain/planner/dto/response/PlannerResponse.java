@@ -21,6 +21,9 @@ public class PlannerResponse {
         private final String name;
         private final String status;
         private final int totalCredit;
+        // 조회전용이라 항상 true. 프론트가 completedTerms/plannedTerms를 하나의 카드 리스트로
+        // 합쳐서 다룰 때, 배열 출처를 안 따지고 이 값 하나로 편집 아이콘(⋮/⇄) 노출 여부를 정할 수 있게.
+        private final boolean locked;
         private final List<CompletedCourse> courses;
     }
 

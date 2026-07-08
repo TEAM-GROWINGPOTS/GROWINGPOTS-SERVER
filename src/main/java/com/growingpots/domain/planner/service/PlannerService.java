@@ -192,6 +192,7 @@ public class PlannerService {
                 .name(yearLevel + "학년 " + semester + "학기")
                 .status(inProgress ? "IN_PROGRESS" : "COMPLETED")
                 .totalCredit(totalCredit)
+                .locked(true)
                 .courses(courses.stream().map(this::toCompletedCourse).toList())
                 .build();
     }

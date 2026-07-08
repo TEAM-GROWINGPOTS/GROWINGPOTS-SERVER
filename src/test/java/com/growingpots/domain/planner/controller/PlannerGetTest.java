@@ -137,10 +137,12 @@ class PlannerGetTest {
                 .andExpect(jsonPath("$.data.completedTerms[0].name").value("1학년 1학기"))
                 .andExpect(jsonPath("$.data.completedTerms[0].status").value("COMPLETED"))
                 .andExpect(jsonPath("$.data.completedTerms[0].totalCredit").value(3))
+                .andExpect(jsonPath("$.data.completedTerms[0].locked").value(true))
                 .andExpect(jsonPath("$.data.completedTerms[0].courses[0].departmentName").value("미디어학과"))
                 .andExpect(jsonPath("$.data.completedTerms[0].courses[0].divisionName").value("전공필수"))
                 .andExpect(jsonPath("$.data.completedTerms[1].semester").value(2))
                 .andExpect(jsonPath("$.data.completedTerms[1].status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.data.completedTerms[1].locked").value(true))
                 .andExpect(jsonPath("$.data.completedTerms[1].courses[0].courseId").doesNotExist())
                 .andExpect(jsonPath("$.data.completedTerms[1].courses[0].courseName").value("연극문헌과연기"));
     }
