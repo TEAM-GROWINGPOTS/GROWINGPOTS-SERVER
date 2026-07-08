@@ -1,0 +1,245 @@
+package com.growingpots.domain.planner.controller;
+
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.growingpots.domain.planner.entity.PlannerSimulation;
+import com.growingpots.domain.planner.entity.PlannerTerm;
+import com.growingpots.domain.planner.entity.PlannerTermVersion;
+import com.growingpots.domain.planner.entity.PlannerVersionItem;
+import com.growingpots.domain.planner.repository.PlannerSimulationRepository;
+import com.growingpots.domain.planner.repository.PlannerTermRepository;
+import com.growingpots.domain.planner.repository.PlannerTermVersionRepository;
+import com.growingpots.domain.planner.repository.PlannerVersionItemRepository;
+import com.growingpots.domain.transcript.entity.StudentCourse;
+import com.growingpots.domain.transcript.entity.enums.CourseStatus;
+import com.growingpots.domain.transcript.entity.enums.RecordSource;
+import com.growingpots.domain.transcript.entity.enums.Semester;
+import com.growingpots.domain.transcript.repository.StudentCourseRepository;
+import com.growingpots.domain.university.entity.Course;
+import com.growingpots.domain.university.entity.Department;
+import com.growingpots.domain.university.entity.Division;
+import com.growingpots.domain.university.entity.School;
+import com.growingpots.domain.university.entity.enums.DivisionCategory;
+import com.growingpots.domain.university.entity.enums.OpenedSemester;
+import com.growingpots.domain.university.repository.CourseRepository;
+import com.growingpots.domain.university.repository.DepartmentRepository;
+import com.growingpots.domain.university.repository.DivisionRepository;
+import com.growingpots.domain.university.repository.SchoolRepository;
+import com.growingpots.domain.user.entity.Member;
+import com.growingpots.domain.user.entity.StudentProfile;
+import com.growingpots.domain.user.entity.enums.OauthProvider;
+import com.growingpots.domain.user.repository.MemberRepository;
+import com.growingpots.domain.user.repository.StudentProfileRepository;
+import java.util.Collections;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.web.servlet.MockMvc;
+
+@ActiveProfiles("test")
+@SpringBootTest
+@AutoConfigureMockMvc
+class PlannerGetTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private MemberRepository memberRepository;
+
+    @Autowired
+    private StudentProfileRepository studentProfileRepository;
+
+    @Autowired
+    private SchoolRepository schoolRepository;
+
+    @Autowired
+    private DepartmentRepository departmentRepository;
+
+    @Autowired
+    private DivisionRepository divisionRepository;
+
+    @Autowired
+    private CourseRepository courseRepository;
+
+    @Autowired
+    private StudentCourseRepository studentCourseRepository;
+
+    @Autowired
+    private PlannerSimulationRepository plannerSimulationRepository;
+
+    @Autowired
+    private PlannerTermRepository plannerTermRepository;
+
+    @Autowired
+    private PlannerTermVersionRepository plannerTermVersionRepository;
+
+    @Autowired
+    private PlannerVersionItemRepository plannerVersionItemRepository;
+
+    private StudentProfile onboardedStudent(String oauthId, Department department, int admissionYear) {
+        Member member = memberRepository.save(Member.builder()
+                .nickname("테스트유저")
+                .oauthProvider(OauthProvider.KAKAO)
+                .oauthId(oauthId)
+                .email(null)
+                .build());
+        return studentProfileRepository.save(StudentProfile.builder()
+                .member(member)
+                .school(department.getSchool())
+                .department(department)
+                .admissionYear(admissionYear)
+                .build());
+    }
+
+    private Authentication authenticationOf(Long memberId) {
+        return new UsernamePasswordAuthenticationToken(memberId.toString(), null, Collections.emptyList());
+    }
+
+    @Test
+    void 이수완료와_이수중_학기가_학년학기로_묶여_상태와_총학점과_함께_반환된다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-7701").build());
+        Department media = departmentRepository.save(Department.builder()
+                .school(school).college("문화대학").name("미디어학과").build());
+        Division majorRequired = divisionRepository.save(Division.builder()
+                .school(school).code("04").category(DivisionCategory.MAJOR_REQUIRED).build());
+        Course course = courseRepository.save(Course.builder()
+                .school(school).courseCode("MED101").name("미디어와사회").credit(3)
+                .offeringDepartment(media).recommendedYearLow(1).recommendedYearHigh(1)
+                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).build());
+        StudentProfile profile = onboardedStudent("7701", media, 2023);
+
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(course).appliedDivision(majorRequired)
+                .rawCourseCode("MED101").rawCourseName("미디어와사회").credit(3)
+                .takenYear(2023).takenSemester(Semester.FIRST)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).isRetake(false).build());
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(null).appliedDivision(majorRequired)
+                .rawCourseCode(null).rawCourseName("연극문헌과연기").credit(3)
+                .takenYear(2023).takenSemester(Semester.SECOND)
+                .status(CourseStatus.IN_PROGRESS).source(RecordSource.PDF).isRetake(false).build());
+
+        mockMvc.perform(get("/api/v1/planner")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("PLAN_200"))
+                .andExpect(jsonPath("$.data.completedTerms.length()").value(2))
+                .andExpect(jsonPath("$.data.completedTerms[0].yearLevel").value(1))
+                .andExpect(jsonPath("$.data.completedTerms[0].semester").value(1))
+                .andExpect(jsonPath("$.data.completedTerms[0].name").value("1학년 1학기"))
+                .andExpect(jsonPath("$.data.completedTerms[0].status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.completedTerms[0].totalCredit").value(3))
+                .andExpect(jsonPath("$.data.completedTerms[0].courses[0].departmentName").value("미디어학과"))
+                .andExpect(jsonPath("$.data.completedTerms[0].courses[0].divisionName").value("전공필수"))
+                .andExpect(jsonPath("$.data.completedTerms[1].semester").value(2))
+                .andExpect(jsonPath("$.data.completedTerms[1].status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.data.completedTerms[1].courses[0].courseId").doesNotExist())
+                .andExpect(jsonPath("$.data.completedTerms[1].courses[0].courseName").value("연극문헌과연기"));
+    }
+
+    @Test
+    void 검수가_끝나지_않아_이수구분이_없는_과목은_completedTerms에서_빠진다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-7702").build());
+        Department cs = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과").build());
+        StudentProfile profile = onboardedStudent("7702", cs, 2023);
+
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(null).appliedDivision(null)
+                .rawCourseCode(null).rawCourseName("미검수과목").credit(3)
+                .takenYear(2023).takenSemester(Semester.FIRST)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).isRetake(false).build());
+
+        mockMvc.perform(get("/api/v1/planner")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.completedTerms.length()").value(0));
+    }
+
+    @Test
+    void 계획한_학기는_시뮬레이션_트리로_반환되고_locked는_항상_false다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-7703").build());
+        Department iem = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("산업경영공학과").build());
+        Division majorRequired = divisionRepository.save(Division.builder()
+                .school(school).code("04").category(DivisionCategory.MAJOR_REQUIRED).build());
+        Course course1 = courseRepository.save(Course.builder()
+                .school(school).courseCode("IEM201").name("경영정보시스템").credit(3)
+                .offeringDepartment(iem).defaultDivision(majorRequired)
+                .recommendedYearLow(2).recommendedYearHigh(2)
+                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).build());
+        Course course2 = courseRepository.save(Course.builder()
+                .school(school).courseCode("IEM202").name("품질경영").credit(2)
+                .offeringDepartment(iem)
+                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).build());
+        StudentProfile profile = onboardedStudent("7703", iem, 2023);
+
+        PlannerSimulation simulation = plannerSimulationRepository.save(PlannerSimulation.builder()
+                .studentProfile(profile).name("내 플래너").build());
+        PlannerTerm term = plannerTermRepository.save(PlannerTerm.builder()
+                .plannerSimulation(simulation).yearLevel(2).semester(1).termOrder(3).build());
+        PlannerTermVersion version = plannerTermVersionRepository.save(PlannerTermVersion.builder()
+                .plannerTerm(term).versionNo(1).name("폴더 1").isSelected(true).build());
+        plannerVersionItemRepository.save(PlannerVersionItem.builder()
+                .plannerTermVersion(version).course(course1).plannedDivision(majorRequired)
+                .credit(3).positionOrder(0).build());
+        // course2는 defaultDivision이 없는 과목이라 plannedDivision도 null로 저장된 케이스
+        plannerVersionItemRepository.save(PlannerVersionItem.builder()
+                .plannerTermVersion(version).course(course2).plannedDivision(null)
+                .credit(2).positionOrder(1).build());
+
+        mockMvc.perform(get("/api/v1/planner")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.plannedTerms.length()").value(1))
+                .andExpect(jsonPath("$.data.plannedTerms[0].plannerTermId").value(term.getId()))
+                .andExpect(jsonPath("$.data.plannedTerms[0].locked").value(false))
+                .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].isSelected").value(true))
+                .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].totalCredit").value(5))
+                .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].courses.length()").value(2))
+                .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].courses[0].courseName").value("경영정보시스템"))
+                .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].courses[0].divisionName").value("전공필수"))
+                .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].courses[1].courseId").value(course2.getId()))
+                .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].courses[1].divisionCategory").doesNotExist());
+    }
+
+    @Test
+    void 시뮬레이션을_한번도_저장한적_없으면_plannedTerms는_빈배열이다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-7704").build());
+        Department cs = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과").build());
+        StudentProfile profile = onboardedStudent("7704", cs, 2023);
+
+        mockMvc.perform(get("/api/v1/planner")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.completedTerms.length()").value(0))
+                .andExpect(jsonPath("$.data.plannedTerms.length()").value(0));
+    }
+
+    @Test
+    void 프로필이_없으면_404_USER_003를_반환한다() throws Exception {
+        Member member = memberRepository.save(Member.builder()
+                .nickname("온보딩안함").oauthProvider(OauthProvider.KAKAO).oauthId("7705").email(null).build());
+
+        mockMvc.perform(get("/api/v1/planner")
+                        .with(authentication(authenticationOf(member.getId()))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("USER_003"));
+    }
+
+    @Test
+    void 인증_헤더가_없으면_401_CMN_005를_반환한다() throws Exception {
+        mockMvc.perform(get("/api/v1/planner"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("CMN_005"));
+    }
+}
