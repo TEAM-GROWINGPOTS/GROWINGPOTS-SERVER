@@ -13,6 +13,18 @@ public interface PlannerTermVersionRepository extends JpaRepository<PlannerTermV
     @Query("SELECT ptv.id FROM PlannerTermVersion ptv WHERE ptv.plannerTerm.id IN :termIds")
     List<Long> findIdsByPlannerTermIdIn(@Param("termIds") List<Long> termIds);
 
+    boolean existsByIdAndPlannerTermId(Long id, Long plannerTermId);
+
+    @Transactional
+    @Modifying
+    @Query("UPDATE PlannerTermVersion v SET v.isSelected = false WHERE v.plannerTerm.id = :termId")
+    void deselectAllByTermId(@Param("termId") Long termId);
+
+    @Transactional
+    @Modifying
+    @Query("UPDATE PlannerTermVersion v SET v.isSelected = true WHERE v.id = :versionId")
+    void selectById(@Param("versionId") Long versionId);
+
     @Transactional
     @Modifying
     @Query("DELETE FROM PlannerTermVersion ptv WHERE ptv.plannerTerm.id IN :termIds")
