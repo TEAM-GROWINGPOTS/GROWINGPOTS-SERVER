@@ -31,8 +31,6 @@ public class GraduationCourseResponse {
         private final String name;
         private final String departmentName;
         private final int credit;
-        // 이수: takenYear(String), 미이수: COURSE.recommendedYear("1-2" 등)
-        private final String grade;
         // 이수: takenSemester + "학기", 미이수: openedSemester 표시용 문자열(FIRST→"1학기" 등)
         private final String semester;
         private final boolean taken;

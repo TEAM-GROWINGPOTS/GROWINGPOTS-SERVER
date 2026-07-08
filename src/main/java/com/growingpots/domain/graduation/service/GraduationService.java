@@ -19,7 +19,6 @@ import com.growingpots.domain.transcript.repository.CertResultRepository;
 import com.growingpots.domain.university.entity.enums.DivisionCategory;
 import com.growingpots.domain.transcript.repository.GraduationAnalysisSummaryRepository;
 import com.growingpots.domain.transcript.repository.StudentCourseRepository;
-import com.growingpots.domain.university.entity.Course;
 import com.growingpots.domain.university.entity.Division;
 import com.growingpots.domain.university.entity.RequirementCourse;
 import com.growingpots.domain.university.entity.RequirementCourseItem;
@@ -211,7 +210,6 @@ public class GraduationService {
                 .name(sc.getRawCourseName())
                 .departmentName(departmentName)
                 .credit(sc.getCredit())
-                .grade(sc.getTakenYear() != null ? String.valueOf(sc.getTakenYear()) : null)
                 .semester(sc.getTakenSemester() != null ? semesterName(sc.getTakenSemester()) : null)
                 .taken(true)
                 .build();
@@ -226,20 +224,9 @@ public class GraduationService {
                 .name(course.getName())
                 .departmentName(departmentName)
                 .credit(course.getCredit())
-                .grade(recommendedYearDisplay(course))
                 .semester(openedSemesterName(course.getOpenedSemester()))
                 .taken(false)
                 .build();
-    }
-
-    // Course.recommendedYear(String)가 low/high 정수 범위로 바뀌어서, "1-2" 같은 기존 표시 형식을 재구성한다.
-    private String recommendedYearDisplay(Course course) {
-        Integer low = course.getRecommendedYearLow();
-        Integer high = course.getRecommendedYearHigh();
-        if (low == null || high == null) {
-            return null;
-        }
-        return low.equals(high) ? String.valueOf(low) : low + "-" + high;
     }
 
     private String semesterName(Semester semester) {
