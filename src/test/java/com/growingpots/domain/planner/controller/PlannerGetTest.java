@@ -165,6 +165,44 @@ class PlannerGetTest {
     }
 
     @Test
+    void 휴학으로_수강_공백이_있어도_실제로_들은_학기_순서대로_학년학기가_매겨진다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-7706").build());
+        Department cs = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과").build());
+        Division majorRequired = divisionRepository.save(Division.builder()
+                .school(school).code("04").category(DivisionCategory.MAJOR_REQUIRED).build());
+        StudentProfile profile = onboardedStudent("7706", cs, 2023);
+
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(null).appliedDivision(majorRequired)
+                .rawCourseCode(null).rawCourseName("자료구조").credit(3)
+                .takenYear(2023).takenSemester(Semester.FIRST)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).isRetake(false).build());
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(null).appliedDivision(majorRequired)
+                .rawCourseCode(null).rawCourseName("알고리즘").credit(3)
+                .takenYear(2023).takenSemester(Semester.SECOND)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).isRetake(false).build());
+        // 2024년은 휴학이라 STUDENT_COURSE 기록이 없음 - 달력으로 계산하면 3학년 1학기가 되지만
+        // 실제로는 세 번째로 들은 학기라 2학년 1학기여야 한다.
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(null).appliedDivision(majorRequired)
+                .rawCourseCode(null).rawCourseName("운영체제").credit(3)
+                .takenYear(2025).takenSemester(Semester.FIRST)
+                .status(CourseStatus.IN_PROGRESS).source(RecordSource.PDF).isRetake(false).build());
+
+        mockMvc.perform(get("/api/v1/planner")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.completedTerms.length()").value(3))
+                .andExpect(jsonPath("$.data.completedTerms[2].yearLevel").value(2))
+                .andExpect(jsonPath("$.data.completedTerms[2].semester").value(1))
+                .andExpect(jsonPath("$.data.completedTerms[2].name").value("2학년 1학기"))
+                .andExpect(jsonPath("$.data.completedTerms[2].status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.data.completedTerms[2].courses[0].courseName").value("운영체제"));
+    }
+
+    @Test
     void 계획한_학기는_시뮬레이션_트리로_반환되고_locked는_항상_false다() throws Exception {
         School school = schoolRepository.save(School.builder().name("경희대학교-7703").build());
         Department iem = departmentRepository.save(Department.builder()

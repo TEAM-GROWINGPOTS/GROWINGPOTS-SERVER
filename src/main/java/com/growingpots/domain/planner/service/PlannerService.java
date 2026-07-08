@@ -138,13 +138,16 @@ public class PlannerService {
                 .build();
     }
 
-    // (학년, 학기) 단위로 묶는다. 여름학기는 1학기, 겨울학기는 2학기 묶음에 합산한다.
+    // 실제로 과목을 들은 (수강년도, 수강학기) 묶음만 달력 순으로 줄 세워서 몇 번째 학기인지로
+    // 학년/학기를 매긴다. "입학년도 - 수강년도" 같은 달력 계산은 휴학/유급 등으로 공백이 생기면
+    // 틀어지지만(예: 1년 휴학하면 실제 3학년 2학기가 4학년 1학기로 밀림), 이 방식은 휴학한 학기엔
+    // 애초에 STUDENT_COURSE 기록 자체가 없어서 순서에서 자동으로 빠지므로 안전하다.
     private List<PlannerResponse.CompletedTerm> buildCompletedTerms(StudentProfile profile) {
         List<StudentCourse> courses = studentCourseRepository.findWithCourseAndDivisionByStudentProfile(profile);
 
-        Map<TermKey, List<StudentCourse>> grouped = new TreeMap<>();
+        Map<RawTermKey, List<StudentCourse>> grouped = new TreeMap<>();
         for (StudentCourse course : courses) {
-            TermKey key = toTermKey(profile.getAdmissionYear(), course);
+            RawTermKey key = toRawTermKey(course);
             // 수강년도/학기 정보가 없어 학기를 특정할 수 없는 과목은 플래너에 배치할 수 없어 제외한다.
             if (key == null) {
                 continue;
@@ -152,31 +155,36 @@ public class PlannerService {
             grouped.computeIfAbsent(key, k -> new ArrayList<>()).add(course);
         }
 
-        return grouped.entrySet().stream()
-                .map(entry -> toCompletedTerm(entry.getKey(), entry.getValue()))
-                .toList();
+        List<PlannerResponse.CompletedTerm> result = new ArrayList<>();
+        int sequence = 0;
+        for (List<StudentCourse> termCourses : grouped.values()) {
+            sequence++;
+            int yearLevel = (sequence - 1) / 2 + 1;
+            int semester = (sequence - 1) % 2 + 1;
+            result.add(toCompletedTerm(yearLevel, semester, termCourses));
+        }
+        return result;
     }
 
-    private TermKey toTermKey(int admissionYear, StudentCourse course) {
+    private RawTermKey toRawTermKey(StudentCourse course) {
         Integer takenYear = course.getTakenYear();
         Semester takenSemester = course.getTakenSemester();
         if (takenYear == null || takenSemester == null) {
             return null;
         }
-        int yearLevel = takenYear - admissionYear + 1;
-        int semester = (takenSemester == Semester.FIRST || takenSemester == Semester.SUMMER) ? 1 : 2;
-        return new TermKey(yearLevel, semester);
+        int semesterBucket = (takenSemester == Semester.FIRST || takenSemester == Semester.SUMMER) ? 1 : 2;
+        return new RawTermKey(takenYear, semesterBucket);
     }
 
-    private PlannerResponse.CompletedTerm toCompletedTerm(TermKey key, List<StudentCourse> courses) {
+    private PlannerResponse.CompletedTerm toCompletedTerm(int yearLevel, int semester, List<StudentCourse> courses) {
         boolean inProgress = courses.stream().anyMatch(c -> c.getStatus() == CourseStatus.IN_PROGRESS);
         int totalCredit = courses.stream().mapToInt(StudentCourse::getCredit).sum();
 
         return PlannerResponse.CompletedTerm.builder()
-                .yearLevel(key.yearLevel())
-                .semester(key.semester())
-                .plannerTermVersionId(key.syntheticVersionId())
-                .name(key.yearLevel() + "학년 " + key.semester() + "학기")
+                .yearLevel(yearLevel)
+                .semester(semester)
+                .plannerTermVersionId(yearLevel * 10L + semester)
+                .name(yearLevel + "학년 " + semester + "학기")
                 .status(inProgress ? "IN_PROGRESS" : "COMPLETED")
                 .totalCredit(totalCredit)
                 .courses(courses.stream().map(this::toCompletedCourse).toList())
@@ -208,15 +216,12 @@ public class PlannerService {
         return course.getOfferingDepartment().getName();
     }
 
-    private record TermKey(int yearLevel, int semester) implements Comparable<TermKey> {
-        long syntheticVersionId() {
-            return yearLevel * 10L + semester;
-        }
-
+    // 달력 기준 수강년도/학기 묶음. 학년/학기 표시값이 아니라 정렬 순서를 정하기 위한 원시 키다.
+    private record RawTermKey(int takenYear, int semesterBucket) implements Comparable<RawTermKey> {
         @Override
-        public int compareTo(TermKey other) {
-            int byYear = Integer.compare(yearLevel, other.yearLevel);
-            return byYear != 0 ? byYear : Integer.compare(semester, other.semester);
+        public int compareTo(RawTermKey other) {
+            int byYear = Integer.compare(takenYear, other.takenYear);
+            return byYear != 0 ? byYear : Integer.compare(semesterBucket, other.semesterBucket);
         }
     }
 
