@@ -40,4 +40,12 @@ public interface StudentCourseRepository extends JpaRepository<StudentCourse, Lo
             + "WHERE sc.studentProfile = :studentProfile AND sc.status = :status AND sc.course IS NOT NULL")
     List<Long> findCourseIdsByStudentProfileAndStatus(
             @Param("studentProfile") StudentProfile studentProfile, @Param("status") CourseStatus status);
+
+    @Query("SELECT sc.course.id FROM StudentCourse sc "
+            + "WHERE sc.studentProfile = :studentProfile "
+            + "AND sc.status IN :statuses "
+            + "AND sc.course IS NOT NULL")
+    List<Long> findCourseIdsByStudentProfileAndStatusIn(
+            @Param("studentProfile") StudentProfile studentProfile,
+            @Param("statuses") List<CourseStatus> statuses);
 }
