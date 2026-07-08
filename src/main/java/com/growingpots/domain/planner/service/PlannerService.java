@@ -438,7 +438,12 @@ public class PlannerService {
         return new SelectVersionResponse(plannerTermId, versionId);
     }
 
-    // TODO(#GET-planner): GET /planner 구현 시 실제 locked 판정 로직으로 교체 필요
+    // plannedTerms(PLANNER_TERM)는 정상 흐름에서 항상 미래 학기만 존재한다 — 이미 지난/진행중인
+    // 학기는 STUDENT_COURSE 기반 GET /planner의 completedTerms로 빠지고 PLANNER_TERM으로 안
+    // 남는다(GET /planner 구현 완료, PlannerService.getPlanner 참고). 그래서 원칙적으론 "잠글"
+    // 대상 자체가 없어 false 고정이 맞다. 다만 저장 API가 과거 학기 저장을 막지 않아 예외적으로
+    // 그런 PlannerTerm이 남을 수 있는데, 필요해지면 그때 StudentProfile.currentGrade/currentTerm과
+    // 비교해서 판정하면 된다.
     private boolean isTermLocked(PlannerTerm term) {
         return false;
     }
