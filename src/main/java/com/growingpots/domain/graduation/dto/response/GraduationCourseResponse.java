@@ -96,8 +96,11 @@ public class GraduationCourseResponse {
         private final boolean taken;
         // Lombok이 boolean isEnglish/isSw에 대해 isEnglish()/isSw() 게터를 만드는데, Jackson은
         // "is" 접두사를 벗겨 "english"/"sw"로 직렬화해버린다. 게터에 @JsonProperty를 얹어 이름 고정.
+        @Schema(description = "영어 강의 여부")
         @Getter(onMethod_ = @__(@JsonProperty("isEnglish")))
         private final boolean isEnglish;
+
+        @Schema(description = "SW 인증 강의 여부")
         @Getter(onMethod_ = @__(@JsonProperty("isSw")))
         private final boolean isSw;
     }
