@@ -159,18 +159,49 @@ public class GraduationResponse {
         private final GraduationRequiredSummary graduationRequired;
     }
 
-    @Schema(description = "학과 독립 졸업요건 요약 (이수구분 무관, 예: 스포츠의학과 졸업필수)")
+    @Schema(description = "학과 독립 졸업요건 요약 (이수구분 무관, 예: 스포츠의학과 졸업필수). "
+            + "PRIMARY/MULTI 탭이면 항상 채워짐 — hasGraduationRequired로 해당 학과에 요건 자체가 "
+            + "있는지 판단한다(false면 나머지 필드는 기본값이라 탭을 숨기면 됨).")
     @Getter
     @Builder
     public static class GraduationRequiredSummary {
 
+        @Schema(description = "이 학과에 졸업필수 요건 자체가 있는지 여부 (예: 스포츠의학과만 true). "
+                + "FE는 이 값으로 졸업필수 탭 노출 여부를 판단하면 된다.")
+        private final boolean hasGraduationRequired;
+
         @Schema(description = "요건 충족 여부")
         private final boolean satisfied;
 
-        @Schema(description = "연결 과목 중 이수(COMPLETED)한 학점 합계")
+        @Schema(description = "연결 과목 중 이수(COMPLETED)한 학점 합계. source=PLANNED면 계획 과목 학점도 합산")
         private final int totalCredit;
 
-        @Schema(description = "미충족 학점 기준 하위조건 안내 문구 목록 (예: '[졸업필수] 2/4학점 이수완료'). 과목수 기준 조건은 미포함")
+        @Schema(description = "미충족 학점 기준 하위조건 안내 문구 목록 (예: '[졸업필수] 2/4학점 이수완료'). "
+                + "과목수 기준 조건은 미포함 — 하위 요건별 수치는 items를 사용할 것")
         private final List<String> unmetDescriptions;
+
+        @Schema(description = "하위 요건별(예: 전문실기, 맨손체조) 진행 현황. 플래너·노드뷰 화면에서 사용")
+        private final List<RequirementProgress> items;
+    }
+
+    @Schema(description = "졸업필수 하위 요건 하나의 진행 현황 (예: 전문실기 2/2과목)")
+    @Getter
+    @Builder
+    public static class RequirementProgress {
+
+        @Schema(description = "하위 요건 이름", example = "전문실기")
+        private final String name;
+
+        @Schema(description = "현재 이수량. source=PLANNED면 계획 과목 포함")
+        private final int current;
+
+        @Schema(description = "요구량")
+        private final int required;
+
+        @Schema(description = "단위", allowableValues = {"CREDITS", "COURSES"})
+        private final String unit;
+
+        @Schema(description = "이 하위 요건 충족 여부")
+        private final boolean satisfied;
     }
 }

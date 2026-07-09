@@ -5,6 +5,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.growingpots.domain.planner.entity.PlannerSimulation;
+import com.growingpots.domain.planner.entity.PlannerTerm;
+import com.growingpots.domain.planner.entity.PlannerTermVersion;
+import com.growingpots.domain.planner.entity.PlannerVersionItem;
+import com.growingpots.domain.planner.repository.PlannerSimulationRepository;
+import com.growingpots.domain.planner.repository.PlannerTermRepository;
+import com.growingpots.domain.planner.repository.PlannerTermVersionRepository;
+import com.growingpots.domain.planner.repository.PlannerVersionItemRepository;
 import com.growingpots.domain.transcript.entity.GraduationAnalysisSummary;
 import com.growingpots.domain.transcript.entity.StudentCourse;
 import com.growingpots.domain.transcript.entity.enums.CourseStatus;
@@ -80,12 +88,24 @@ class GraduationRequiredTest {
     @Autowired
     private StudentCourseRepository studentCourseRepository;
 
+    @Autowired
+    private PlannerSimulationRepository plannerSimulationRepository;
+
+    @Autowired
+    private PlannerTermRepository plannerTermRepository;
+
+    @Autowired
+    private PlannerTermVersionRepository plannerTermVersionRepository;
+
+    @Autowired
+    private PlannerVersionItemRepository plannerVersionItemRepository;
+
     private Authentication authenticationOf(Long memberId) {
         return new UsernamePasswordAuthenticationToken(memberId.toString(), null, Collections.emptyList());
     }
 
     // 스포츠의학과 학생 하나를 만들고, 전문실기1~6(2학점씩) + 맨손체조(1학점) 요건과 과목을 세팅한다.
-    // 요건: "전문실기 4학점 이상"(minCredit=4), "맨손체조"(minCount=1)
+    // 요건: "전문실기 2과목 이상"(minCount=2), "맨손체조"(minCount=1)
     private StudentProfile setUpSportsScienceStudent(String oauthId) {
         School school = schoolRepository.save(School.builder().name("경희대학교-" + oauthId).build());
         Department department = departmentRepository.save(Department.builder()
@@ -99,8 +119,8 @@ class GraduationRequiredTest {
         graduationAnalysisSummaryRepository.save(GraduationAnalysisSummary.builder().studentMajor(major).build());
 
         RequirementCourse specialty = requirementCourseRepository.save(RequirementCourse.builder()
-                .department(department).division(null).name("졸업필수(전문실기 2과목만 인정)")
-                .baseYear(2019).minCredit(4).minCount(0).build());
+                .department(department).division(null).name("전문실기")
+                .baseYear(2019).minCredit(0).minCount(2).build());
         RequirementCourse gymnastics = requirementCourseRepository.save(RequirementCourse.builder()
                 .department(department).division(null).name("맨손체조")
                 .baseYear(2019).minCredit(0).minCount(1).build());
@@ -155,8 +175,15 @@ class GraduationRequiredTest {
                         .with(authentication(authenticationOf(profile.getMember().getId()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.graduatable").value(true))
+                .andExpect(jsonPath("$.data.graduationRequired.hasGraduationRequired").value(true))
                 .andExpect(jsonPath("$.data.graduationRequired.satisfied").value(true))
-                .andExpect(jsonPath("$.data.graduationRequired.totalCredit").value(5));
+                .andExpect(jsonPath("$.data.graduationRequired.totalCredit").value(5))
+                .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='전문실기')].current").value(2))
+                .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='전문실기')].required").value(2))
+                .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='전문실기')].unit").value("COURSES"))
+                .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='전문실기')].satisfied").value(true))
+                .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='맨손체조')].current").value(1))
+                .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='맨손체조')].required").value(1));
     }
 
     @Test
@@ -169,9 +196,9 @@ class GraduationRequiredTest {
                         .with(authentication(authenticationOf(profile.getMember().getId()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.majors[0].satisfied").value(false))
-                .andExpect(jsonPath("$.data.majors[0].unmetDescriptions.length()").value(1))
-                .andExpect(jsonPath("$.data.majors[0].unmetDescriptions[0]")
-                        .value("[졸업필수(전문실기 2과목만 인정)] 2/4학점 이수완료"))
+                // 전문실기가 minCount 기준으로 바뀌면서 과목수 기준 조건이 되어 unmetDescriptions엔
+                // 안 담긴다(과목 카드로만 표시) — 이하 courses 검증으로 충분히 확인됨.
+                .andExpect(jsonPath("$.data.majors[0].unmetDescriptions.length()").value(0))
                 .andExpect(jsonPath("$.data.majors[0].courses[?(@.name=='전문실기1')].taken").value(true))
                 .andExpect(jsonPath("$.data.majors[0].courses[?(@.name=='전문실기2')].taken").value(false))
                 .andExpect(jsonPath("$.data.majors[0].courses[?(@.name=='맨손체조')].taken").value(false));
@@ -181,13 +208,19 @@ class GraduationRequiredTest {
                         .with(authentication(authenticationOf(profile.getMember().getId()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.graduatable").value(false))
+                .andExpect(jsonPath("$.data.graduationRequired.hasGraduationRequired").value(true))
                 .andExpect(jsonPath("$.data.graduationRequired.satisfied").value(false))
                 .andExpect(jsonPath("$.data.graduationRequired.totalCredit").value(2))
-                .andExpect(jsonPath("$.data.graduationRequired.unmetDescriptions.length()").value(1));
+                .andExpect(jsonPath("$.data.graduationRequired.unmetDescriptions.length()").value(0))
+                .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='전문실기')].current").value(1))
+                .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='전문실기')].required").value(2))
+                .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='전문실기')].satisfied").value(false))
+                .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='맨손체조')].current").value(0))
+                .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='맨손체조')].required").value(1));
     }
 
-    // 학점 기준 조건(전문실기)은 만족했지만 과목수 기준 조건(맨손체조)만 미충족인 경우.
-    // unmetDescriptions는 학점 조건만 담아서 비어있어도 current(만족한 조건 수)는 그대로
+    // 전문실기(과목수 기준)는 만족했지만 맨손체조(과목수 기준)만 미충족인 경우.
+    // 둘 다 과목수 기준이라 unmetDescriptions는 항상 비어있고, current(만족한 조건 수)는 그대로
     // 반영돼 satisfied=false와 모순되지 않아야 한다(1/2, unmetDescriptions는 빈 리스트).
     @Test
     void 전문실기는_만족하고_맨손체조만_미이수면_current_required가_만족여부와_모순되지_않는다() throws Exception {
@@ -239,6 +272,7 @@ class GraduationRequiredTest {
                         .with(authentication(authenticationOf(profile.getMember().getId()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.graduationRequired").exists())
+                .andExpect(jsonPath("$.data.graduationRequired.hasGraduationRequired").value(true))
                 .andExpect(jsonPath("$.data.graduationRequired.satisfied").value(false))
                 .andExpect(jsonPath("$.data.graduatable").value(false));
     }
@@ -268,6 +302,8 @@ class GraduationRequiredTest {
                 .andExpect(status().is5xxServerError());
     }
 
+    // graduationRequired는 이제 PRIMARY/MULTI 탭에서 요건이 없어도 항상 채워지고, FE는
+    // hasGraduationRequired 플래그로 탭 노출 여부를 판단한다(null 체크 대신).
     @Test
     void 졸업필수_요건이_없는_학과는_해당_섹션이_비어있다() throws Exception {
         School school = schoolRepository.save(School.builder().name("경희대학교-9203").build());
@@ -292,6 +328,45 @@ class GraduationRequiredTest {
                         .param("majorType", "PRIMARY")
                         .with(authentication(authenticationOf(profile.getMember().getId()))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.graduationRequired").doesNotExist());
+                .andExpect(jsonPath("$.data.graduationRequired").exists())
+                .andExpect(jsonPath("$.data.graduationRequired.hasGraduationRequired").value(false));
+    }
+
+    // 전문실기 1과목만 완료하고 나머지 1과목을 플래너(선택된 버전)에 담아둔 경우,
+    // source=PLANNED 조회 시 그 계획 과목까지 반영해서 전문실기가 충족돼야 한다.
+    @Test
+    void PLANNED_모드에서는_플래너에_담은_전문실기_과목도_반영된다() throws Exception {
+        StudentProfile profile = setUpSportsScienceStudent("9207");
+        completeCourse(profile, "CPE201", 2);
+
+        Course cpe202 = courseRepository.findBySchool(profile.getSchool()).stream()
+                .filter(c -> "CPE202".equals(c.getCourseCode())).findFirst().orElseThrow();
+
+        PlannerSimulation simulation = plannerSimulationRepository.save(PlannerSimulation.builder()
+                .studentProfile(profile).name("내 플래너").build());
+        PlannerTerm term = plannerTermRepository.save(PlannerTerm.builder()
+                .plannerSimulation(simulation).yearLevel(2).semester(1).termOrder(3).build());
+        PlannerTermVersion version = plannerTermVersionRepository.save(PlannerTermVersion.builder()
+                .plannerTerm(term).versionNo(1).name("폴더 1").isSelected(true).build());
+        plannerVersionItemRepository.save(PlannerVersionItem.builder()
+                .plannerTermVersion(version).course(cpe202).plannedDivision(null)
+                .credit(2).positionOrder(0).build());
+
+        // COMPLETED면 계획 과목이 반영되지 않아 여전히 미충족
+        mockMvc.perform(get("/api/v1/students/me/graduation")
+                        .param("majorType", "PRIMARY").param("source", "COMPLETED")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.graduationRequired.satisfied").value(false))
+                .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='전문실기')].current").value(1));
+
+        // PLANNED면 계획 과목(CPE202)까지 더해져 2/2로 충족
+        mockMvc.perform(get("/api/v1/students/me/graduation")
+                        .param("majorType", "PRIMARY").param("source", "PLANNED")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='전문실기')].current").value(2))
+                .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='전문실기')].satisfied").value(true))
+                .andExpect(jsonPath("$.data.graduationRequired.totalCredit").value(4));
     }
 }
