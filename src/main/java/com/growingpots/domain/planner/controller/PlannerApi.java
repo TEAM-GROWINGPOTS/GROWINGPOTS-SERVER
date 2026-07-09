@@ -1,6 +1,9 @@
 package com.growingpots.domain.planner.controller;
 
 import com.growingpots.domain.planner.dto.response.PlannerResponse;
+import com.growingpots.domain.planner.dto.response.PlannerSaveResponse;
+import com.growingpots.domain.planner.dto.response.PrerequisiteCheckResponse;
+import com.growingpots.domain.planner.dto.response.SelectVersionResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
@@ -162,7 +165,46 @@ public @interface PlannerApi {
                     + "1학기 개설 과목은 1학기 term에만, 2학기 개설 과목은 2학기 term에만 추가할 수 있다."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "저장 성공 (PLAN_200_1)"),
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "저장 성공 (PLAN_200_1)",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = PlannerSaveResponse.class),
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "success": true,
+                                      "code": "PLAN_200_1",
+                                      "message": "플래너를 저장했습니다.",
+                                      "data": {
+                                        "plannerSimulationId": 1001,
+                                        "terms": [
+                                          {
+                                            "plannerTermId": 3001,
+                                            "yearLevel": 2,
+                                            "semester": 1,
+                                            "versions": [
+                                              {
+                                                "plannerTermVersionId": 4001,
+                                                "versionNo": 1,
+                                                "isSelected": true,
+                                                "items": [
+                                                  { "plannerVersionItemId": 5001, "courseId": 78 }
+                                                ]
+                                              },
+                                              {
+                                                "plannerTermVersionId": 4002,
+                                                "versionNo": 2,
+                                                "isSelected": false,
+                                                "items": []
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    }
+                                    """)
+                    )),
             @ApiResponse(responseCode = "400", description = "데이터 정합성 오류 (PLAN_004)"),
             @ApiResponse(responseCode = "401", description = "인증 실패 (CMN_005)"),
             @ApiResponse(responseCode = "403", description = "플래너 접근 권한 없음 (PLAN_003)"),
@@ -181,7 +223,43 @@ public @interface PlannerApi {
                     + "선수과목이 없거나 모두 이수한 과목은 결과에 포함되지 않는다."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "검사 성공 (PLAN_200_2)"),
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "검사 성공 (PLAN_200_2)",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = PrerequisiteCheckResponse.class),
+                            examples = {
+                                    @ExampleObject(name = "미이수 선수과목 있음", value = """
+                                            {
+                                              "success": true,
+                                              "code": "PLAN_200_2",
+                                              "message": "선수과목 검사 결과입니다.",
+                                              "data": {
+                                                "results": [
+                                                  {
+                                                    "courseId": 78,
+                                                    "courseName": "데이터베이스",
+                                                    "missingPrerequisites": [
+                                                      { "courseId": 45, "courseName": "자료구조", "type": "REQUIRED" }
+                                                    ]
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                            """),
+                                    @ExampleObject(name = "모두 이수 완료 (선수과목 없음)", value = """
+                                            {
+                                              "success": true,
+                                              "code": "PLAN_200_2",
+                                              "message": "선수과목 검사 결과입니다.",
+                                              "data": {
+                                                "results": []
+                                              }
+                                            }
+                                            """)
+                            }
+                    )),
             @ApiResponse(responseCode = "400", description = "요청 형식 오류 (CMN_002)"),
             @ApiResponse(responseCode = "401", description = "인증 실패 (CMN_005)"),
             @ApiResponse(responseCode = "404", description = "학적 정보 없음 (USER_003)")
@@ -199,7 +277,24 @@ public @interface PlannerApi {
                     + "다른 학기에 속한 versionId를 지정하면 404를 반환한다."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "버전 변경 성공 (PLAN_200_4)"),
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "버전 변경 성공 (PLAN_200_4)",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = SelectVersionResponse.class),
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "success": true,
+                                      "code": "PLAN_200_4",
+                                      "message": "선택 버전이 변경되었습니다.",
+                                      "data": {
+                                        "plannerTermId": 3001,
+                                        "selectedVersionId": 4002
+                                      }
+                                    }
+                                    """)
+                    )),
             @ApiResponse(responseCode = "400", description = "요청 형식 오류 (CMN_002) / 이수 완료 학기 (PLAN_006)"),
             @ApiResponse(responseCode = "401", description = "인증 실패 (CMN_005)"),
             @ApiResponse(responseCode = "404", description = "학적 정보 없음 (USER_003) / 학기·버전 없음 또는 소유 아님 (PLAN_005)")

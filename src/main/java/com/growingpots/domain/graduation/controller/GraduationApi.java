@@ -81,8 +81,8 @@ public @interface GraduationApi {
                                               { "code": "MAJOR_BASIC",    "name": "전공 기초", "current": 18, "required": 18, "unit": "CREDITS", "satisfied": true,  "chartTarget": true  },
                                               { "code": "MAJOR_REQUIRED", "name": "전공 필수", "current": 12, "required": 21, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
                                               { "code": "MAJOR_ELECTIVE", "name": "전공 선택", "current": 15, "required": 24, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
-                                              { "code": "ENGLISH_COURSE",  "name": "영어 강의",    "current": 2, "required": 3, "unit": "COURSES", "satisfied": false, "chartTarget": false },
-                                              { "code": "SW_CERT_COURSE",  "name": "SW 인증 강의", "current": 1, "required": 1, "unit": "COURSES", "satisfied": true,  "chartTarget": false }
+                                              { "code": "ENGLISH_COURSE",  "name": "영어 강의",    "current": 2, "required": 3, "unit": "COURSES", "satisfied": false, "chartTarget": true  },
+                                              { "code": "SW_CERT_COURSE",  "name": "SW 인증 강의", "current": 1, "required": 1, "unit": "CREDITS", "satisfied": true,  "chartTarget": true  }
                                             ],
                                             "graduationRequired": {
                                               "hasGraduationRequired": false,
@@ -99,15 +99,15 @@ public @interface GraduationApi {
                                               { "code": "REQUIRED_GE",    "name": "필수 교과",      "current": 6,  "required": 6,  "unit": "CREDITS", "satisfied": true,  "chartTarget": true  },
                                               { "code": "DISTRIBUTED_GE", "name": "배분 이수 교과", "current": 9,  "required": 12, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
                                               { "code": "FREE_GE",        "name": "자유 이수 교과", "current": 6,  "required": 6,  "unit": "CREDITS", "satisfied": true,  "chartTarget": true  },
-                                              { "code": "ENGLISH_COURSE",  "name": "영어 강의",    "current": 2, "required": 3, "unit": "COURSES", "satisfied": false, "chartTarget": false },
-                                              { "code": "SW_CERT_COURSE",  "name": "SW 인증 강의", "current": 1, "required": 1, "unit": "COURSES", "satisfied": true,  "chartTarget": false }
+                                              { "code": "ENGLISH_COURSE",  "name": "영어 강의",    "current": 2, "required": 3, "unit": "COURSES", "satisfied": false, "chartTarget": true  },
+                                              { "code": "SW_CERT_COURSE",  "name": "SW 인증 강의", "current": 1, "required": 1, "unit": "CREDITS", "satisfied": true,  "chartTarget": true  }
                                             ],
                                             "graduationRequired": null
                                           },
                                           "others": {
                                             "majorName": null,
                                             "conditions": [
-                                              { "code": "GENERAL_ELECTIVE", "name": "일반 선택", "current": 21, "required": null, "unit": "CREDITS", "satisfied": true, "chartTarget": false }
+                                              { "code": "GENERAL_ELECTIVE", "name": "기타", "current": 21, "required": null, "unit": "CREDITS", "satisfied": true, "chartTarget": false }
                                             ],
                                             "graduationRequired": null
                                           }
@@ -218,6 +218,7 @@ public @interface GraduationApi {
                                             "satisfied": false,
                                             "hasRequiredList": true,
                                             "unmetDescriptions": [],
+                                            "areaRequirement": null,
                                             "courses": [
                                               {
                                                 "studentCourseId": 101,
@@ -227,7 +228,8 @@ public @interface GraduationApi {
                                                 "semester": "1학기",
                                                 "taken": true,
                                                 "isEnglish": false,
-                                                "isSw": false
+                                                "isSw": false,
+                                                "area": null
                                               },
                                               {
                                                 "studentCourseId": null,
@@ -237,7 +239,8 @@ public @interface GraduationApi {
                                                 "semester": "1학기",
                                                 "taken": false,
                                                 "isEnglish": false,
-                                                "isSw": false
+                                                "isSw": false,
+                                                "area": null
                                               }
                                             ]
                                           }

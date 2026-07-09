@@ -21,7 +21,7 @@ public class GraduationResponse {
     @Schema(description = "조건 목록. PRIMARY/MULTI/GE/OTHERS 탭 조회 시 채워짐. ALL 탭이면 null")
     private final List<ConditionInfo> conditions;
 
-    @Schema(description = "학과 독립 졸업요건 요약. PRIMARY/MULTI 탭이고 해당 학과에 졸업필수 요건이 있을 때만 채워짐. 그 외 null")
+    @Schema(description = "학과 독립 졸업요건 요약. PRIMARY/MULTI 탭이면 항상 채워짐 (hasGraduationRequired=false이면 해당 학과에 요건 없음). GE/OTHERS 탭·ALL 탭(top-level)은 null", nullable = true)
     private final GraduationRequiredSummary graduationRequired;
 
     @Schema(description = "4섹션 분리 응답. ALL 탭 조회 시 채워짐. 그 외 null")
@@ -155,7 +155,7 @@ public class GraduationResponse {
         @Schema(description = "해당 섹션의 조건 목록")
         private final List<ConditionInfo> conditions;
 
-        @Schema(description = "학과 독립 졸업요건 요약. primary/multi 섹션이고 해당 학과에 졸업필수 요건이 있을 때만 채워짐. 그 외 null", nullable = true)
+        @Schema(description = "학과 독립 졸업요건 요약. primary/multi 섹션이면 항상 채워짐 (hasGraduationRequired=false이면 해당 학과에 요건 없음). ge/others 섹션은 null", nullable = true)
         private final GraduationRequiredSummary graduationRequired;
     }
 
