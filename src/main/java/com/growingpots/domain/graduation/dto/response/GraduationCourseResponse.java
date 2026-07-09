@@ -1,7 +1,9 @@
 package com.growingpots.domain.graduation.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -48,7 +50,7 @@ public class GraduationCourseResponse {
                 nullable = true)
         private final Integer required;
 
-        @Schema(description = "요건 충족 여부")
+        @Schema(description = "요건 충족 여부. DISTRIBUTED_GE는 학점 충족 AND 영역 m-of-n 충족 모두 필요")
         private final boolean satisfied;
 
         @Schema(description = "필수 과목 목록 존재 여부. "
@@ -61,10 +63,60 @@ public class GraduationCourseResponse {
         @Builder.Default
         private final List<String> unmetDescriptions = List.of();
 
+        @Schema(description = "배분이수 영역 달성 현황. "
+                + "DISTRIBUTED_GE 조회 시 24학번 이상이면 채워짐, 19~23학번이거나 다른 이수구분이면 null",
+                nullable = true)
+        private final AreaRequirement areaRequirement;
+
         @Schema(description = "과목 목록. "
                 + "이수과목(taken=true) + 미이수 필수과목(taken=false, hasRequiredList=true일 때). "
                 + "이름순 정렬.")
         private final List<CourseInfo> courses;
+    }
+
+    @Schema(description = "배분이수 영역 달성 현황 (24학번 이상 전용)")
+    @Getter
+    @Builder
+    public static class AreaRequirement {
+
+        @Schema(description = "필요 이수 영역 수 (m). 24학번 이상 기준 3", example = "3")
+        private final int requiredCount;
+
+        @Schema(description = "완료된 영역 수 (1과목 이상 이수한 영역)", example = "2")
+        private final int completedCount;
+
+        @Schema(description = "completedCount >= requiredCount")
+        private final boolean satisfied;
+
+        @Schema(description = "전체 영역 목록 (5개). 각 영역의 이수 완료 여부 포함")
+        private final List<AreaStatus> areas;
+
+        @Schema(description = "개별 영역 완료 현황")
+        @Getter
+        @Builder
+        public static class AreaStatus {
+
+            @Schema(description = "영역 코드", example = "AREA_1")
+            private final String code;
+
+            @Schema(description = "영역명", example = "생명, 우주, 인간")
+            private final String name;
+
+            @Schema(description = "해당 영역 완료 여부 (1과목 이상 이수 시 true)")
+            private final boolean completed;
+        }
+    }
+
+    @Schema(description = "교양 영역 기본 정보 (과목카드 영역 칩 표시용)")
+    @Getter
+    @AllArgsConstructor
+    public static class AreaInfo {
+
+        @Schema(description = "영역 코드", example = "AREA_1")
+        private final String code;
+
+        @Schema(description = "영역명", example = "생명, 우주, 인간")
+        private final String name;
     }
 
     @Schema(description = "개별 과목 정보")
@@ -93,5 +145,20 @@ public class GraduationCourseResponse {
 
         @Schema(description = "이수 여부. true: 이수 완료, false: 미이수 필수과목")
         private final boolean taken;
+
+        // Lombok이 boolean isEnglish/isSw에 대해 isEnglish()/isSw() 게터를 만드는데, Jackson은
+        // "is" 접두사를 벗겨 "english"/"sw"로 직렬화해버린다. 게터에 @JsonProperty를 얹어 이름 고정.
+        @Schema(description = "영어 강의 여부")
+        @Getter(onMethod_ = @__(@JsonProperty("isEnglish")))
+        private final boolean isEnglish;
+
+        @Schema(description = "SW 인증 강의 여부")
+        @Getter(onMethod_ = @__(@JsonProperty("isSw")))
+        private final boolean isSw;
+
+        @Schema(description = "배분이수 영역 정보 (과목카드 영역 칩용). "
+                + "DISTRIBUTED_GE 과목이고 Course 매칭 및 영역 정보가 있을 때만 채워짐, 그 외 null",
+                nullable = true)
+        private final AreaInfo area;
     }
 }
