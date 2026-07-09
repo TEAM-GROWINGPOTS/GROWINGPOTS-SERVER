@@ -11,6 +11,7 @@ import com.growingpots.domain.planner.service.PlannerService;
 import com.growingpots.global.response.BaseResponse;
 import com.growingpots.global.response.success.SuccessCode;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.Parameter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -64,6 +65,7 @@ public class PlannerController {
     @PlannerApi.SelectVersion
     @PatchMapping("/terms/{plannerTermId}/selected-version")
     public ResponseEntity<BaseResponse<SelectVersionResponse>> selectVersion(
+            @Parameter(description = "선택 버전을 변경할 플래너 학기 PK")
             @PathVariable Long plannerTermId,
             @Valid @RequestBody SelectVersionRequest request,
             Authentication authentication

@@ -3,6 +3,7 @@ package com.growingpots.domain.transcript.controller;
 import com.growingpots.domain.transcript.service.TranscriptService;
 import com.growingpots.global.response.BaseResponse;
 import com.growingpots.global.response.success.SuccessCode;
+import io.swagger.v3.oas.annotations.Parameter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -24,6 +25,7 @@ public class TranscriptController {
     @TranscriptApi.UploadTranscript
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<BaseResponse<Void>> uploadTranscript(
+            @Parameter(description = "졸업사정관리표 PDF 파일 (최대 10MB)")
             @RequestParam("file") MultipartFile file,
             Authentication authentication
     ) {
