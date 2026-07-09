@@ -805,6 +805,8 @@ public class GraduationService {
                 .credit(sc.getCredit())
                 .semester(sc.getTakenSemester() != null ? semesterName(sc.getTakenSemester()) : null)
                 .taken(true)
+                .isEnglish(sc.getCourse() != null && sc.getCourse().isEnglish())
+                .isSw(sc.getCourse() != null && sc.getCourse().isSw())
                 .build();
     }
 
@@ -819,6 +821,8 @@ public class GraduationService {
                 .credit(course.getCredit())
                 .semester(openedSemesterName(course.getOpenedSemester()))
                 .taken(false)
+                .isEnglish(course.isEnglish())
+                .isSw(course.isSw())
                 .build();
     }
 
