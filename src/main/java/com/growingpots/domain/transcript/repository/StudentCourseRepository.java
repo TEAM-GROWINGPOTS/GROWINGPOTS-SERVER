@@ -95,4 +95,15 @@ public interface StudentCourseRepository extends JpaRepository<StudentCourse, Lo
     List<Long> findCourseIdsByStudentProfileAndStatusIn(
             @Param("studentProfile") StudentProfile studentProfile,
             @Param("statuses") List<CourseStatus> statuses);
+
+    // DISTRIBUTED_GE 과목 조회 시 course.geArea까지 JOIN FETCH (영역 판정용)
+    @Query("SELECT sc FROM StudentCourse sc "
+            + "LEFT JOIN FETCH sc.course c "
+            + "LEFT JOIN FETCH c.geArea "
+            + "LEFT JOIN FETCH c.offeringDepartment "
+            + "WHERE sc.studentProfile = :studentProfile "
+            + "AND sc.appliedDivision = :division")
+    List<StudentCourse> findByStudentProfileAndAppliedDivisionWithGeArea(
+            @Param("studentProfile") StudentProfile studentProfile,
+            @Param("division") Division division);
 }

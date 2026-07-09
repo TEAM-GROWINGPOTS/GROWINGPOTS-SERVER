@@ -1,6 +1,9 @@
 package com.growingpots.domain.graduation.service;
 
 import com.growingpots.domain.graduation.dto.response.GraduationCourseResponse;
+import com.growingpots.domain.graduation.dto.response.GraduationCourseResponse.AreaInfo;
+import com.growingpots.domain.graduation.dto.response.GraduationCourseResponse.AreaRequirement;
+import com.growingpots.domain.graduation.dto.response.GraduationCourseResponse.AreaRequirement.AreaStatus;
 import com.growingpots.domain.graduation.dto.response.GraduationCourseResponse.CourseInfo;
 import com.growingpots.domain.graduation.dto.response.GraduationCourseResponse.MajorCourses;
 import com.growingpots.domain.graduation.dto.response.GraduationResponse;
@@ -29,10 +32,12 @@ import com.growingpots.domain.university.entity.enums.DivisionCategory;
 import com.growingpots.domain.transcript.repository.GraduationAnalysisSummaryRepository;
 import com.growingpots.domain.transcript.repository.StudentCourseRepository;
 import com.growingpots.domain.university.entity.Division;
+import com.growingpots.domain.university.entity.GeArea;
 import com.growingpots.domain.university.entity.RequirementCourse;
 import com.growingpots.domain.university.entity.RequirementCourseItem;
 import com.growingpots.domain.university.entity.enums.OpenedSemester;
 import com.growingpots.domain.university.repository.DivisionRepository;
+import com.growingpots.domain.university.repository.GeAreaRepository;
 import com.growingpots.domain.university.repository.RequirementCourseItemRepository;
 import com.growingpots.domain.university.repository.RequirementCourseRepository;
 import com.growingpots.domain.user.entity.StudentMajor;
@@ -67,12 +72,18 @@ public class GraduationService {
     private final RequirementCourseRepository requirementCourseRepository;
     private final RequirementCourseItemRepository requirementCourseItemRepository;
     private final PlannerVersionItemRepository plannerVersionItemRepository;
+    private final GeAreaRepository geAreaRepository;
 
     private static final List<DivisionCategory> MAJOR_CATEGORIES = List.of(
             DivisionCategory.MAJOR_BASIC, DivisionCategory.MAJOR_REQUIRED, DivisionCategory.MAJOR_ELECTIVE);
     private static final List<DivisionCategory> GE_CATEGORIES = List.of(
             DivisionCategory.REQUIRED_GE, DivisionCategory.DISTRIBUTED_GE, DivisionCategory.FREE_GE);
     private static final List<DivisionCategory> OTHERS_CATEGORIES = List.of(DivisionCategory.GENERAL_ELECTIVE);
+
+    private static final int DISTRIBUTED_GE_AREA_YEAR_CUTOFF = 2024;
+    private static final int DISTRIBUTED_GE_REQUIRED_AREA_COUNT = 3;
+    private static final List<String> DISTRIBUTED_GE_AREA_CODES =
+            List.of("AREA_1", "AREA_2", "AREA_3", "AREA_4", "AREA_5");
 
     @Transactional(readOnly = true)
     public GraduationResponse getGraduation(Long memberId, MajorTypeFilter majorTypeFilter, GraduationSource source) {
@@ -128,26 +139,32 @@ public class GraduationService {
                 : buildAdjustedSummary(doubleSummary, allPlannedItems,
                         doubleMajorOpt.map(StudentMajor::getDepartment).orElse(null));
 
-        boolean graduatable = computeGraduatable(effectiveMainSummary, effectiveDoubleSummary, allCerts)
+        DistributedGeAreaResult geAreaResult = null;
+        if (profile.getAdmissionYear() >= DISTRIBUTED_GE_AREA_YEAR_CUTOFF) {
+            List<StudentCourse> distCourses = fetchDistributedGeCourses(profile);
+            geAreaResult = computeDistributedGeAreas(distCourses, allPlannedItems, profile);
+        }
+
+        boolean graduatable = computeGraduatable(effectiveMainSummary, effectiveDoubleSummary, allCerts, geAreaResult)
                 && mainJudgement.satisfied()
                 && (doubleJudgement == null || doubleJudgement.satisfied());
 
         return switch (majorTypeFilter) {
             case PRIMARY -> buildSingleTabResponse(profile, effectiveMainSummary, MajorTypeFilter.PRIMARY,
-                    mainMajor.getDepartment(), mainJudgement, graduatable, mainCerts, allPlannedItems);
+                    mainMajor.getDepartment(), mainJudgement, graduatable, mainCerts, allPlannedItems, null);
             case MULTI -> {
                 StudentMajor doubleMajor = doubleMajorOpt
                         .orElseThrow(() -> new BaseException(ErrorCode.DOUBLE_MAJOR_NOT_FOUND));
                 GraduationAnalysisSummary multiSummary = Optional.ofNullable(effectiveDoubleSummary)
                         .orElseThrow(() -> new BaseException(ErrorCode.REQUIREMENT_NOT_FOUND));
                 yield buildSingleTabResponse(profile, multiSummary, MajorTypeFilter.MULTI,
-                        doubleMajor.getDepartment(), doubleJudgement, graduatable, doubleCerts, allPlannedItems);
+                        doubleMajor.getDepartment(), doubleJudgement, graduatable, doubleCerts, allPlannedItems, null);
             }
             case GE, OTHERS -> buildSingleTabResponse(profile, effectiveMainSummary, majorTypeFilter,
-                    null, null, graduatable, mainCerts, allPlannedItems);
+                    null, null, graduatable, mainCerts, allPlannedItems, geAreaResult);
             case ALL -> buildAllTabResponse(profile, mainMajor, effectiveMainSummary, mainJudgement,
                     doubleMajorOpt.orElse(null), effectiveDoubleSummary, doubleJudgement,
-                    graduatable, mainCerts, allPlannedItems);
+                    graduatable, mainCerts, allPlannedItems, geAreaResult);
         };
     }
 
@@ -160,12 +177,13 @@ public class GraduationService {
             GraduationRequiredJudgement judgement,  // PRIMARY/MULTI만 값 있음, GE/OTHERS는 null
             boolean graduatable,
             List<CertResult> certs,
-            List<PlannerVersionItem> plannedItems
+            List<PlannerVersionItem> plannedItems,
+            DistributedGeAreaResult geAreaResult  // GE/OTHERS 탭만 전달, PRIMARY/MULTI는 null
     ) {
         return GraduationResponse.builder()
                 .summary(buildSummary(profile, summary))
                 .graduatable(graduatable)
-                .conditions(buildConditionsForTab(profile, summary, tab, department, plannedItems))
+                .conditions(buildConditionsForTab(profile, summary, tab, department, plannedItems, geAreaResult))
                 .graduationRequired(toGraduationRequiredSummary(judgement))
                 .sections(null)
                 .certs(toCertInfos(certs))
@@ -183,12 +201,13 @@ public class GraduationService {
             GraduationRequiredJudgement doubleJudgement,
             boolean graduatable,
             List<CertResult> certs,
-            List<PlannerVersionItem> plannedItems
+            List<PlannerVersionItem> plannedItems,
+            DistributedGeAreaResult geAreaResult
     ) {
         TabSection primarySection = TabSection.builder()
                 .majorName(mainMajor.getDepartment().getName())
                 .conditions(buildConditionsForTab(profile, mainSummary,
-                        MajorTypeFilter.PRIMARY, mainMajor.getDepartment(), plannedItems))
+                        MajorTypeFilter.PRIMARY, mainMajor.getDepartment(), plannedItems, null))
                 .graduationRequired(toGraduationRequiredSummary(mainJudgement))
                 .build();
 
@@ -197,17 +216,17 @@ public class GraduationService {
             multiSection = TabSection.builder()
                     .majorName(doubleMajor.getDepartment().getName())
                     .conditions(buildConditionsForTab(profile, doubleSummary,
-                            MajorTypeFilter.MULTI, doubleMajor.getDepartment(), plannedItems))
+                            MajorTypeFilter.MULTI, doubleMajor.getDepartment(), plannedItems, null))
                     .graduationRequired(toGraduationRequiredSummary(doubleJudgement))
                     .build();
         }
 
         TabSection geSection = TabSection.builder()
-                .conditions(buildConditionsForTab(profile, mainSummary, MajorTypeFilter.GE, null, plannedItems))
+                .conditions(buildConditionsForTab(profile, mainSummary, MajorTypeFilter.GE, null, plannedItems, geAreaResult))
                 .build();
 
         TabSection othersSection = TabSection.builder()
-                .conditions(buildConditionsForTab(profile, mainSummary, MajorTypeFilter.OTHERS, null, plannedItems))
+                .conditions(buildConditionsForTab(profile, mainSummary, MajorTypeFilter.OTHERS, null, plannedItems, null))
                 .build();
 
         return GraduationResponse.builder()
@@ -233,7 +252,8 @@ public class GraduationService {
             GraduationAnalysisSummary summary,
             MajorTypeFilter tab,
             Department department,
-            List<PlannerVersionItem> plannedItems
+            List<PlannerVersionItem> plannedItems,
+            DistributedGeAreaResult geAreaResult
     ) {
         List<GraduationConditionType> types = switch (tab) {
             case PRIMARY, MULTI -> List.of(
@@ -250,7 +270,11 @@ public class GraduationService {
 
         List<ConditionInfo> result = new ArrayList<>();
         for (GraduationConditionType type : types) {
-            result.add(toConditionInfoFromSnapshot(type, summary));
+            if (type == GraduationConditionType.DISTRIBUTED_GE) {
+                result.add(buildDistributedGeConditionInfo(summary, geAreaResult));
+            } else {
+                result.add(toConditionInfoFromSnapshot(type, summary));
+            }
         }
 
         // 영어/SW: 이수구분 기준으로 탭 배치.
@@ -368,6 +392,23 @@ public class GraduationService {
                 .build();
     }
 
+    private ConditionInfo buildDistributedGeConditionInfo(
+            GraduationAnalysisSummary summary, DistributedGeAreaResult geAreaResult) {
+        int current = summary.getDistributedGeCurrent();
+        Integer required = summary.getDistributedGeRequired();
+        boolean creditSatisfied = required == null || current >= required;
+        boolean satisfied = creditSatisfied && (geAreaResult == null || geAreaResult.satisfied());
+        return ConditionInfo.builder()
+                .code(GraduationConditionType.DISTRIBUTED_GE.name())
+                .name(GraduationConditionType.DISTRIBUTED_GE.getDisplayName())
+                .current(current)
+                .required(required)
+                .unit(GraduationConditionType.DISTRIBUTED_GE.getUnit())
+                .satisfied(satisfied)
+                .chartTarget(GraduationConditionType.DISTRIBUTED_GE.isChartTarget())
+                .build();
+    }
+
     // PLANNED 모드용: 스냅샷 기반 summary에 계획 과목의 학점 delta를 더해 새 in-memory summary를 반환한다.
     // majorDept: 전공 학점 귀속 판단 기준 (본전공 또는 복수전공). null이면 전공 delta는 0.
     // GPA는 미래 예측 불가이므로 원본 값 유지.
@@ -458,6 +499,25 @@ public class GraduationService {
                 .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
 
         List<StudentMajor> majors = studentMajorRepository.findWithDepartmentByStudentProfile(profile);
+
+        // ENGLISH_COURSE/SW_CERT_COURSE는 이수구분이 아닌 course 플래그 기반이라 majorType별 처리가 다르다.
+        // OTHERS: 졸업현황 OTHERS 섹션에 영어·SW 조건이 없으므로 빈 응답
+        // ALL: 탭·학과 구분 없이 전체 합산해서 단일 항목으로 반환
+        // PRIMARY/MULTI/GE: 기존 buildMajorCourses 경로가 이미 올바르게 처리
+        if (conditionType == GraduationConditionType.ENGLISH_COURSE
+                || conditionType == GraduationConditionType.SW_CERT_COURSE) {
+            if (majorTypeFilter == MajorTypeFilter.OTHERS) {
+                return GraduationCourseResponse.builder()
+                        .divisionCode(conditionType.name())
+                        .divisionName(conditionType.getDisplayName())
+                        .majors(List.of())
+                        .build();
+            }
+            if (majorTypeFilter == MajorTypeFilter.ALL) {
+                return buildMergedFlagCourseResponse(profile, majors, conditionType);
+            }
+        }
+
         List<StudentMajor> targetMajors = filterMajors(majors, majorTypeFilter);
 
         if (majorTypeFilter == MajorTypeFilter.MULTI && targetMajors.isEmpty()) {
@@ -472,6 +532,55 @@ public class GraduationService {
                 .divisionCode(conditionType.name())
                 .divisionName(conditionType.getDisplayName())
                 .majors(majorCoursesList)
+                .build();
+    }
+
+    // ENGLISH_COURSE/SW_CERT_COURSE + majorType=ALL 전용.
+    // 탭·학과 구분 없이 학생의 전체 영어/SW 강의를 하나로 합산해 단일 MajorCourses로 반환한다.
+    // required는 본전공 스냅샷 기준(영어/SW 요건은 학과 공통이므로 본전공 summary에서 읽는다).
+    // majorType=null: 특정 전공에 귀속되지 않는 전체 합산임을 명시.
+    private GraduationCourseResponse buildMergedFlagCourseResponse(
+            StudentProfile profile,
+            List<StudentMajor> majors,
+            GraduationConditionType conditionType
+    ) {
+        StudentMajor mainMajor = majors.stream()
+                .filter(m -> m.getMajorType() == MajorType.MAIN)
+                .findFirst()
+                .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
+        GraduationAnalysisSummary summary = requireSummary(mainMajor);
+
+        List<StudentCourse> takenCourses;
+        int current;
+        Integer required;
+        if (conditionType == GraduationConditionType.ENGLISH_COURSE) {
+            takenCourses = studentCourseRepository.findByStudentProfileAndCourseIsEnglish(profile);
+            current = takenCourses.size();
+            required = summary.getEnglishRequired();
+        } else {
+            takenCourses = studentCourseRepository.findByStudentProfileAndCourseIsSw(profile);
+            current = takenCourses.stream().mapToInt(StudentCourse::getCredit).sum();
+            required = summary.getSwCertRequired();
+        }
+        boolean satisfied = required == null || current >= required;
+
+        List<CourseInfo> courses = takenCourses.stream()
+                .map(this::toTakenCourseInfo)
+                .sorted(Comparator.comparing(CourseInfo::getName))
+                .toList();
+
+        return GraduationCourseResponse.builder()
+                .divisionCode(conditionType.name())
+                .divisionName(conditionType.getDisplayName())
+                .majors(List.of(MajorCourses.builder()
+                        .majorType(null)
+                        .departmentName(null)
+                        .current(current)
+                        .required(required)
+                        .satisfied(satisfied)
+                        .hasRequiredList(false)
+                        .courses(courses)
+                        .build()))
                 .build();
     }
 
@@ -500,7 +609,16 @@ public class GraduationService {
             required = conditionType.getRequiredExtractor() != null
                     ? conditionType.getRequiredExtractor().apply(summary) : null;
         }
+        DistributedGeAreaResult areaResult = null;
+        if (conditionType == GraduationConditionType.DISTRIBUTED_GE
+                && profile.getAdmissionYear() >= DISTRIBUTED_GE_AREA_YEAR_CUTOFF) {
+            areaResult = computeDistributedGeAreas(takenCourses, List.of(), profile);
+        }
+
         boolean satisfied = required == null || current >= required;
+        if (areaResult != null) {
+            satisfied = satisfied && areaResult.satisfied();
+        }
 
         int admissionYear = profile.getAdmissionYear();
         Optional<Division> divisionOpt = toDivisionCategory(conditionType)
@@ -523,7 +641,7 @@ public class GraduationService {
             if (sc.getCourse() != null) {
                 takenCourseIds.add(sc.getCourse().getId());
             }
-            courses.add(toTakenCourseInfo(sc));
+            courses.add(toTakenCourseInfo(sc, extractAreaInfo(sc, conditionType)));
         }
 
         // 미이수 과목: RequirementCourseItem 중 이수하지 않은 것. courseId 기준 중복 제거.
@@ -546,6 +664,7 @@ public class GraduationService {
                 .required(required)
                 .satisfied(satisfied)
                 .hasRequiredList(hasRequiredList)
+                .areaRequirement(areaResult != null ? toAreaRequirementDto(areaResult) : null)
                 .courses(courses)
                 .build();
     }
@@ -713,11 +832,64 @@ public class GraduationService {
             return studentCourseRepository
                     .findByStudentProfileAndCourseIsSwAndDivisionCategoryIn(profile, cats);
         }
+        if (conditionType == GraduationConditionType.DISTRIBUTED_GE) {
+            return fetchDistributedGeCourses(profile);
+        }
         return toDivisionCategory(conditionType)
                 .flatMap(cat -> divisionRepository.findBySchoolAndCategory(profile.getSchool(), cat))
                 .map(div -> studentCourseRepository.findByStudentProfileAndAppliedDivisionIn(profile, List.of(div)))
                 .orElse(List.of());
     }
+
+    private List<StudentCourse> fetchDistributedGeCourses(StudentProfile profile) {
+        return divisionRepository.findBySchoolAndCategory(profile.getSchool(), DivisionCategory.DISTRIBUTED_GE)
+                .map(div -> studentCourseRepository.findByStudentProfileAndAppliedDivisionWithGeArea(profile, div))
+                .orElse(List.of());
+    }
+
+    private DistributedGeAreaResult computeDistributedGeAreas(
+            List<StudentCourse> distributedGeCourses,
+            List<PlannerVersionItem> plannedItems,
+            StudentProfile profile
+    ) {
+        Set<String> coveredCodes = distributedGeCourses.stream()
+                .filter(sc -> sc.getCourse() != null && sc.getCourse().getGeArea() != null)
+                .map(sc -> sc.getCourse().getGeArea().getCode())
+                .collect(Collectors.toSet());
+        for (PlannerVersionItem item : plannedItems) {
+            if (item.getPlannedDivision() != null
+                    && item.getPlannedDivision().getCategory() == DivisionCategory.DISTRIBUTED_GE
+                    && item.getCourse().getGeArea() != null) {
+                coveredCodes.add(item.getCourse().getGeArea().getCode());
+            }
+        }
+        Map<String, String> areaNameMap = geAreaRepository.findBySchool(profile.getSchool()).stream()
+                .collect(Collectors.toMap(GeArea::getCode, GeArea::getName));
+        List<AreaStatus> areas = DISTRIBUTED_GE_AREA_CODES.stream()
+                .map(code -> AreaStatus.builder()
+                        .code(code)
+                        .name(areaNameMap.getOrDefault(code, code))
+                        .completed(coveredCodes.contains(code))
+                        .build())
+                .toList();
+        int completedCount = (int) areas.stream().filter(AreaStatus::isCompleted).count();
+        return new DistributedGeAreaResult(
+                completedCount, DISTRIBUTED_GE_REQUIRED_AREA_COUNT,
+                completedCount >= DISTRIBUTED_GE_REQUIRED_AREA_COUNT, areas);
+    }
+
+    private AreaRequirement toAreaRequirementDto(DistributedGeAreaResult result) {
+        return AreaRequirement.builder()
+                .requiredCount(result.requiredCount())
+                .completedCount(result.completedCount())
+                .satisfied(result.satisfied())
+                .areas(result.areas())
+                .build();
+    }
+
+    private record DistributedGeAreaResult(
+            int completedCount, int requiredCount, boolean satisfied, List<AreaStatus> areas
+    ) {}
 
     private Optional<DivisionCategory> toDivisionCategory(GraduationConditionType conditionType) {
         try {
@@ -728,6 +900,10 @@ public class GraduationService {
     }
 
     private CourseInfo toTakenCourseInfo(StudentCourse sc) {
+        return toTakenCourseInfo(sc, null);
+    }
+
+    private CourseInfo toTakenCourseInfo(StudentCourse sc, AreaInfo area) {
         String departmentName = sc.getCourse() != null && sc.getCourse().getOfferingDepartment() != null
                 ? sc.getCourse().getOfferingDepartment().getName() : null;
         return CourseInfo.builder()
@@ -737,7 +913,17 @@ public class GraduationService {
                 .credit(sc.getCredit())
                 .semester(sc.getTakenSemester() != null ? semesterName(sc.getTakenSemester()) : null)
                 .taken(true)
+                .isEnglish(sc.getCourse() != null && sc.getCourse().isEnglish())
+                .isSw(sc.getCourse() != null && sc.getCourse().isSw())
+                .area(area)
                 .build();
+    }
+
+    private AreaInfo extractAreaInfo(StudentCourse sc, GraduationConditionType conditionType) {
+        if (conditionType != GraduationConditionType.DISTRIBUTED_GE
+                || sc.getCourse() == null || sc.getCourse().getGeArea() == null) return null;
+        GeArea geArea = sc.getCourse().getGeArea();
+        return new AreaInfo(geArea.getCode(), geArea.getName());
     }
 
     private CourseInfo toNotTakenCourseInfo(RequirementCourseItem item) {
@@ -751,6 +937,8 @@ public class GraduationService {
                 .credit(course.getCredit())
                 .semester(openedSemesterName(course.getOpenedSemester()))
                 .taken(false)
+                .isEnglish(course.isEnglish())
+                .isSw(course.isSw())
                 .build();
     }
 
@@ -795,7 +983,8 @@ public class GraduationService {
     private boolean computeGraduatable(
             GraduationAnalysisSummary mainSummary,
             GraduationAnalysisSummary doubleSummary,
-            List<CertResult> allCerts
+            List<CertResult> allCerts,
+            DistributedGeAreaResult geAreaResult
     ) {
         // 학점 요건
         if (!isMajorRequirementMet(mainSummary)) return false;
@@ -803,6 +992,7 @@ public class GraduationService {
 
         if (mainSummary.getRequiredGeCurrent() < mainSummary.getRequiredGeRequired()) return false;
         if (mainSummary.getDistributedGeCurrent() < mainSummary.getDistributedGeRequired()) return false;
+        if (geAreaResult != null && !geAreaResult.satisfied()) return false;
         if (mainSummary.getFreeGeCurrent() < mainSummary.getFreeGeRequired()) return false;
 
         if (mainSummary.getEnglishCurrent() < mainSummary.getEnglishRequired()) return false;
