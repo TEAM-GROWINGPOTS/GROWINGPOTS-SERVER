@@ -75,20 +75,20 @@ public class GraduationResponse {
     public static class ConditionInfo {
 
         @Schema(
-                description = "조건 코드. "
-                        + "MAJOR_BASIC(전공 기초) · MAJOR_REQUIRED(전공 필수) · MAJOR_ELECTIVE(전공 선택): 전공 탭. "
-                        + "REQUIRED_GE(필수 교과) · DISTRIBUTED_GE(배분 이수 교과) · FREE_GE(자유 이수 교과): 교양 탭. "
-                        + "GENERAL_ELECTIVE(기타): 기타 탭. "
-                        + "ENGLISH_COURSE(영어 강의) · SW_CERT_COURSE(SW 인증 강의): 전공·교양 탭에 공통 포함.",
+                description = """
+                        조건 코드.
+                        - 전공 탭: MAJOR_BASIC(전공 기초) · MAJOR_REQUIRED(전공 필수) · MAJOR_ELECTIVE(전공 선택)
+                        - 교양 탭: REQUIRED_GE(필수 교과) · DISTRIBUTED_GE(배분 이수 교과) · FREE_GE(자유 이수 교과)
+                        - 기타 탭: GENERAL_ELECTIVE
+                        - 전공·교양 탭 공통: ENGLISH_COURSE(영어 강의) · SW_CERT_COURSE(SW 인증 강의)""",
                 allowableValues = {
                         "MAJOR_BASIC", "MAJOR_REQUIRED", "MAJOR_ELECTIVE",
                         "REQUIRED_GE", "DISTRIBUTED_GE", "FREE_GE",
                         "GENERAL_ELECTIVE", "ENGLISH_COURSE", "SW_CERT_COURSE"
-                },
-                example = "MAJOR_REQUIRED")
+                })
         private final String code;
 
-        @Schema(description = "조건 이름 (예: 전공 필수, 영어 강의)", example = "전공 필수")
+        @Schema(description = "조건 이름 (예: 전공 필수, 영어 강의)")
         private final String name;
 
         @Schema(description = "현재 이수량. unit=CREDITS이면 학점 합계, unit=COURSES이면 과목 수")
