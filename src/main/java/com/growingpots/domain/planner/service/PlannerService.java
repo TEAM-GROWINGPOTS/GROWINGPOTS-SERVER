@@ -209,7 +209,10 @@ public class PlannerService {
         return PlannerResponse.CompletedCourse.builder()
                 .studentCourseId(studentCourse.getId())
                 .courseId(course != null ? course.getId() : null)
-                .courseName(course != null ? course.getName() : studentCourse.getRawCourseName())
+                // rawCourseName은 TranscriptPersister가 매칭 시 COURSE 이름으로 정리해서 저장하고,
+                // 사용자가 편집 화면에서 고치면 그 값으로 덮어써진다. 여기서 course.getName()으로
+                // 다시 덮어쓰면 사용자가 고친 이름이 무시되므로 항상 rawCourseName을 그대로 쓴다.
+                .courseName(studentCourse.getRawCourseName())
                 .departmentName(departmentName(course))
                 .divisionCategory(division.getCategory().name())
                 .divisionName(division.getCategory().getDisplayName())

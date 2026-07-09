@@ -2,6 +2,7 @@ package com.growingpots.domain.graduation.controller;
 
 import com.growingpots.domain.graduation.dto.response.GraduationCourseResponse;
 import com.growingpots.domain.graduation.dto.response.GraduationResponse;
+import com.growingpots.domain.graduation.enums.GraduationSource;
 import com.growingpots.domain.graduation.enums.MajorTypeFilter;
 import com.growingpots.domain.graduation.service.GraduationService;
 import com.growingpots.global.response.BaseResponse;
@@ -27,11 +28,11 @@ public class GraduationController {
     @GetMapping
     public ResponseEntity<BaseResponse<GraduationResponse>> getGraduation(
             @RequestParam(defaultValue = "ALL") MajorTypeFilter majorType,
-            @RequestParam(defaultValue = "COMPLETED") String source, // TODO(planner-source): PLANNED 구현 시 enum으로 전환
+            @RequestParam(defaultValue = "COMPLETED") GraduationSource source,
             Authentication authentication
     ) {
         Long memberId = Long.parseLong(authentication.getName());
-        GraduationResponse response = graduationService.getGraduation(memberId, majorType);
+        GraduationResponse response = graduationService.getGraduation(memberId, majorType, source);
         return ResponseEntity.ok(BaseResponse.success(SuccessCode.GRADUATION_STATUS_FOUND, response));
     }
 

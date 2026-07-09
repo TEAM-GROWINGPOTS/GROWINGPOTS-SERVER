@@ -23,13 +23,15 @@ public @interface GraduationApi {
                     + "majorType=PRIMARY: 본전공 MAJOR_* 조건 + 전공 이수구분 영어/SW. "
                     + "majorType=MULTI: 복수전공 MAJOR_* 조건 + 전공 이수구분 영어/SW. "
                     + "majorType=GE: REQUIRED_GE/DISTRIBUTED_GE/FREE_GE + 교양 이수구분 영어/SW. "
-                    + "majorType=OTHERS: GENERAL_ELECTIVE + 기타 이수구분 영어/SW. "
-                    + "영어/SW 강의는 appliedDivision.category 기준으로 해당 탭에 배치된다. "
+                    + "majorType=OTHERS: GENERAL_ELECTIVE(기타) 조건 하나만 반환, 영어/SW 미포함. "
+                    + "영어/SW 강의는 appliedDivision.category 기준으로 전공·교양 탭에만 배치된다. "
                     + "graduationRequired: 해당 학과에 이수구분과 무관한 독립 졸업요건(예: 스포츠의학과 졸업필수)이 "
                     + "있는 경우에만 채워짐(PRIMARY/MULTI 및 ALL의 sections.primary/multi). 그 외엔 null. "
                     + "totalCredit은 그 요건에 연결된 과목 중 이수한 학점 합계. unmetDescriptions는 학점 기준 "
                     + "하위조건만 문구로 담고(과목수 기준 조건은 과목 카드로만 표시). "
-                    + "source=PLANNED는 미구현(추후 플래너 연동)."
+                    + "source=PLANNED는 선택된 플래너 버전의 계획 과목 중 미이수/미수강 과목을 스냅샷에 합산한 예상 졸업현황을 반환한다. "
+                    + "플래너가 없거나 신규 계획 과목이 없으면 COMPLETED와 동일한 응답. "
+                    + "이수구분 미지정 계획 과목은 기타(GENERAL_ELECTIVE)로 처리된다."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "졸업 현황 조회 성공 (REQ_200_1)"),

@@ -159,6 +159,7 @@ public class TranscriptPersister {
         String semester = course.get("semester");
         String rawCourseCode = course.get("courseCode");
         boolean inProgress = CURRENT_SEMESTER_SECTION.equals(section);
+        Course matchedCourse = rawCourseCode == null ? null : coursesByCode.get(rawCourseCode);
 
         // 금학기수강학점(진행 중) 과목은 PDF에 수강년도/학기가 안 찍혀 있어 오늘 날짜 기준으로 채운다.
         Integer takenYear = semester != null ? takenYear(semester) : (inProgress ? computeCurrentAcademicYear(now) : null);
@@ -167,10 +168,13 @@ public class TranscriptPersister {
 
         return StudentCourse.builder()
                 .studentProfile(studentProfile)
-                .course(rawCourseCode == null ? null : coursesByCode.get(rawCourseCode))
+                .course(matchedCourse)
                 .appliedDivision(resolveAppliedDivision(section, rawClassification, divisionsByCategory, divisionsByCode))
                 .rawCourseCode(rawCourseCode)
-                .rawCourseName(course.get("courseName"))
+                // 매칭되는 과목이 있으면 COURSE의 정식 이름을 쓴다. PDF 원문엔 "e영화제작실습"처럼
+                // 영어강의/SW인증 등을 나타내는 접두 마커가 붙어있는데, 학생에게 보여줄 이름엔 필요 없다.
+                // 매칭 안 되면(옛날 과목 등) 원문 그대로 저장해 최소한의 표시는 되게 한다.
+                .rawCourseName(matchedCourse != null ? matchedCourse.getName() : course.get("courseName"))
                 .credit(Integer.parseInt(course.get("credits")))
                 .takenYear(takenYear)
                 .takenSemester(takenSemester)
