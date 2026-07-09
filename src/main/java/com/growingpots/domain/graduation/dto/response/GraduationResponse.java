@@ -126,16 +126,14 @@ public class GraduationResponse {
         private final String result;
     }
 
-    @Schema(description = "ALL 탭 전용 4섹션 응답")
+    @Schema(description = "ALL 탭 전용 섹션 응답")
     @Getter
     @Builder
     public static class AllSections {
 
-        @Schema(description = "본전공 섹션")
-        private final TabSection primary;
-
-        @Schema(description = "복수전공 섹션. 복수전공이 없으면 null", nullable = true)
-        private final TabSection multi;
+        @Schema(description = "보유 전공 전부(본전공 + 복수전공 몇 개든). 순서는 본전공이 먼저 오되, "
+                + "고정된 개수를 가정하지 말 것 - 복수전공을 여러 개 가진 학생도 있다")
+        private final List<TabSection> majors;
 
         @Schema(description = "교양 섹션")
         private final TabSection ge;
@@ -149,13 +147,19 @@ public class GraduationResponse {
     @Builder
     public static class TabSection {
 
-        @Schema(description = "전공명. primary/multi 섹션만 채워짐. ge/others는 null", nullable = true)
+        @Schema(description = "전공명(학과명). 전공 섹션(majors 배열의 각 항목)만 채워짐. ge/others는 null", nullable = true)
         private final String majorName;
+
+        @Schema(description = "전공 유형. MAIN: 본전공, DOUBLE: 복수전공. 전공 섹션만 채워짐, ge/others는 null",
+                allowableValues = {"MAIN", "DOUBLE"}, nullable = true)
+        private final String majorType;
 
         @Schema(description = "해당 섹션의 조건 목록")
         private final List<ConditionInfo> conditions;
 
-        @Schema(description = "학과 독립 졸업요건 요약. primary/multi 섹션이고 해당 학과에 졸업필수 요건이 있을 때만 채워짐. 그 외 null", nullable = true)
+        @Schema(description = "학과 독립 졸업요건 요약. 전공 섹션(majors 배열의 각 항목)에서 그 학과에 "
+                + "졸업필수 요건이 실제로 있을 때만(예: 스포츠의학과) 채워지고, 그 외 학과는 null. "
+                + "ge/others 섹션도 null", nullable = true)
         private final GraduationRequiredSummary graduationRequired;
     }
 
@@ -166,8 +170,9 @@ public class GraduationResponse {
     @Builder
     public static class GraduationRequiredSummary {
 
-        @Schema(description = "이 학과에 졸업필수 요건 자체가 있는지 여부 (예: 스포츠의학과만 true). "
-                + "FE는 이 값으로 졸업필수 탭 노출 여부를 판단하면 된다.")
+        @Schema(description = "이 학과에 졸업필수 요건 자체가 있는지 여부. graduationRequired 객체가 "
+                + "존재하는 경우에만 이 값이 내려오고 항상 true다(요건 없는 학과는 객체 자체가 null이라 "
+                + "이 필드까지 안 옴) - FE는 graduationRequired null 여부로 탭 노출을 판단하면 됨.")
         private final boolean hasGraduationRequired;
 
         @Schema(description = "요건 충족 여부")
