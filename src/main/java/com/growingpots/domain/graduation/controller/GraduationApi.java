@@ -35,13 +35,17 @@ public @interface GraduationApi {
 
                     영어/SW 강의는 appliedDivision.category 기준으로 전공·교양 탭에만 배치된다.
 
+                    **DISTRIBUTED_GE satisfied**
+                    24학번 이상: 학점 충족 AND 5개 영역 중 3개 이상 이수를 모두 충족해야 true.
+                    19~23학번: 학점 기준만 적용.
+
                     **graduationRequired**
-                    PRIMARY/MULTI 탭(및 ALL의 sections.primary/multi)에서 항상 채워짐, GE/OTHERS 탭·ALL 탭(top-level)은 null.
+                    PRIMARY/MULTI 탭(및 ALL의 sections.primary/multi)에서 항상 채워짐. GE/OTHERS 탭·ALL 탭(top-level)은 null.
                     hasGraduationRequired로 해당 학과에 이수구분과 무관한 독립 졸업요건(예: 스포츠의학과 졸업필수)이
                     실제로 있는지 판단한다 (false면 나머지 필드는 기본값이라 이 플래그로 탭 노출 여부만 보면 됨).
-                    totalCredit은 연결 과목 중 이수한 학점 합계, unmetDescriptions는 학점 기준 하위조건 문구만 포함
-                    (과목수 기준 조건은 과목 카드로만 표시). items는 전문실기·맨손체조 같은 하위 요건별
-                    current/required/unit/satisfied를 구조화해서 담는다 (플래너·노드뷰 화면용).
+                    totalCredit은 연결 과목 중 이수한 학점 합계.
+                    unmetDescriptions는 학점 기준 하위조건 문구만 포함 (과목수 기준 조건은 과목 카드로만 표시).
+                    items는 전문실기·맨손체조 같은 하위 요건별 current/required/unit/satisfied를 구조화해서 담는다 (플래너·노드뷰 화면용).
 
                     **source=PLANNED**
                     플래너의 미이수/미수강 계획 과목을 스냅샷에 합산한 예상 졸업현황.
@@ -177,6 +181,12 @@ public @interface GraduationApi {
                     - ENGLISH_COURSE·SW_CERT_COURSE + ALL: 탭·학과 구분 없이 전체 합산 (majors 1개, majorType=null)
                     - ENGLISH_COURSE·SW_CERT_COURSE + PRIMARY/MULTI/GE: 해당 탭 이수구분에 속하는 과목만 반환
                     - ENGLISH_COURSE·SW_CERT_COURSE + OTHERS: 기타 섹션에 조건이 없어 majors=[] 빈 응답
+
+                    **DISTRIBUTED_GE**
+                    24학번 이상: areaRequirement 블록이 채워짐 (5개 영역 완료 현황).
+                    satisfied는 학점 충족 AND 3개 이상 영역 이수를 모두 만족해야 true.
+                    19~23학번: areaRequirement=null, satisfied는 학점 기준만 적용.
+                    각 과목 카드의 area 필드에 배분이수 영역 정보(코드·이름)가 담김 (영역 미지정 과목은 null).
 
                     **GRADUATION_REQUIRED**
                     학과 독립 졸업요건에 연결된 과목들을 이수/미이수 하나의 리스트로 반환.
