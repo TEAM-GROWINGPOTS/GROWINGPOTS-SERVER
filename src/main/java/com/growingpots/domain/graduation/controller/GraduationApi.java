@@ -36,12 +36,16 @@ public @interface GraduationApi {
                     영어/SW 강의는 appliedDivision.category 기준으로 전공·교양 탭에만 배치된다.
 
                     **graduationRequired**
-                    학과 독립 졸업요건이 있을 때만 채워짐 (PRIMARY/MULTI 및 ALL의 sections.primary/multi).
-                    totalCredit은 연결 과목 중 이수한 학점 합계.
-                    unmetDescriptions는 학점 기준 하위조건 문구만 포함 (과목수 기준 조건은 과목 카드로만 표시).
+                    PRIMARY/MULTI 탭(및 ALL의 sections.primary/multi)에서 항상 채워짐, GE/OTHERS 탭·ALL 탭(top-level)은 null.
+                    hasGraduationRequired로 해당 학과에 이수구분과 무관한 독립 졸업요건(예: 스포츠의학과 졸업필수)이
+                    실제로 있는지 판단한다 (false면 나머지 필드는 기본값이라 이 플래그로 탭 노출 여부만 보면 됨).
+                    totalCredit은 연결 과목 중 이수한 학점 합계, unmetDescriptions는 학점 기준 하위조건 문구만 포함
+                    (과목수 기준 조건은 과목 카드로만 표시). items는 전문실기·맨손체조 같은 하위 요건별
+                    current/required/unit/satisfied를 구조화해서 담는다 (플래너·노드뷰 화면용).
 
                     **source=PLANNED**
                     플래너의 미이수/미수강 계획 과목을 스냅샷에 합산한 예상 졸업현황.
+                    graduationRequired도 동일하게 계획 과목을 반영한다 (예: 전문실기를 플래너에 담으면 items의 current가 올라감).
                     플래너가 없거나 신규 계획 과목이 없으면 COMPLETED와 동일.
                     이수구분 미지정 계획 과목은 GENERAL_ELECTIVE로 처리된다."""
     )
@@ -76,7 +80,13 @@ public @interface GraduationApi {
                                               { "code": "ENGLISH_COURSE",  "name": "영어 강의",    "current": 2, "required": 3, "unit": "COURSES", "satisfied": false, "chartTarget": false },
                                               { "code": "SW_CERT_COURSE",  "name": "SW 인증 강의", "current": 1, "required": 1, "unit": "COURSES", "satisfied": true,  "chartTarget": false }
                                             ],
-                                            "graduationRequired": null
+                                            "graduationRequired": {
+                                              "hasGraduationRequired": false,
+                                              "satisfied": true,
+                                              "totalCredit": 0,
+                                              "unmetDescriptions": [],
+                                              "items": []
+                                            }
                                           },
                                           "multi": null,
                                           "ge": {
