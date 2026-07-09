@@ -21,6 +21,10 @@ public class GraduationCourseResponse {
         private final Integer required;
         private final boolean satisfied;
         private final boolean hasRequiredList;
+        // GRADUATION_REQUIRED 전용: 하위조건 중 미충족인 것들의 안내 문구
+        // (예: "[졸업필수(전문실기 2과목만 인정)] 2/4학점 이수완료"). 그 외 조건은 항상 빈 리스트.
+        @Builder.Default
+        private final List<String> unmetDescriptions = List.of();
         private final List<CourseInfo> courses;
     }
 

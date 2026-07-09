@@ -9,6 +9,7 @@ import com.growingpots.domain.graduation.dto.response.GraduationResponse.CertInf
 import com.growingpots.domain.graduation.dto.response.GraduationResponse.ConditionInfo;
 import com.growingpots.domain.graduation.dto.response.GraduationResponse.CreditInfo;
 import com.growingpots.domain.graduation.dto.response.GraduationResponse.GpaInfo;
+import com.growingpots.domain.graduation.dto.response.GraduationResponse.GraduationRequiredSummary;
 import com.growingpots.domain.graduation.dto.response.GraduationResponse.Summary;
 import com.growingpots.domain.graduation.dto.response.GraduationResponse.TabSection;
 import com.growingpots.domain.graduation.enums.GraduationConditionType;
@@ -45,8 +46,10 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -91,6 +94,14 @@ public class GraduationService {
                 .flatMap(graduationAnalysisSummaryRepository::findByStudentMajor)
                 .orElse(null);
 
+        // graduatable은 탭 무관 항상 전체 요건 기준으로 계산.
+        // judgeGraduationRequired는 학생 전체 이수내역을 다시 조회하는 비용이 있어, 탭마다(그리고
+        // ALL 탭이면 primary/multi 섹션마다) 매번 다시 부르지 않도록 여기서 한 번씩만 계산해 재사용한다.
+        GraduationRequiredJudgement mainJudgement = judgeGraduationRequired(profile, mainMajor.getDepartment());
+        GraduationRequiredJudgement doubleJudgement = doubleMajorOpt
+                .map(dm -> judgeGraduationRequired(profile, dm.getDepartment()))
+                .orElse(null);
+
         List<CertResult> mainCerts = certResultRepository.findByStudentMajor(mainMajor);
         List<CertResult> doubleCerts = doubleMajorOpt
                 .map(certResultRepository::findByStudentMajor)
@@ -117,23 +128,26 @@ public class GraduationService {
                 : buildAdjustedSummary(doubleSummary, allPlannedItems,
                         doubleMajorOpt.map(StudentMajor::getDepartment).orElse(null));
 
-        boolean graduatable = computeGraduatable(effectiveMainSummary, effectiveDoubleSummary, allCerts);
+        boolean graduatable = computeGraduatable(effectiveMainSummary, effectiveDoubleSummary, allCerts)
+                && mainJudgement.satisfied()
+                && (doubleJudgement == null || doubleJudgement.satisfied());
 
         return switch (majorTypeFilter) {
             case PRIMARY -> buildSingleTabResponse(profile, effectiveMainSummary, MajorTypeFilter.PRIMARY,
-                    mainMajor.getDepartment(), graduatable, mainCerts, allPlannedItems);
+                    mainMajor.getDepartment(), mainJudgement, graduatable, mainCerts, allPlannedItems);
             case MULTI -> {
                 StudentMajor doubleMajor = doubleMajorOpt
                         .orElseThrow(() -> new BaseException(ErrorCode.DOUBLE_MAJOR_NOT_FOUND));
                 GraduationAnalysisSummary multiSummary = Optional.ofNullable(effectiveDoubleSummary)
                         .orElseThrow(() -> new BaseException(ErrorCode.REQUIREMENT_NOT_FOUND));
                 yield buildSingleTabResponse(profile, multiSummary, MajorTypeFilter.MULTI,
-                        doubleMajor.getDepartment(), graduatable, doubleCerts, allPlannedItems);
+                        doubleMajor.getDepartment(), doubleJudgement, graduatable, doubleCerts, allPlannedItems);
             }
             case GE, OTHERS -> buildSingleTabResponse(profile, effectiveMainSummary, majorTypeFilter,
-                    null, graduatable, mainCerts, allPlannedItems);
-            case ALL -> buildAllTabResponse(profile, mainMajor, effectiveMainSummary,
-                    doubleMajorOpt.orElse(null), effectiveDoubleSummary, graduatable, mainCerts, allPlannedItems);
+                    null, null, graduatable, mainCerts, allPlannedItems);
+            case ALL -> buildAllTabResponse(profile, mainMajor, effectiveMainSummary, mainJudgement,
+                    doubleMajorOpt.orElse(null), effectiveDoubleSummary, doubleJudgement,
+                    graduatable, mainCerts, allPlannedItems);
         };
     }
 
@@ -142,7 +156,8 @@ public class GraduationService {
             StudentProfile profile,
             GraduationAnalysisSummary summary,
             MajorTypeFilter tab,
-            Department department,
+            Department department,  // PRIMARY/MULTI: 해당 전공 학과, GE/OTHERS: null
+            GraduationRequiredJudgement judgement,  // PRIMARY/MULTI만 값 있음, GE/OTHERS는 null
             boolean graduatable,
             List<CertResult> certs,
             List<PlannerVersionItem> plannedItems
@@ -151,6 +166,7 @@ public class GraduationService {
                 .summary(buildSummary(profile, summary))
                 .graduatable(graduatable)
                 .conditions(buildConditionsForTab(profile, summary, tab, department, plannedItems))
+                .graduationRequired(toGraduationRequiredSummary(judgement))
                 .sections(null)
                 .certs(toCertInfos(certs))
                 .build();
@@ -161,8 +177,10 @@ public class GraduationService {
             StudentProfile profile,
             StudentMajor mainMajor,
             GraduationAnalysisSummary mainSummary,
+            GraduationRequiredJudgement mainJudgement,
             StudentMajor doubleMajor,
             GraduationAnalysisSummary doubleSummary,
+            GraduationRequiredJudgement doubleJudgement,
             boolean graduatable,
             List<CertResult> certs,
             List<PlannerVersionItem> plannedItems
@@ -171,6 +189,7 @@ public class GraduationService {
                 .majorName(mainMajor.getDepartment().getName())
                 .conditions(buildConditionsForTab(profile, mainSummary,
                         MajorTypeFilter.PRIMARY, mainMajor.getDepartment(), plannedItems))
+                .graduationRequired(toGraduationRequiredSummary(mainJudgement))
                 .build();
 
         TabSection multiSection = null;
@@ -179,6 +198,7 @@ public class GraduationService {
                     .majorName(doubleMajor.getDepartment().getName())
                     .conditions(buildConditionsForTab(profile, doubleSummary,
                             MajorTypeFilter.MULTI, doubleMajor.getDepartment(), plannedItems))
+                    .graduationRequired(toGraduationRequiredSummary(doubleJudgement))
                     .build();
         }
 
@@ -457,6 +477,10 @@ public class GraduationService {
 
     private MajorCourses buildMajorCourses(StudentProfile profile, StudentMajor major,
             GraduationConditionType conditionType, MajorTypeFilter filter) {
+        if (conditionType == GraduationConditionType.GRADUATION_REQUIRED) {
+            return buildGraduationRequiredMajorCourses(profile, major);
+        }
+
         GraduationAnalysisSummary summary = requireSummary(major);
 
         // 영어/SW: major.getDepartment() 전달 → fetchTakenCourses에서 PRIMARY/MULTI면 학과 필터 적용
@@ -524,6 +548,138 @@ public class GraduationService {
                 .hasRequiredList(hasRequiredList)
                 .courses(courses)
                 .build();
+    }
+
+    // 학과 자체의 독립 졸업요건(division 기반 아님, 예: 스포츠의학과 졸업필수) 드릴다운 응답.
+    // 하위조건이 여러 개일 수 있어 current/required는 "만족한 조건 수/전체 조건 수"로 요약하고,
+    // 조건별 상세는 unmetDescriptions에 문구로 담는다. 과목 리스트는 모든 하위조건에 연결된
+    // 과목을 하나로 합쳐서 보여준다(전문실기1~6 + 맨손체조가 한 리스트에 섞여 나옴).
+    private MajorCourses buildGraduationRequiredMajorCourses(StudentProfile profile, StudentMajor major) {
+        GraduationRequiredJudgement judgement = judgeGraduationRequired(profile, major.getDepartment());
+        boolean hasRequiredList = !judgement.items().isEmpty();
+
+        Set<Long> takenCourseIds = new HashSet<>();
+        List<CourseInfo> courses = new ArrayList<>();
+        for (StudentCourse sc : judgement.takenCourses()) {
+            courses.add(toTakenCourseInfo(sc));
+            takenCourseIds.add(sc.getCourse().getId());
+        }
+
+        Set<Long> addedIds = new HashSet<>();
+        for (RequirementCourseItem item : judgement.items()) {
+            Long courseId = item.getCourse().getId();
+            if (!takenCourseIds.contains(courseId) && addedIds.add(courseId)) {
+                courses.add(toNotTakenCourseInfo(item));
+            }
+        }
+        courses.sort(Comparator.comparing(CourseInfo::getName));
+
+        return MajorCourses.builder()
+                .majorType(major.getMajorType().name())
+                .departmentName(major.getDepartment().getName())
+                .current(judgement.satisfiedRequirementCount())
+                .required(judgement.totalRequirementCount())
+                .satisfied(judgement.satisfied())
+                .hasRequiredList(hasRequiredList)
+                .unmetDescriptions(judgement.unmetDescriptions())
+                .courses(courses)
+                .build();
+    }
+
+    // judgeGraduationRequired 결과를 홈 화면 요약 DTO로 변환한다. judgement가 없거나(GE/OTHERS처럼
+    // 학과 자체가 없는 탭) 해당 학과에 RequirementCourse 자체가 없으면 null을 반환해 FE가 섹션을 안
+    // 보여줄 수 있게 한다. items().isEmpty()가 아니라 totalRequirementCount()로 판단해야 한다 —
+    // RequirementCourse는 있는데 RequirementCourseItem을 깜빡하고 안 넣은 경우, items()는 비어있지만
+    // 요건 자체는 존재하는 거라 미충족(satisfied=false)으로 정확히 보여줘야지 섹션을 숨기면 안 된다.
+    private GraduationRequiredSummary toGraduationRequiredSummary(GraduationRequiredJudgement judgement) {
+        if (judgement == null || judgement.totalRequirementCount() == 0) {
+            return null;
+        }
+        return GraduationRequiredSummary.builder()
+                .satisfied(judgement.satisfied())
+                .totalCredit(judgement.totalCredit())
+                .unmetDescriptions(judgement.unmetDescriptions())
+                .build();
+    }
+
+    // 학과의 독립 졸업요건(division=null인 RequirementCourse들)을 학생 이수내역과 대조해 판정한다.
+    // 해당 학과에 이런 요건이 없으면(대부분의 학과) 항상 satisfied=true, 빈 리스트를 반환한다.
+    private GraduationRequiredJudgement judgeGraduationRequired(StudentProfile profile, Department department) {
+        List<RequirementCourse> requirementCourses = requirementCourseRepository
+                .findGraduationRequiredByDepartment(department, profile.getAdmissionYear());
+        if (requirementCourses.isEmpty()) {
+            return new GraduationRequiredJudgement(true, List.of(), 0, 0, 0, List.of(), List.of());
+        }
+
+        List<RequirementCourseItem> allItems =
+                requirementCourseItemRepository.findWithCourseByRequirementCourseIn(requirementCourses);
+        Map<Long, List<RequirementCourseItem>> itemsByRequirement = allItems.stream()
+                .collect(Collectors.groupingBy(item -> item.getRequirementCourse().getId()));
+
+        List<StudentCourse> studentCourses = studentCourseRepository.findWithCourseByStudentProfile(profile);
+        Set<Long> requirementCourseIds = allItems.stream()
+                .map(item -> item.getCourse().getId())
+                .collect(Collectors.toSet());
+        List<StudentCourse> takenCourses = studentCourses.stream()
+                .filter(sc -> sc.getCourse() != null
+                        && sc.getStatus() == CourseStatus.COMPLETED
+                        && requirementCourseIds.contains(sc.getCourse().getId()))
+                .toList();
+        Map<Long, Integer> completedCreditByCourseId = takenCourses.stream()
+                .collect(Collectors.toMap(sc -> sc.getCourse().getId(), StudentCourse::getCredit, (a, b) -> a));
+
+        // minCredit이 있으면 학점 합으로, minCount가 있으면 이수 과목 수로 판정한다. 둘 다 설정된
+        // row는 아래 루프에서 바로 예외를 던지므로 여기까지 오면 정확히 하나만 설정된 상태다.
+        // 안내 문구(unmetDescriptions)는 학점 기준 조건만 담는다. 과목수 기준 조건(예: 맨손체조)은
+        // 어차피 과목 자체가 이수/미이수 카드로 리스트에 나오기 때문에 문구로 중복해서 보여줄 필요가 없다.
+        boolean satisfied = true;
+        int satisfiedCount = 0;
+        List<String> unmetDescriptions = new ArrayList<>();
+        for (RequirementCourse rc : requirementCourses) {
+            // minCredit/minCount는 시드 데이터로 직접 들어가서(Java 빌더를 안 거침) 엔티티 레벨 검증으로는
+            // 못 막는다. 둘 다 설정된 row가 들어오면 어느 쪽이 무시됐는지 모른 채 조용히 잘못 판정하는
+            // 대신, 여기서 바로 예외를 던져서 데이터 실수를 즉시 드러낸다.
+            if (rc.getMinCredit() > 0 && rc.getMinCount() > 0) {
+                throw new IllegalStateException(
+                        "RequirementCourse(id=" + rc.getId() + ")에 minCredit/minCount가 둘 다 설정돼 있습니다. "
+                                + "하나만 설정해야 합니다.");
+            }
+            List<RequirementCourseItem> items = itemsByRequirement.getOrDefault(rc.getId(), List.of());
+            boolean byCredit = rc.getMinCredit() > 0;
+            int current = byCredit
+                    ? items.stream()
+                            .mapToInt(item -> completedCreditByCourseId.getOrDefault(item.getCourse().getId(), 0))
+                            .sum()
+                    : (int) items.stream()
+                            .filter(item -> completedCreditByCourseId.containsKey(item.getCourse().getId()))
+                            .count();
+            int required = byCredit ? rc.getMinCredit() : rc.getMinCount();
+            if (current < required) {
+                satisfied = false;
+                if (byCredit) {
+                    unmetDescriptions.add("[" + rc.getName() + "] " + current + "/" + required + "학점 이수완료");
+                }
+            } else {
+                satisfiedCount++;
+            }
+        }
+
+        int totalCredit = takenCourses.stream().mapToInt(StudentCourse::getCredit).sum();
+        return new GraduationRequiredJudgement(satisfied, unmetDescriptions, totalCredit,
+                satisfiedCount, requirementCourses.size(), allItems, takenCourses);
+    }
+
+    // satisfiedRequirementCount/totalRequirementCount는 학점/과목수 조건 전부(unmetDescriptions에
+    // 안 담기는 과목수 조건 포함)를 센 값이라, current==required면 항상 satisfied=true와 일치한다.
+    private record GraduationRequiredJudgement(
+            boolean satisfied,
+            List<String> unmetDescriptions,
+            int totalCredit,
+            int satisfiedRequirementCount,
+            int totalRequirementCount,
+            List<RequirementCourseItem> items,
+            List<StudentCourse> takenCourses
+    ) {
     }
 
     // 영어/SW: 전공 탭(PRIMARY/MULTI)은 이수구분 + 개설학과 기준 필터링으로 본전공/복수전공 구분
