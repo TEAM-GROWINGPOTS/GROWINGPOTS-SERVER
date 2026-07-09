@@ -226,10 +226,17 @@ public class TranscriptPersister {
     // 전공(본전공/복수전공)별로 STUDENT_MAJOR를 찾거나 만들고, GRADUATION_ANALYSIS_SUMMARY는 덮어쓴다.
     private List<StudentMajor> saveMajorsAndSummaries(
             StudentProfile studentProfile, ParsedTranscript parsed, List<Department> departments) {
+        // 기존 학과 목록을 한 번만 조회해서 findOrCreateStudentMajor/deleteStaleStudentMajors에서
+        // 재사용한다(둘 다 매번 따로 DB를 조회하던 걸 합침).
+        Map<Long, StudentMajor> existingMajorsByDepartmentId = studentMajorRepository
+                .findWithDepartmentByStudentProfile(studentProfile).stream()
+                .collect(Collectors.toMap(m -> m.getDepartment().getId(), m -> m));
+        List<StudentMajor> existingMajors = new ArrayList<>(existingMajorsByDepartmentId.values());
+
         List<StudentMajor> studentMajors = new ArrayList<>();
         for (Map<String, String> majorRequirement : parsed.majorRequirements()) {
             StudentMajor studentMajor = findOrCreateStudentMajor(
-                    studentProfile, majorRequirement, parsed.studentInfo(), departments);
+                    studentProfile, majorRequirement, parsed.studentInfo(), departments, existingMajorsByDepartmentId);
             studentMajors.add(studentMajor);
 
             GraduationAnalysisSummary newSummary = toGraduationAnalysisSummary(
@@ -239,16 +246,15 @@ public class TranscriptPersister {
                             existing -> existing.updateFrom(newSummary),
                             () -> graduationAnalysisSummaryRepository.save(newSummary));
         }
-        deleteStaleStudentMajors(studentProfile, studentMajors);
+        deleteStaleStudentMajors(existingMajors, studentMajors);
         return studentMajors;
     }
 
     // 이번 PDF에 더 이상 등장하지 않는 예전 학과의 STUDENT_MAJOR를 지운다. 안 지우면 학과가 다른
     // PDF를 계속 올릴 때마다(테스트 재업로드 포함) STUDENT_MAJOR가 계속 쌓여서, "본전공은 1개"라는
     // GraduationService의 전제가 깨진다(MAIN이 여러 개면 아무거나 골라버림).
-    private void deleteStaleStudentMajors(StudentProfile studentProfile, List<StudentMajor> currentMajors) {
+    private void deleteStaleStudentMajors(List<StudentMajor> existingMajors, List<StudentMajor> currentMajors) {
         Set<Long> currentMajorIds = currentMajors.stream().map(StudentMajor::getId).collect(Collectors.toSet());
-        List<StudentMajor> existingMajors = studentMajorRepository.findWithDepartmentByStudentProfile(studentProfile);
         List<StudentMajor> staleMajors = existingMajors.stream()
                 .filter(major -> !currentMajorIds.contains(major.getId()))
                 .toList();
@@ -263,7 +269,8 @@ public class TranscriptPersister {
             StudentProfile studentProfile,
             Map<String, String> majorRequirement,
             Map<String, String> studentInfo,
-            List<Department> departments
+            List<Department> departments,
+            Map<Long, StudentMajor> existingMajorsByDepartmentId
     ) {
         MajorType majorType = toMajorType(majorRequirement.get("majorType"));
         String majorName = majorRequirement.get("majorName");
@@ -278,12 +285,18 @@ public class TranscriptPersister {
         }
 
         Department department = matched;
-        return studentMajorRepository.findByStudentProfileAndDepartment(studentProfile, department)
-                .orElseGet(() -> studentMajorRepository.save(StudentMajor.builder()
-                        .studentProfile(studentProfile)
-                        .majorType(majorType)
-                        .department(department)
-                        .build()));
+        StudentMajor existing = existingMajorsByDepartmentId.get(department.getId());
+        if (existing != null) {
+            return existing;
+        }
+        StudentMajor created = studentMajorRepository.save(StudentMajor.builder()
+                .studentProfile(studentProfile)
+                .majorType(majorType)
+                .department(department)
+                .build());
+        // 같은 PDF 안에 같은 학과가 중복으로 나오는 경우(정상적으론 없음)에도 두 번 생성되지 않도록 반영.
+        existingMajorsByDepartmentId.put(department.getId(), created);
+        return created;
     }
 
     // PDF의 전공명("스포츠의학")과 DEPARTMENT.name("스포츠의학과")은 "학과/과" 접미사 유무가 달라 정규화 후 비교한다.
