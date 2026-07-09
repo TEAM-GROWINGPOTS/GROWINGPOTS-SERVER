@@ -29,22 +29,19 @@ public class GraduationController {
     @GraduationApi.GetGraduationStatus
     @GetMapping
     public ResponseEntity<BaseResponse<GraduationResponse>> getGraduation(
-            @Parameter(description =
-                    "전공 필터. "
-                    + "ALL: 전체(본전공·복수전공·교양·기타 4섹션 분리, sections 사용). "
-                    + "PRIMARY: 본전공 조건(MAJOR_* + 영어·SW). "
-                    + "MULTI: 복수전공 조건(MAJOR_* + 영어·SW). "
-                    + "GE: 교양 조건(REQUIRED_GE·DISTRIBUTED_GE·FREE_GE + 영어·SW). "
-                    + "OTHERS: 기타 조건(GENERAL_ELECTIVE만, 영어·SW 미포함). "
-                    + "기본값: ALL")
+            @Parameter(description = """
+                    전공 필터. 기본값: ALL
+                    - ALL: 전체 (4섹션 분리, sections 사용)
+                    - PRIMARY: 본전공 (MAJOR_* + 영어·SW)
+                    - MULTI: 복수전공 (MAJOR_* + 영어·SW)
+                    - GE: 교양 (REQUIRED_GE·DISTRIBUTED_GE·FREE_GE + 영어·SW)
+                    - OTHERS: 기타 (GENERAL_ELECTIVE만, 영어·SW 미포함)""")
             @RequestParam(defaultValue = "ALL") MajorTypeFilter majorType,
 
-            @Parameter(description =
-                    "조회 기준. "
-                    + "COMPLETED: 이수 완료 기준(PDF 스냅샷). "
-                    + "PLANNED: 플래너 선택 버전의 계획 과목을 스냅샷에 합산한 예상 졸업현황. "
-                    + "플래너가 없거나 신규 계획 과목이 없으면 COMPLETED와 동일. "
-                    + "기본값: COMPLETED")
+            @Parameter(description = """
+                    조회 기준. 기본값: COMPLETED
+                    - COMPLETED: 이수 완료 기준 (PDF 스냅샷)
+                    - PLANNED: 플래너의 계획 과목을 스냅샷에 합산한 예상 졸업현황. 플래너가 없거나 신규 계획 과목이 없으면 COMPLETED와 동일""")
             @RequestParam(defaultValue = "COMPLETED") GraduationSource source,
 
             Authentication authentication
@@ -58,13 +55,13 @@ public class GraduationController {
     @GetMapping("/{divisionCode}/courses")
     public ResponseEntity<BaseResponse<GraduationCourseResponse>> getDivisionCourses(
             @Parameter(
-                    description =
-                            "이수구분 코드. "
-                            + "MAJOR_BASIC(전공 기초) · MAJOR_REQUIRED(전공 필수) · MAJOR_ELECTIVE(전공 선택): 전공 탭. "
-                            + "REQUIRED_GE(필수 교과) · DISTRIBUTED_GE(배분 이수 교과) · FREE_GE(자유 이수 교과): 교양 탭. "
-                            + "GENERAL_ELECTIVE(기타): 기타 탭. "
-                            + "ENGLISH_COURSE(영어 강의) · SW_CERT_COURSE(SW 인증 강의): 전공·교양 탭 공통. "
-                            + "GRADUATION_REQUIRED: 학과 독립 졸업요건(예: 스포츠의학과 졸업필수).",
+                    description = """
+                            이수구분 코드.
+                            - 전공 탭: MAJOR_BASIC(전공 기초) · MAJOR_REQUIRED(전공 필수) · MAJOR_ELECTIVE(전공 선택)
+                            - 교양 탭: REQUIRED_GE(필수 교과) · DISTRIBUTED_GE(배분 이수 교과) · FREE_GE(자유 이수 교과)
+                            - 기타 탭: GENERAL_ELECTIVE
+                            - 전공·교양 탭 공통: ENGLISH_COURSE(영어 강의) · SW_CERT_COURSE(SW 인증 강의)
+                            - GRADUATION_REQUIRED: 학과 독립 졸업요건 (예: 스포츠의학과 졸업필수)""",
                     schema = @Schema(
                             type = "string",
                             allowableValues = {
@@ -75,15 +72,11 @@ public class GraduationController {
                             }))
             @PathVariable String divisionCode,
 
-            @Parameter(description =
-                    "전공 필터. "
-                    + "ALL: 보유 전공 전부. "
-                    + "PRIMARY: 본전공. "
-                    + "MULTI: 복수전공. "
-                    + "GE·OTHERS: 본전공 스냅샷 기준. "
-                    + "ENGLISH_COURSE·SW_CERT_COURSE + ALL: 탭·학과 구분 없이 전체 합산(majors 1개, majorType=null). "
-                    + "ENGLISH_COURSE·SW_CERT_COURSE + OTHERS: 빈 응답(majors=[]). "
-                    + "기본값: ALL")
+            @Parameter(description = """
+                    전공 필터. 기본값: ALL
+                    - ALL: 보유 전공 전부 / PRIMARY: 본전공 / MULTI: 복수전공 / GE·OTHERS: 본전공 스냅샷 기준
+                    - ENGLISH_COURSE·SW_CERT_COURSE + ALL: 탭·학과 구분 없이 전체 합산 (majors 1개, majorType=null)
+                    - ENGLISH_COURSE·SW_CERT_COURSE + OTHERS: 빈 응답 (majors=[])""")
             @RequestParam(defaultValue = "ALL") MajorTypeFilter majorType,
 
             Authentication authentication
