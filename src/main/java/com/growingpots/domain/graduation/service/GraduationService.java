@@ -10,6 +10,7 @@ import com.growingpots.domain.graduation.dto.response.GraduationResponse.Conditi
 import com.growingpots.domain.graduation.dto.response.GraduationResponse.CreditInfo;
 import com.growingpots.domain.graduation.dto.response.GraduationResponse.GpaInfo;
 import com.growingpots.domain.graduation.dto.response.GraduationResponse.GraduationRequiredSummary;
+import com.growingpots.domain.graduation.dto.response.GraduationResponse.RequirementProgress;
 import com.growingpots.domain.graduation.dto.response.GraduationResponse.Summary;
 import com.growingpots.domain.graduation.dto.response.GraduationResponse.TabSection;
 import com.growingpots.domain.graduation.enums.GraduationConditionType;
@@ -94,14 +95,6 @@ public class GraduationService {
                 .flatMap(graduationAnalysisSummaryRepository::findByStudentMajor)
                 .orElse(null);
 
-        // graduatable은 탭 무관 항상 전체 요건 기준으로 계산.
-        // judgeGraduationRequired는 학생 전체 이수내역을 다시 조회하는 비용이 있어, 탭마다(그리고
-        // ALL 탭이면 primary/multi 섹션마다) 매번 다시 부르지 않도록 여기서 한 번씩만 계산해 재사용한다.
-        GraduationRequiredJudgement mainJudgement = judgeGraduationRequired(profile, mainMajor.getDepartment());
-        GraduationRequiredJudgement doubleJudgement = doubleMajorOpt
-                .map(dm -> judgeGraduationRequired(profile, dm.getDepartment()))
-                .orElse(null);
-
         List<CertResult> mainCerts = certResultRepository.findByStudentMajor(mainMajor);
         List<CertResult> doubleCerts = doubleMajorOpt
                 .map(certResultRepository::findByStudentMajor)
@@ -120,6 +113,17 @@ public class GraduationService {
                     .filter(i -> !alreadyCounted.contains(i.getCourse().getId()))
                     .toList();
         }
+
+        // graduatable은 탭 무관 항상 전체 요건 기준으로 계산.
+        // judgeGraduationRequired는 학생 전체 이수내역을 다시 조회하는 비용이 있어, 탭마다(그리고
+        // ALL 탭이면 primary/multi 섹션마다) 매번 다시 부르지 않도록 여기서 한 번씩만 계산해 재사용한다.
+        // allPlannedItems도 같이 넘겨 source=PLANNED면 졸업필수도 계획 과목을 반영하게 한다.
+        List<PlannerVersionItem> plannedItemsForJudgement = allPlannedItems;
+        GraduationRequiredJudgement mainJudgement =
+                judgeGraduationRequired(profile, mainMajor.getDepartment(), plannedItemsForJudgement);
+        GraduationRequiredJudgement doubleJudgement = doubleMajorOpt
+                .map(dm -> judgeGraduationRequired(profile, dm.getDepartment(), plannedItemsForJudgement))
+                .orElse(null);
 
         GraduationAnalysisSummary effectiveMainSummary = allPlannedItems.isEmpty() ? mainSummary
                 : buildAdjustedSummary(mainSummary, allPlannedItems, mainMajor.getDepartment());
@@ -623,7 +627,8 @@ public class GraduationService {
     // 조건별 상세는 unmetDescriptions에 문구로 담는다. 과목 리스트는 모든 하위조건에 연결된
     // 과목을 하나로 합쳐서 보여준다(전문실기1~6 + 맨손체조가 한 리스트에 섞여 나옴).
     private MajorCourses buildGraduationRequiredMajorCourses(StudentProfile profile, StudentMajor major) {
-        GraduationRequiredJudgement judgement = judgeGraduationRequired(profile, major.getDepartment());
+        // 이 드릴다운 엔드포인트는 PLANNED를 지원하지 않아(별도 스코프) 항상 COMPLETED만 반영한다.
+        GraduationRequiredJudgement judgement = judgeGraduationRequired(profile, major.getDepartment(), List.of());
         boolean hasRequiredList = !judgement.items().isEmpty();
 
         Set<Long> takenCourseIds = new HashSet<>();
@@ -654,29 +659,46 @@ public class GraduationService {
                 .build();
     }
 
-    // judgeGraduationRequired 결과를 홈 화면 요약 DTO로 변환한다. judgement가 없거나(GE/OTHERS처럼
-    // 학과 자체가 없는 탭) 해당 학과에 RequirementCourse 자체가 없으면 null을 반환해 FE가 섹션을 안
-    // 보여줄 수 있게 한다. items().isEmpty()가 아니라 totalRequirementCount()로 판단해야 한다 —
+    // judgeGraduationRequired 결과를 홈 화면 요약 DTO로 변환한다. judgement가 없는 탭(GE/OTHERS처럼
+    // 학과 자체가 없는 탭)만 null을 반환한다. PRIMARY/MULTI는 해당 학과에 요건이 없어도 항상 객체를
+    // 반환하고 hasGraduationRequired=false로 표시한다 — FE가 null 체크 대신 이 플래그 하나로 탭 노출
+    // 여부를 판단할 수 있게 하기 위함(요건이 없는 학과가 대부분이라 이쪽이 더 다루기 쉽다).
+    // hasGraduationRequired는 items().isEmpty()가 아니라 totalRequirementCount()로 판단해야 한다 —
     // RequirementCourse는 있는데 RequirementCourseItem을 깜빡하고 안 넣은 경우, items()는 비어있지만
-    // 요건 자체는 존재하는 거라 미충족(satisfied=false)으로 정확히 보여줘야지 섹션을 숨기면 안 된다.
+    // 요건 자체는 존재하는 거라 미충족(satisfied=false)으로 정확히 보여줘야지 숨기면 안 된다.
     private GraduationRequiredSummary toGraduationRequiredSummary(GraduationRequiredJudgement judgement) {
-        if (judgement == null || judgement.totalRequirementCount() == 0) {
+        if (judgement == null) {
             return null;
         }
+        List<RequirementProgress> items = judgement.itemProgress().stream()
+                .map(p -> RequirementProgress.builder()
+                        .name(p.name())
+                        .current(p.current())
+                        .required(p.required())
+                        .unit(p.byCredit() ? "CREDITS" : "COURSES")
+                        .satisfied(p.satisfied())
+                        .build())
+                .toList();
         return GraduationRequiredSummary.builder()
+                .hasGraduationRequired(judgement.totalRequirementCount() > 0)
                 .satisfied(judgement.satisfied())
                 .totalCredit(judgement.totalCredit())
                 .unmetDescriptions(judgement.unmetDescriptions())
+                .items(items)
                 .build();
     }
 
     // 학과의 독립 졸업요건(division=null인 RequirementCourse들)을 학생 이수내역과 대조해 판정한다.
     // 해당 학과에 이런 요건이 없으면(대부분의 학과) 항상 satisfied=true, 빈 리스트를 반환한다.
-    private GraduationRequiredJudgement judgeGraduationRequired(StudentProfile profile, Department department) {
+    // plannedItems: source=PLANNED일 때 getGraduation()이 이미 완료/수강중 과목을 제외해 넘겨주는
+    // 신규 계획 과목 목록. 드릴다운(buildGraduationRequiredMajorCourses)처럼 PLANNED를 지원하지
+    // 않는 호출부는 List.of()를 넘긴다.
+    private GraduationRequiredJudgement judgeGraduationRequired(
+            StudentProfile profile, Department department, List<PlannerVersionItem> plannedItems) {
         List<RequirementCourse> requirementCourses = requirementCourseRepository
                 .findGraduationRequiredByDepartment(department, profile.getAdmissionYear());
         if (requirementCourses.isEmpty()) {
-            return new GraduationRequiredJudgement(true, List.of(), 0, 0, 0, List.of(), List.of());
+            return new GraduationRequiredJudgement(true, List.of(), 0, 0, 0, List.of(), List.of(), List.of());
         }
 
         List<RequirementCourseItem> allItems =
@@ -696,13 +718,23 @@ public class GraduationService {
         Map<Long, Integer> completedCreditByCourseId = takenCourses.stream()
                 .collect(Collectors.toMap(sc -> sc.getCourse().getId(), StudentCourse::getCredit, (a, b) -> a));
 
+        // PLANNED: 이 졸업요건 대상 과목만 걸러서 미이수 판정에 더한다. completedCreditByCourseId에
+        // 이미 있는 과목은 계획에도 잡혀있을 수 없다(getGraduation()에서 이미 걸러서 넘어옴).
+        List<PlannerVersionItem> plannedInScope = plannedItems.stream()
+                .filter(i -> requirementCourseIds.contains(i.getCourse().getId()))
+                .toList();
+        Map<Long, Integer> plannedCreditByCourseId = plannedInScope.stream()
+                .collect(Collectors.toMap(i -> i.getCourse().getId(), PlannerVersionItem::getCredit, (a, b) -> a));
+
         // minCredit이 있으면 학점 합으로, minCount가 있으면 이수 과목 수로 판정한다. 둘 다 설정된
         // row는 아래 루프에서 바로 예외를 던지므로 여기까지 오면 정확히 하나만 설정된 상태다.
         // 안내 문구(unmetDescriptions)는 학점 기준 조건만 담는다. 과목수 기준 조건(예: 맨손체조)은
         // 어차피 과목 자체가 이수/미이수 카드로 리스트에 나오기 때문에 문구로 중복해서 보여줄 필요가 없다.
+        // 하위 요건별 수치는 itemProgress(→ RequirementProgress)가 대신 담당한다.
         boolean satisfied = true;
         int satisfiedCount = 0;
         List<String> unmetDescriptions = new ArrayList<>();
+        List<RequirementItemProgress> itemProgress = new ArrayList<>();
         for (RequirementCourse rc : requirementCourses) {
             // minCredit/minCount는 시드 데이터로 직접 들어가서(Java 빌더를 안 거침) 엔티티 레벨 검증으로는
             // 못 막는다. 둘 다 설정된 row가 들어오면 어느 쪽이 무시됐는지 모른 채 조용히 잘못 판정하는
@@ -716,13 +748,22 @@ public class GraduationService {
             boolean byCredit = rc.getMinCredit() > 0;
             int current = byCredit
                     ? items.stream()
-                            .mapToInt(item -> completedCreditByCourseId.getOrDefault(item.getCourse().getId(), 0))
+                            .mapToInt(item -> {
+                                Long courseId = item.getCourse().getId();
+                                Integer completed = completedCreditByCourseId.get(courseId);
+                                return completed != null ? completed : plannedCreditByCourseId.getOrDefault(courseId, 0);
+                            })
                             .sum()
                     : (int) items.stream()
-                            .filter(item -> completedCreditByCourseId.containsKey(item.getCourse().getId()))
+                            .filter(item -> {
+                                Long courseId = item.getCourse().getId();
+                                return completedCreditByCourseId.containsKey(courseId)
+                                        || plannedCreditByCourseId.containsKey(courseId);
+                            })
                             .count();
             int required = byCredit ? rc.getMinCredit() : rc.getMinCount();
-            if (current < required) {
+            boolean rowSatisfied = current >= required;
+            if (!rowSatisfied) {
                 satisfied = false;
                 if (byCredit) {
                     unmetDescriptions.add("[" + rc.getName() + "] " + current + "/" + required + "학점 이수완료");
@@ -730,11 +771,13 @@ public class GraduationService {
             } else {
                 satisfiedCount++;
             }
+            itemProgress.add(new RequirementItemProgress(rc.getName(), current, required, byCredit, rowSatisfied));
         }
 
-        int totalCredit = takenCourses.stream().mapToInt(StudentCourse::getCredit).sum();
+        int totalCredit = takenCourses.stream().mapToInt(StudentCourse::getCredit).sum()
+                + plannedInScope.stream().mapToInt(PlannerVersionItem::getCredit).sum();
         return new GraduationRequiredJudgement(satisfied, unmetDescriptions, totalCredit,
-                satisfiedCount, requirementCourses.size(), allItems, takenCourses);
+                satisfiedCount, requirementCourses.size(), allItems, takenCourses, itemProgress);
     }
 
     // satisfiedRequirementCount/totalRequirementCount는 학점/과목수 조건 전부(unmetDescriptions에
@@ -746,7 +789,15 @@ public class GraduationService {
             int satisfiedRequirementCount,
             int totalRequirementCount,
             List<RequirementCourseItem> items,
-            List<StudentCourse> takenCourses
+            List<StudentCourse> takenCourses,
+            List<RequirementItemProgress> itemProgress
+    ) {
+    }
+
+    // RequirementCourse 한 행(예: 전문실기, 맨손체조)의 진행 현황. toGraduationRequiredSummary에서
+    // RequirementProgress DTO로 변환된다.
+    private record RequirementItemProgress(
+            String name, int current, int required, boolean byCredit, boolean satisfied
     ) {
     }
 
