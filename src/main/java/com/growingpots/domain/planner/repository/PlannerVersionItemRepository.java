@@ -2,6 +2,7 @@ package com.growingpots.domain.planner.repository;
 
 import com.growingpots.domain.planner.entity.PlannerTermVersion;
 import com.growingpots.domain.planner.entity.PlannerVersionItem;
+import com.growingpots.domain.user.entity.StudentProfile;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -17,6 +18,14 @@ public interface PlannerVersionItemRepository extends JpaRepository<PlannerVersi
             + "WHERE pvi.plannerTermVersion IN :versions "
             + "ORDER BY pvi.plannerTermVersion.id, pvi.positionOrder")
     List<PlannerVersionItem> findWithDetailsByPlannerTermVersionIn(@Param("versions") List<PlannerTermVersion> versions);
+
+    // 학생의 플래너에서 현재 선택된 버전의 계획 과목 전체 조회 (source=PLANNED 졸업현황 계산용)
+    @Query("SELECT pvi FROM PlannerVersionItem pvi "
+            + "JOIN FETCH pvi.course c LEFT JOIN FETCH c.offeringDepartment "
+            + "LEFT JOIN FETCH pvi.plannedDivision "
+            + "WHERE pvi.plannerTermVersion.isSelected = true "
+            + "AND pvi.plannerTermVersion.plannerTerm.plannerSimulation.studentProfile = :profile")
+    List<PlannerVersionItem> findSelectedByStudentProfile(@Param("profile") StudentProfile profile);
 
     @Transactional
     @Modifying
