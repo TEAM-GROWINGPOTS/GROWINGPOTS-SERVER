@@ -458,6 +458,25 @@ public class GraduationService {
                 .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
 
         List<StudentMajor> majors = studentMajorRepository.findWithDepartmentByStudentProfile(profile);
+
+        // ENGLISH_COURSE/SW_CERT_COURSE는 이수구분이 아닌 course 플래그 기반이라 majorType별 처리가 다르다.
+        // OTHERS: 졸업현황 OTHERS 섹션에 영어·SW 조건이 없으므로 빈 응답
+        // ALL: 탭·학과 구분 없이 전체 합산해서 단일 항목으로 반환
+        // PRIMARY/MULTI/GE: 기존 buildMajorCourses 경로가 이미 올바르게 처리
+        if (conditionType == GraduationConditionType.ENGLISH_COURSE
+                || conditionType == GraduationConditionType.SW_CERT_COURSE) {
+            if (majorTypeFilter == MajorTypeFilter.OTHERS) {
+                return GraduationCourseResponse.builder()
+                        .divisionCode(conditionType.name())
+                        .divisionName(conditionType.getDisplayName())
+                        .majors(List.of())
+                        .build();
+            }
+            if (majorTypeFilter == MajorTypeFilter.ALL) {
+                return buildMergedFlagCourseResponse(profile, majors, conditionType);
+            }
+        }
+
         List<StudentMajor> targetMajors = filterMajors(majors, majorTypeFilter);
 
         if (majorTypeFilter == MajorTypeFilter.MULTI && targetMajors.isEmpty()) {
@@ -472,6 +491,55 @@ public class GraduationService {
                 .divisionCode(conditionType.name())
                 .divisionName(conditionType.getDisplayName())
                 .majors(majorCoursesList)
+                .build();
+    }
+
+    // ENGLISH_COURSE/SW_CERT_COURSE + majorType=ALL 전용.
+    // 탭·학과 구분 없이 학생의 전체 영어/SW 강의를 하나로 합산해 단일 MajorCourses로 반환한다.
+    // required는 본전공 스냅샷 기준(영어/SW 요건은 학과 공통이므로 본전공 summary에서 읽는다).
+    // majorType=null: 특정 전공에 귀속되지 않는 전체 합산임을 명시.
+    private GraduationCourseResponse buildMergedFlagCourseResponse(
+            StudentProfile profile,
+            List<StudentMajor> majors,
+            GraduationConditionType conditionType
+    ) {
+        StudentMajor mainMajor = majors.stream()
+                .filter(m -> m.getMajorType() == MajorType.MAIN)
+                .findFirst()
+                .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
+        GraduationAnalysisSummary summary = requireSummary(mainMajor);
+
+        List<StudentCourse> takenCourses;
+        int current;
+        Integer required;
+        if (conditionType == GraduationConditionType.ENGLISH_COURSE) {
+            takenCourses = studentCourseRepository.findByStudentProfileAndCourseIsEnglish(profile);
+            current = takenCourses.size();
+            required = summary.getEnglishRequired();
+        } else {
+            takenCourses = studentCourseRepository.findByStudentProfileAndCourseIsSw(profile);
+            current = takenCourses.stream().mapToInt(StudentCourse::getCredit).sum();
+            required = summary.getSwCertRequired();
+        }
+        boolean satisfied = required == null || current >= required;
+
+        List<CourseInfo> courses = takenCourses.stream()
+                .map(this::toTakenCourseInfo)
+                .sorted(Comparator.comparing(CourseInfo::getName))
+                .toList();
+
+        return GraduationCourseResponse.builder()
+                .divisionCode(conditionType.name())
+                .divisionName(conditionType.getDisplayName())
+                .majors(List.of(MajorCourses.builder()
+                        .majorType(null)
+                        .departmentName(null)
+                        .current(current)
+                        .required(required)
+                        .satisfied(satisfied)
+                        .hasRequiredList(false)
+                        .courses(courses)
+                        .build()))
                 .build();
     }
 
