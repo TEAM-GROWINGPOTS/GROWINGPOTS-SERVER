@@ -587,9 +587,12 @@ public class GraduationService {
     }
 
     // judgeGraduationRequired 결과를 홈 화면 요약 DTO로 변환한다. judgement가 없거나(GE/OTHERS처럼
-    // 학과 자체가 없는 탭) 해당 학과에 독립 졸업요건이 없으면 null을 반환해 FE가 섹션을 안 보여줄 수 있게 한다.
+    // 학과 자체가 없는 탭) 해당 학과에 RequirementCourse 자체가 없으면 null을 반환해 FE가 섹션을 안
+    // 보여줄 수 있게 한다. items().isEmpty()가 아니라 totalRequirementCount()로 판단해야 한다 —
+    // RequirementCourse는 있는데 RequirementCourseItem을 깜빡하고 안 넣은 경우, items()는 비어있지만
+    // 요건 자체는 존재하는 거라 미충족(satisfied=false)으로 정확히 보여줘야지 섹션을 숨기면 안 된다.
     private GraduationRequiredSummary toGraduationRequiredSummary(GraduationRequiredJudgement judgement) {
-        if (judgement == null || judgement.items().isEmpty()) {
+        if (judgement == null || judgement.totalRequirementCount() == 0) {
             return null;
         }
         return GraduationRequiredSummary.builder()
@@ -625,14 +628,22 @@ public class GraduationService {
         Map<Long, Integer> completedCreditByCourseId = takenCourses.stream()
                 .collect(Collectors.toMap(sc -> sc.getCourse().getId(), StudentCourse::getCredit, (a, b) -> a));
 
-        // minCredit이 있으면 학점 합으로, minCount가 있으면 이수 과목 수로 판정한다(둘 다 있는 행은
-        // 현재 데이터엔 없지만, minCredit을 우선한다).
+        // minCredit이 있으면 학점 합으로, minCount가 있으면 이수 과목 수로 판정한다. 둘 다 설정된
+        // row는 아래 루프에서 바로 예외를 던지므로 여기까지 오면 정확히 하나만 설정된 상태다.
         // 안내 문구(unmetDescriptions)는 학점 기준 조건만 담는다. 과목수 기준 조건(예: 맨손체조)은
         // 어차피 과목 자체가 이수/미이수 카드로 리스트에 나오기 때문에 문구로 중복해서 보여줄 필요가 없다.
         boolean satisfied = true;
         int satisfiedCount = 0;
         List<String> unmetDescriptions = new ArrayList<>();
         for (RequirementCourse rc : requirementCourses) {
+            // minCredit/minCount는 시드 데이터로 직접 들어가서(Java 빌더를 안 거침) 엔티티 레벨 검증으로는
+            // 못 막는다. 둘 다 설정된 row가 들어오면 어느 쪽이 무시됐는지 모른 채 조용히 잘못 판정하는
+            // 대신, 여기서 바로 예외를 던져서 데이터 실수를 즉시 드러낸다.
+            if (rc.getMinCredit() > 0 && rc.getMinCount() > 0) {
+                throw new IllegalStateException(
+                        "RequirementCourse(id=" + rc.getId() + ")에 minCredit/minCount가 둘 다 설정돼 있습니다. "
+                                + "하나만 설정해야 합니다.");
+            }
             List<RequirementCourseItem> items = itemsByRequirement.getOrDefault(rc.getId(), List.of());
             boolean byCredit = rc.getMinCredit() > 0;
             int current = byCredit

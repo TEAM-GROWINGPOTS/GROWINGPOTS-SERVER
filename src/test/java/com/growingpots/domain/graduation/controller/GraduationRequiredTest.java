@@ -213,6 +213,61 @@ class GraduationRequiredTest {
                 .andExpect(jsonPath("$.data.graduationRequired.unmetDescriptions.length()").value(0));
     }
 
+    // RequirementCourse row는 있는데 RequirementCourseItem(연결 과목)을 안 넣은 경우.
+    // items()만 보면 비어있어서 "요건 없음"으로 오판할 수 있는데, totalRequirementCount()로
+    // 판단해야 이 경우도 정확히 "요건 있음 + 미충족"으로 나온다.
+    @Test
+    void RequirementCourse는_있는데_연결과목이_없으면_요건이_있는_것으로_취급되고_미충족이다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-9205").build());
+        Department department = departmentRepository.save(Department.builder()
+                .school(school).college("체육대학").name("스포츠의학과-9205").build());
+        Member member = memberRepository.save(Member.builder()
+                .nickname("테스트유저").oauthProvider(OauthProvider.KAKAO).oauthId("9205").email(null).build());
+        StudentProfile profile = studentProfileRepository.save(StudentProfile.builder()
+                .member(member).school(school).department(department).admissionYear(2023).build());
+        StudentMajor major = studentMajorRepository.save(StudentMajor.builder()
+                .studentProfile(profile).department(department).majorType(MajorType.MAIN).build());
+        graduationAnalysisSummaryRepository.save(GraduationAnalysisSummary.builder().studentMajor(major).build());
+
+        // RequirementCourseItem을 아예 안 만듦 (연결 과목 누락 시나리오)
+        requirementCourseRepository.save(RequirementCourse.builder()
+                .department(department).division(null).name("졸업필수(미설정)")
+                .baseYear(2019).minCredit(4).minCount(0).build());
+
+        mockMvc.perform(get("/api/v1/students/me/graduation")
+                        .param("majorType", "PRIMARY")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.graduationRequired").exists())
+                .andExpect(jsonPath("$.data.graduationRequired.satisfied").value(false))
+                .andExpect(jsonPath("$.data.graduatable").value(false));
+    }
+
+    // minCredit/minCount가 동시에 설정된 잘못된 시드 데이터가 들어오면, 어느 쪽을 쓸지 조용히
+    // 정하지 말고 바로 실패해야 한다(데이터 실수를 즉시 드러내기 위함).
+    @Test
+    void minCredit과_minCount가_동시에_설정되면_예외가_발생한다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-9206").build());
+        Department department = departmentRepository.save(Department.builder()
+                .school(school).college("체육대학").name("스포츠의학과-9206").build());
+        Member member = memberRepository.save(Member.builder()
+                .nickname("테스트유저").oauthProvider(OauthProvider.KAKAO).oauthId("9206").email(null).build());
+        StudentProfile profile = studentProfileRepository.save(StudentProfile.builder()
+                .member(member).school(school).department(department).admissionYear(2023).build());
+        StudentMajor major = studentMajorRepository.save(StudentMajor.builder()
+                .studentProfile(profile).department(department).majorType(MajorType.MAIN).build());
+        graduationAnalysisSummaryRepository.save(GraduationAnalysisSummary.builder().studentMajor(major).build());
+
+        requirementCourseRepository.save(RequirementCourse.builder()
+                .department(department).division(null).name("잘못된요건")
+                .baseYear(2019).minCredit(4).minCount(1).build());
+
+        mockMvc.perform(get("/api/v1/students/me/graduation")
+                        .param("majorType", "PRIMARY")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().is5xxServerError());
+    }
+
     @Test
     void 졸업필수_요건이_없는_학과는_해당_섹션이_비어있다() throws Exception {
         School school = schoolRepository.save(School.builder().name("경희대학교-9203").build());
