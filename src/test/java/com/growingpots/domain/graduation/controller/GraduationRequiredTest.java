@@ -465,4 +465,34 @@ class GraduationRequiredTest {
                 .andExpect(jsonPath("$.data.sections.majors[1].graduationRequired.satisfied").value(true))
                 .andExpect(jsonPath("$.data.sections.majors[1].graduationRequired.items[?(@.name=='전문실기')].current").value(2));
     }
+
+    // GENERAL_ELECTIVE(기타)는 요구 학점 기준 자체가 없어(required=null) 예전엔 satisfied=true로
+    // 나왔는데, 졸업 요건이 아니라 참고용 집계라 "충족" 배지를 안 보여주기로 해서 무조건 false로
+    // 고정했다. OTHERS 탭과 드릴다운(GENERAL_ELECTIVE/courses) 둘 다 확인한다.
+    @Test
+    void 기타_이수구분은_학점과_무관하게_satisfied가_항상_false다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-9210").build());
+        Department department = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("화학공학과-9210").build());
+        Member member = memberRepository.save(Member.builder()
+                .nickname("테스트유저").oauthProvider(OauthProvider.KAKAO).oauthId("9210").email(null).build());
+        StudentProfile profile = studentProfileRepository.save(StudentProfile.builder()
+                .member(member).school(school).department(department).admissionYear(2023).build());
+        StudentMajor major = studentMajorRepository.save(StudentMajor.builder()
+                .studentProfile(profile).department(department).majorType(MajorType.MAIN).build());
+        graduationAnalysisSummaryRepository.save(GraduationAnalysisSummary.builder().studentMajor(major).build());
+
+        mockMvc.perform(get("/api/v1/students/me/graduation")
+                        .param("majorType", "OTHERS")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.conditions[0].code").value("GENERAL_ELECTIVE"))
+                .andExpect(jsonPath("$.data.conditions[0].satisfied").value(false));
+
+        mockMvc.perform(get("/api/v1/students/me/graduation/GENERAL_ELECTIVE/courses")
+                        .param("department", "화학공학과-9210")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.majors[0].satisfied").value(false));
+    }
 }

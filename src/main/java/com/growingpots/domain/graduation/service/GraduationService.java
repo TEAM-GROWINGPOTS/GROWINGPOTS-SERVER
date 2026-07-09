@@ -376,7 +376,10 @@ public class GraduationService {
     private ConditionInfo toConditionInfoFromSnapshot(GraduationConditionType type, GraduationAnalysisSummary summary) {
         int current = type.getCurrentExtractor().applyAsInt(summary);
         Integer required = type.getRequiredExtractor() != null ? type.getRequiredExtractor().apply(summary) : null;
-        boolean satisfied = required == null || current >= required;
+        // GENERAL_ELECTIVE(기타)는 요구 학점 자체가 없어(required=null) 항상 satisfied=true로 계산되던
+        // 걸 요청에 따라 무조건 false로 고정한다 - 졸업 요건이 아니라 참고용 집계라 "충족" 배지를 아예
+        // 안 보여주기 위함.
+        boolean satisfied = type != GraduationConditionType.GENERAL_ELECTIVE && (required == null || current >= required);
         return ConditionInfo.builder()
                 .code(type.name())
                 .name(type.getDisplayName())
@@ -630,7 +633,11 @@ public class GraduationService {
             areaResult = computeDistributedGeAreas(takenCourses, List.of(), profile);
         }
 
-        boolean satisfied = required == null || current >= required;
+        // GENERAL_ELECTIVE(기타)는 요구 학점 자체가 없어(required=null) 항상 satisfied=true로 계산되던
+        // 걸 요청에 따라 무조건 false로 고정한다 - 졸업 요건이 아니라 참고용 집계라 "충족" 배지를 아예
+        // 안 보여주기 위함.
+        boolean satisfied = conditionType != GraduationConditionType.GENERAL_ELECTIVE
+                && (required == null || current >= required);
         if (areaResult != null) {
             satisfied = satisfied && areaResult.satisfied();
         }

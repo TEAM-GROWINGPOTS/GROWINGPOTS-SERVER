@@ -100,7 +100,7 @@ public class GraduationResponse {
         @Schema(description = "단위", allowableValues = {"CREDITS", "COURSES"})
         private final String unit;
 
-        @Schema(description = "요건 충족 여부")
+        @Schema(description = "요건 충족 여부. GENERAL_ELECTIVE는 요구 기준 자체가 없어 항상 false로 고정")
         private final boolean satisfied;
 
         @Schema(description = "원형 차트 포함 여부. GENERAL_ELECTIVE는 false (차트 8등분에서 제외)")

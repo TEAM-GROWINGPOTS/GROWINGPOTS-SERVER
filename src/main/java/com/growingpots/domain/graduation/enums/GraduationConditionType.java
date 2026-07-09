@@ -34,7 +34,8 @@ public enum GraduationConditionType {
             GraduationAnalysisSummary::getFreeGeCurrent,
             GraduationAnalysisSummary::getFreeGeRequired),
 
-    // required 컬럼 없음 → required=null, satisfied=true 고정. 원형 차트 8등분에서 제외(chartTarget=false)
+    // required 컬럼 없음(required=null). satisfied는 GraduationService에서 무조건 false로 고정한다
+    // (졸업 요건이 아니라 참고용 집계라 "충족" 배지를 안 보여주기 위함). 원형 차트 8등분에서 제외(chartTarget=false)
     GENERAL_ELECTIVE("기타", "CREDITS", false, false,
             GraduationAnalysisSummary::getGeneralElectiveCurrent,
             null),
