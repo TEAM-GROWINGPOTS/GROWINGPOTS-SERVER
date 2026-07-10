@@ -248,4 +248,47 @@ class PlannerSaveTest {
                 .count();
         assertThat(simulationCount).isEqualTo(1);
     }
+
+    @Test
+    void 같은_학기_내_versionOrder가_중복되면_400을_반환한다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-6604").build());
+        Department cs = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과").build());
+        StudentProfile student = onboardedStudent("6604", cs);
+
+        String requestBody = """
+                {
+                  "plannerSimulationId": null,
+                  "terms": [
+                    {
+                      "yearLevel": 2,
+                      "semester": 1,
+                      "versions": [
+                        {
+                          "versionNo": 1,
+                          "name": "폴더 1",
+                          "isSelected": true,
+                          "versionOrder": 0,
+                          "items": []
+                        },
+                        {
+                          "versionNo": 2,
+                          "name": "폴더 2",
+                          "isSelected": false,
+                          "versionOrder": 0,
+                          "items": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+                """;
+
+        mockMvc.perform(put("/api/v1/planner")
+                        .with(authentication(authenticationOf(student.getMember().getId())))
+                        .contentType("application/json")
+                        .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("PLAN_004"));
+    }
 }
