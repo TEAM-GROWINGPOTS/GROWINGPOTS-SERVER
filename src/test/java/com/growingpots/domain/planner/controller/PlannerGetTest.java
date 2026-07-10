@@ -137,12 +137,10 @@ class PlannerGetTest {
                 .andExpect(jsonPath("$.data.completedTerms[0].name").value("1학년 1학기"))
                 .andExpect(jsonPath("$.data.completedTerms[0].status").value("COMPLETED"))
                 .andExpect(jsonPath("$.data.completedTerms[0].totalCredit").value(3))
-                .andExpect(jsonPath("$.data.completedTerms[0].locked").value(true))
                 .andExpect(jsonPath("$.data.completedTerms[0].courses[0].departmentName").value("미디어학과"))
                 .andExpect(jsonPath("$.data.completedTerms[0].courses[0].divisionName").value("전공필수"))
                 .andExpect(jsonPath("$.data.completedTerms[1].semester").value(2))
                 .andExpect(jsonPath("$.data.completedTerms[1].status").value("IN_PROGRESS"))
-                .andExpect(jsonPath("$.data.completedTerms[1].locked").value(true))
                 .andExpect(jsonPath("$.data.completedTerms[1].courses[0].courseId").doesNotExist())
                 .andExpect(jsonPath("$.data.completedTerms[1].courses[0].courseName").value("연극문헌과연기"));
     }
@@ -233,7 +231,7 @@ class PlannerGetTest {
     }
 
     @Test
-    void 계획한_학기는_시뮬레이션_트리로_반환되고_locked는_항상_false다() throws Exception {
+    void 계획한_학기는_시뮬레이션_트리로_반환된다() throws Exception {
         School school = schoolRepository.save(School.builder().name("경희대학교-7703").build());
         Department iem = departmentRepository.save(Department.builder()
                 .school(school).college("공과대학").name("산업경영공학과").build());
@@ -253,9 +251,9 @@ class PlannerGetTest {
         PlannerSimulation simulation = plannerSimulationRepository.save(PlannerSimulation.builder()
                 .studentProfile(profile).name("내 플래너").build());
         PlannerTerm term = plannerTermRepository.save(PlannerTerm.builder()
-                .plannerSimulation(simulation).yearLevel(2).semester(1).termOrder(3).build());
+                .plannerSimulation(simulation).yearLevel(2).semester(1).build());
         PlannerTermVersion version = plannerTermVersionRepository.save(PlannerTermVersion.builder()
-                .plannerTerm(term).versionNo(1).name("폴더 1").isSelected(true).build());
+                .plannerTerm(term).versionNo(1).name("폴더 1").isSelected(true).versionOrder(0).build());
         plannerVersionItemRepository.save(PlannerVersionItem.builder()
                 .plannerTermVersion(version).course(course1).plannedDivision(majorRequired)
                 .credit(3).positionOrder(0).build());
@@ -269,7 +267,6 @@ class PlannerGetTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.plannedTerms.length()").value(1))
                 .andExpect(jsonPath("$.data.plannedTerms[0].plannerTermId").value(term.getId()))
-                .andExpect(jsonPath("$.data.plannedTerms[0].locked").value(false))
                 .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].isSelected").value(true))
                 .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].totalCredit").value(5))
                 .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].courses.length()").value(2))
