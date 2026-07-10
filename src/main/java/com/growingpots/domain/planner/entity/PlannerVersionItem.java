@@ -44,7 +44,7 @@ public class PlannerVersionItem extends BaseTimeEntity {
     private int credit;
 
     @Column(nullable = false)
-    private int positionOrder;
+    private int coursePositionOrder;
 
     @Builder
     private PlannerVersionItem(
@@ -52,12 +52,12 @@ public class PlannerVersionItem extends BaseTimeEntity {
             Course course,
             Division plannedDivision,
             int credit,
-            int positionOrder
+            int coursePositionOrder
     ) {
         this.plannerTermVersion = plannerTermVersion;
         this.course = course;
         this.plannedDivision = plannedDivision;
         this.credit = credit;
-        this.positionOrder = positionOrder;
+        this.coursePositionOrder = coursePositionOrder;
     }
 }

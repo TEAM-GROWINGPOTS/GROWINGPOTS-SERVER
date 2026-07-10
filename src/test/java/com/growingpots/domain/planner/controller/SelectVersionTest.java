@@ -59,12 +59,12 @@ class SelectVersionTest {
 
     private PlannerTerm createTerm(PlannerSimulation simulation, int yearLevel, int semester) {
         return plannerTermRepository.save(PlannerTerm.builder()
-                .plannerSimulation(simulation).yearLevel(yearLevel).semester(semester).termOrder(1).build());
+                .plannerSimulation(simulation).yearLevel(yearLevel).semester(semester).build());
     }
 
     private PlannerTermVersion createVersion(PlannerTerm term, int versionNo, boolean isSelected) {
         return plannerTermVersionRepository.save(PlannerTermVersion.builder()
-                .plannerTerm(term).versionNo(versionNo).name(null).isSelected(isSelected).build());
+                .plannerTerm(term).versionNo(versionNo).name(null).isSelected(isSelected).versionOrder(0).build());
     }
 
     private Authentication authOf(Long memberId) {

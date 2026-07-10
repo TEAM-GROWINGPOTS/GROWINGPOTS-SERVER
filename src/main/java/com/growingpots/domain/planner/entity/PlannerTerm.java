@@ -34,14 +34,10 @@ public class PlannerTerm extends BaseTimeEntity {
     @Column(nullable = false)
     private int semester;
 
-    @Column(nullable = false)
-    private int termOrder;
-
     @Builder
-    private PlannerTerm(PlannerSimulation plannerSimulation, int yearLevel, int semester, int termOrder) {
+    private PlannerTerm(PlannerSimulation plannerSimulation, int yearLevel, int semester) {
         this.plannerSimulation = plannerSimulation;
         this.yearLevel = yearLevel;
         this.semester = semester;
-        this.termOrder = termOrder;
     }
 }

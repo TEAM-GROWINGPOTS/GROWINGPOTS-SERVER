@@ -35,11 +35,15 @@ public class PlannerTermVersion extends BaseTimeEntity {
     @Column(nullable = false)
     private boolean isSelected;
 
+    @Column(nullable = false)
+    private int versionOrder;
+
     @Builder
-    private PlannerTermVersion(PlannerTerm plannerTerm, int versionNo, String name, boolean isSelected) {
+    private PlannerTermVersion(PlannerTerm plannerTerm, int versionNo, String name, boolean isSelected, int versionOrder) {
         this.plannerTerm = plannerTerm;
         this.versionNo = versionNo;
         this.name = name;
         this.isSelected = isSelected;
+        this.versionOrder = versionOrder;
     }
 }

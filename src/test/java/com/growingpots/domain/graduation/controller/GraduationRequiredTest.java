@@ -105,8 +105,9 @@ class GraduationRequiredTest {
     }
 
     // 스포츠의학과 학생 하나를 만들고, 전문실기1~6(2학점씩) + 맨손체조(1학점) 요건과 과목을 세팅한다.
-    // 요건: "전문실기 2과목 이상"(minCount=2), "맨손체조"(minCount=1)
-    private StudentProfile setUpSportsScienceStudent(String oauthId) {
+    // 요건: "전문실기 2과목 이상"(minCount=2), "맨손체조"(minCount=1). 본전공 StudentMajor를 반환한다
+    // (studentMajorId 쿼리 파라미터 테스트용 - major.getStudentProfile()로 StudentProfile도 얻을 수 있음).
+    private StudentMajor setUpSportsScienceStudent(String oauthId) {
         School school = schoolRepository.save(School.builder().name("경희대학교-" + oauthId).build());
         Department department = departmentRepository.save(Department.builder()
                 .school(school).college("체육대학").name("스포츠의학과-" + oauthId).build());
@@ -140,7 +141,7 @@ class GraduationRequiredTest {
         requirementCourseItemRepository.save(RequirementCourseItem.builder()
                 .requirementCourse(gymnastics).course(gym).build());
 
-        return profile;
+        return major;
     }
 
     private void completeCourse(StudentProfile profile, String courseCode, int credit) {
@@ -154,13 +155,14 @@ class GraduationRequiredTest {
 
     @Test
     void 전문실기_2과목과_맨손체조를_모두_이수하면_졸업필수를_만족한다() throws Exception {
-        StudentProfile profile = setUpSportsScienceStudent("9201");
+        StudentMajor sportsMajor = setUpSportsScienceStudent("9201");
+        StudentProfile profile = sportsMajor.getStudentProfile();
         completeCourse(profile, "CPE201", 2);
         completeCourse(profile, "CPE202", 2);
         completeCourse(profile, "CPE103", 1);
 
         mockMvc.perform(get("/api/v1/students/me/graduation/GRADUATION_REQUIRED/courses")
-                        .param("majorType", "PRIMARY")
+                        .param("studentMajorId", String.valueOf(sportsMajor.getId()))
                         .with(authentication(authenticationOf(profile.getMember().getId()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.majors[0].satisfied").value(true))
@@ -171,7 +173,7 @@ class GraduationRequiredTest {
                 .andExpect(jsonPath("$.data.majors[0].courses[?(@.name=='맨손체조')].taken").value(true));
 
         mockMvc.perform(get("/api/v1/students/me/graduation")
-                        .param("majorType", "PRIMARY")
+                        .param("studentMajorId", String.valueOf(sportsMajor.getId()))
                         .with(authentication(authenticationOf(profile.getMember().getId()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.graduatable").value(true))
@@ -188,11 +190,12 @@ class GraduationRequiredTest {
 
     @Test
     void 전문실기_1과목만_이수하고_맨손체조_미이수면_졸업필수를_만족하지_못한다() throws Exception {
-        StudentProfile profile = setUpSportsScienceStudent("9202");
+        StudentMajor sportsMajor = setUpSportsScienceStudent("9202");
+        StudentProfile profile = sportsMajor.getStudentProfile();
         completeCourse(profile, "CPE201", 2);
 
         mockMvc.perform(get("/api/v1/students/me/graduation/GRADUATION_REQUIRED/courses")
-                        .param("majorType", "PRIMARY")
+                        .param("studentMajorId", String.valueOf(sportsMajor.getId()))
                         .with(authentication(authenticationOf(profile.getMember().getId()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.majors[0].satisfied").value(false))
@@ -204,7 +207,7 @@ class GraduationRequiredTest {
                 .andExpect(jsonPath("$.data.majors[0].courses[?(@.name=='맨손체조')].taken").value(false));
 
         mockMvc.perform(get("/api/v1/students/me/graduation")
-                        .param("majorType", "PRIMARY")
+                        .param("studentMajorId", String.valueOf(sportsMajor.getId()))
                         .with(authentication(authenticationOf(profile.getMember().getId()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.graduatable").value(false))
@@ -224,12 +227,13 @@ class GraduationRequiredTest {
     // 반영돼 satisfied=false와 모순되지 않아야 한다(1/2, unmetDescriptions는 빈 리스트).
     @Test
     void 전문실기는_만족하고_맨손체조만_미이수면_current_required가_만족여부와_모순되지_않는다() throws Exception {
-        StudentProfile profile = setUpSportsScienceStudent("9204");
+        StudentMajor sportsMajor = setUpSportsScienceStudent("9204");
+        StudentProfile profile = sportsMajor.getStudentProfile();
         completeCourse(profile, "CPE201", 2);
         completeCourse(profile, "CPE202", 2);
 
         mockMvc.perform(get("/api/v1/students/me/graduation/GRADUATION_REQUIRED/courses")
-                        .param("majorType", "PRIMARY")
+                        .param("studentMajorId", String.valueOf(sportsMajor.getId()))
                         .with(authentication(authenticationOf(profile.getMember().getId()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.majors[0].satisfied").value(false))
@@ -238,7 +242,7 @@ class GraduationRequiredTest {
                 .andExpect(jsonPath("$.data.majors[0].unmetDescriptions.length()").value(0));
 
         mockMvc.perform(get("/api/v1/students/me/graduation")
-                        .param("majorType", "PRIMARY")
+                        .param("studentMajorId", String.valueOf(sportsMajor.getId()))
                         .with(authentication(authenticationOf(profile.getMember().getId()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.graduatable").value(false))
@@ -268,7 +272,7 @@ class GraduationRequiredTest {
                 .baseYear(2019).minCredit(4).minCount(0).build());
 
         mockMvc.perform(get("/api/v1/students/me/graduation")
-                        .param("majorType", "PRIMARY")
+                        .param("studentMajorId", String.valueOf(major.getId()))
                         .with(authentication(authenticationOf(profile.getMember().getId()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.graduationRequired").exists())
@@ -297,13 +301,13 @@ class GraduationRequiredTest {
                 .baseYear(2019).minCredit(4).minCount(1).build());
 
         mockMvc.perform(get("/api/v1/students/me/graduation")
-                        .param("majorType", "PRIMARY")
+                        .param("studentMajorId", String.valueOf(major.getId()))
                         .with(authentication(authenticationOf(profile.getMember().getId()))))
                 .andExpect(status().is5xxServerError());
     }
 
-    // graduationRequired는 이제 PRIMARY/MULTI 탭에서 요건이 없어도 항상 채워지고, FE는
-    // hasGraduationRequired 플래그로 탭 노출 여부를 판단한다(null 체크 대신).
+    // graduationRequired는 그 학과에 실제 졸업필수 요건이 있을 때만 채워지고(예: 스포츠의학과),
+    // 없으면 null - FE는 null 체크로 탭/카드 노출 여부를 판단한다.
     @Test
     void 졸업필수_요건이_없는_학과는_해당_섹션이_비어있다() throws Exception {
         School school = schoolRepository.save(School.builder().name("경희대학교-9203").build());
@@ -318,25 +322,25 @@ class GraduationRequiredTest {
         graduationAnalysisSummaryRepository.save(GraduationAnalysisSummary.builder().studentMajor(major).build());
 
         mockMvc.perform(get("/api/v1/students/me/graduation/GRADUATION_REQUIRED/courses")
-                        .param("majorType", "PRIMARY")
+                        .param("studentMajorId", String.valueOf(major.getId()))
                         .with(authentication(authenticationOf(profile.getMember().getId()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.majors[0].hasRequiredList").value(false))
                 .andExpect(jsonPath("$.data.majors[0].courses.length()").value(0));
 
         mockMvc.perform(get("/api/v1/students/me/graduation")
-                        .param("majorType", "PRIMARY")
+                        .param("studentMajorId", String.valueOf(major.getId()))
                         .with(authentication(authenticationOf(profile.getMember().getId()))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.graduationRequired").exists())
-                .andExpect(jsonPath("$.data.graduationRequired.hasGraduationRequired").value(false));
+                .andExpect(jsonPath("$.data.graduationRequired").doesNotExist());
     }
 
     // 전문실기 1과목만 완료하고 나머지 1과목을 플래너(선택된 버전)에 담아둔 경우,
     // source=PLANNED 조회 시 그 계획 과목까지 반영해서 전문실기가 충족돼야 한다.
     @Test
     void PLANNED_모드에서는_플래너에_담은_전문실기_과목도_반영된다() throws Exception {
-        StudentProfile profile = setUpSportsScienceStudent("9207");
+        StudentMajor sportsMajor = setUpSportsScienceStudent("9207");
+        StudentProfile profile = sportsMajor.getStudentProfile();
         completeCourse(profile, "CPE201", 2);
 
         Course cpe202 = courseRepository.findBySchool(profile.getSchool()).stream()
@@ -345,16 +349,16 @@ class GraduationRequiredTest {
         PlannerSimulation simulation = plannerSimulationRepository.save(PlannerSimulation.builder()
                 .studentProfile(profile).name("내 플래너").build());
         PlannerTerm term = plannerTermRepository.save(PlannerTerm.builder()
-                .plannerSimulation(simulation).yearLevel(2).semester(1).termOrder(3).build());
+                .plannerSimulation(simulation).yearLevel(2).semester(1).build());
         PlannerTermVersion version = plannerTermVersionRepository.save(PlannerTermVersion.builder()
-                .plannerTerm(term).versionNo(1).name("폴더 1").isSelected(true).build());
+                .plannerTerm(term).versionNo(1).name("폴더 1").isSelected(true).versionOrder(0).build());
         plannerVersionItemRepository.save(PlannerVersionItem.builder()
                 .plannerTermVersion(version).course(cpe202).plannedDivision(null)
-                .credit(2).positionOrder(0).build());
+                .credit(2).coursePositionOrder(0).build());
 
         // COMPLETED면 계획 과목이 반영되지 않아 여전히 미충족
         mockMvc.perform(get("/api/v1/students/me/graduation")
-                        .param("majorType", "PRIMARY").param("source", "COMPLETED")
+                        .param("studentMajorId", String.valueOf(sportsMajor.getId())).param("source", "COMPLETED")
                         .with(authentication(authenticationOf(profile.getMember().getId()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.graduationRequired.satisfied").value(false))
@@ -362,11 +366,139 @@ class GraduationRequiredTest {
 
         // PLANNED면 계획 과목(CPE202)까지 더해져 2/2로 충족
         mockMvc.perform(get("/api/v1/students/me/graduation")
-                        .param("majorType", "PRIMARY").param("source", "PLANNED")
+                        .param("studentMajorId", String.valueOf(sportsMajor.getId())).param("source", "PLANNED")
                         .with(authentication(authenticationOf(profile.getMember().getId()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='전문실기')].current").value(2))
                 .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='전문실기')].satisfied").value(true))
                 .andExpect(jsonPath("$.data.graduationRequired.totalCredit").value(4));
+    }
+
+    // 예전엔 majors.stream().filter(DOUBLE).findFirst()로 첫 번째 복수전공만 쓰고 나머지는 조용히
+    // 버렸던 버그의 회귀 테스트. 본전공 1개 + 복수전공 2개인 학생이 majorType=ALL로 조회하면
+    // sections.majors에 3개 전공이 전부(누락 없이) 나와야 한다.
+    @Test
+    void 복수전공을_여러_개_가진_학생은_ALL_조회_시_전공이_전부_나온다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-9208").build());
+        Department mainDept = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과-9208").build());
+        Department doubleDept1 = departmentRepository.save(Department.builder()
+                .school(school).college("경영대학").name("경영학과-9208").build());
+        Department doubleDept2 = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("화학공학과-9208").build());
+        Member member = memberRepository.save(Member.builder()
+                .nickname("테스트유저").oauthProvider(OauthProvider.KAKAO).oauthId("9208").email(null).build());
+        StudentProfile profile = studentProfileRepository.save(StudentProfile.builder()
+                .member(member).school(school).department(mainDept).admissionYear(2023).build());
+
+        StudentMajor main = studentMajorRepository.save(StudentMajor.builder()
+                .studentProfile(profile).department(mainDept).majorType(MajorType.MAIN).build());
+        StudentMajor double1 = studentMajorRepository.save(StudentMajor.builder()
+                .studentProfile(profile).department(doubleDept1).majorType(MajorType.DOUBLE).build());
+        StudentMajor double2 = studentMajorRepository.save(StudentMajor.builder()
+                .studentProfile(profile).department(doubleDept2).majorType(MajorType.DOUBLE).build());
+        graduationAnalysisSummaryRepository.save(GraduationAnalysisSummary.builder().studentMajor(main).build());
+        graduationAnalysisSummaryRepository.save(GraduationAnalysisSummary.builder().studentMajor(double1).build());
+        graduationAnalysisSummaryRepository.save(GraduationAnalysisSummary.builder().studentMajor(double2).build());
+
+        mockMvc.perform(get("/api/v1/students/me/graduation")
+                        .param("majorType", "ALL")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.sections.majors.length()").value(3))
+                .andExpect(jsonPath("$.data.sections.majors[?(@.majorName=='컴퓨터공학과-9208')].majorType").value("MAIN"))
+                .andExpect(jsonPath("$.data.sections.majors[?(@.majorName=='경영학과-9208')].majorType").value("DOUBLE"))
+                .andExpect(jsonPath("$.data.sections.majors[?(@.majorName=='화학공학과-9208')].majorType").value("DOUBLE"))
+                // 셋 다 졸업필수 요건이 없는 학과라 graduationRequired가 전공별로 하나도 없어야 한다.
+                // JsonPath 필터([?(...)])는 매칭 결과를 배열로 감싸서 null이 [null]로 나오는 바람에
+                // doesNotExist()가 안 먹어서, 등록 순서를 아는 인덱스로 직접 접근한다
+                // (0=컴퓨터공학과 MAIN, 1=경영학과 DOUBLE, 2=화학공학과 DOUBLE).
+                .andExpect(jsonPath("$.data.sections.majors[0].graduationRequired").doesNotExist())
+                .andExpect(jsonPath("$.data.sections.majors[1].graduationRequired").doesNotExist())
+                .andExpect(jsonPath("$.data.sections.majors[2].graduationRequired").doesNotExist());
+
+        // studentMajorId 파라미터로 복수전공 중 하나(두 번째로 등록된 것)만 콕 집어 조회도 되는지 확인
+        mockMvc.perform(get("/api/v1/students/me/graduation")
+                        .param("studentMajorId", String.valueOf(double2.getId()))
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.sections").doesNotExist())
+                .andExpect(jsonPath("$.data.conditions").isArray());
+    }
+
+    // 복수전공 중 하나(본전공이 아니어도)에만 졸업필수 요건이 있으면, majors 배열에서 그 전공
+    // 항목에만 graduationRequired가 채워지고 나머지 전공은 null이어야 한다.
+    @Test
+    void 복수전공_중_하나에만_졸업필수가_있으면_그_전공에만_반영된다() throws Exception {
+        StudentMajor sportsMajorSeed = setUpSportsScienceStudent("9209");
+        StudentProfile sportsProfile = sportsMajorSeed.getStudentProfile();
+        completeCourse(sportsProfile, "CPE201", 2);
+        completeCourse(sportsProfile, "CPE202", 2);
+        completeCourse(sportsProfile, "CPE103", 1);
+
+        Department mainDept = departmentRepository.save(Department.builder()
+                .school(sportsProfile.getSchool()).college("공과대학").name("화학공학과-9209").build());
+        Department sportsDept = departmentRepository.findAll().stream()
+                .filter(d -> "스포츠의학과-9209".equals(d.getName())).findFirst().orElseThrow();
+
+        // 스포츠의학과를 본전공이 아니라 두 번째 복수전공으로 등록해, majors 배열 순서와 무관하게
+        // 잘 찾아내는지 확인한다. 기존 MAIN 학생전공(스포츠의학과)을 DOUBLE로 남겨두는 대신, 별도
+        // 학생을 새로 만들어 화학공학과를 본전공으로 하고 스포츠의학과를 복수전공으로 추가한다.
+        Member member = memberRepository.save(Member.builder()
+                .nickname("테스트유저").oauthProvider(OauthProvider.KAKAO).oauthId("9209b").email(null).build());
+        StudentProfile profile = studentProfileRepository.save(StudentProfile.builder()
+                .member(member).school(sportsProfile.getSchool()).department(mainDept).admissionYear(2023).build());
+        StudentMajor main = studentMajorRepository.save(StudentMajor.builder()
+                .studentProfile(profile).department(mainDept).majorType(MajorType.MAIN).build());
+        StudentMajor sportsDouble = studentMajorRepository.save(StudentMajor.builder()
+                .studentProfile(profile).department(sportsDept).majorType(MajorType.DOUBLE).build());
+        graduationAnalysisSummaryRepository.save(GraduationAnalysisSummary.builder().studentMajor(main).build());
+        graduationAnalysisSummaryRepository.save(GraduationAnalysisSummary.builder().studentMajor(sportsDouble).build());
+        completeCourse(profile, "CPE201", 2);
+        completeCourse(profile, "CPE202", 2);
+        completeCourse(profile, "CPE103", 1);
+
+        mockMvc.perform(get("/api/v1/students/me/graduation")
+                        .param("majorType", "ALL")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.sections.majors.length()").value(2))
+                // 0=화학공학과(MAIN, 요건 없음), 1=스포츠의학과(DOUBLE, 요건 있음)
+                .andExpect(jsonPath("$.data.sections.majors[0].majorName").value("화학공학과-9209"))
+                .andExpect(jsonPath("$.data.sections.majors[0].graduationRequired").doesNotExist())
+                .andExpect(jsonPath("$.data.sections.majors[1].majorName").value("스포츠의학과-9209"))
+                .andExpect(jsonPath("$.data.sections.majors[1].graduationRequired.hasGraduationRequired").value(true))
+                .andExpect(jsonPath("$.data.sections.majors[1].graduationRequired.satisfied").value(true))
+                .andExpect(jsonPath("$.data.sections.majors[1].graduationRequired.items[?(@.name=='전문실기')].current").value(2));
+    }
+
+    // GENERAL_ELECTIVE(기타)는 요구 학점 기준 자체가 없어(required=null) 예전엔 satisfied=true로
+    // 나왔는데, 졸업 요건이 아니라 참고용 집계라 "충족" 배지를 안 보여주기로 해서 무조건 false로
+    // 고정했다. OTHERS 탭과 드릴다운(GENERAL_ELECTIVE/courses) 둘 다 확인한다.
+    @Test
+    void 기타_이수구분은_학점과_무관하게_satisfied가_항상_false다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-9210").build());
+        Department department = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("화학공학과-9210").build());
+        Member member = memberRepository.save(Member.builder()
+                .nickname("테스트유저").oauthProvider(OauthProvider.KAKAO).oauthId("9210").email(null).build());
+        StudentProfile profile = studentProfileRepository.save(StudentProfile.builder()
+                .member(member).school(school).department(department).admissionYear(2023).build());
+        StudentMajor major = studentMajorRepository.save(StudentMajor.builder()
+                .studentProfile(profile).department(department).majorType(MajorType.MAIN).build());
+        graduationAnalysisSummaryRepository.save(GraduationAnalysisSummary.builder().studentMajor(major).build());
+
+        mockMvc.perform(get("/api/v1/students/me/graduation")
+                        .param("majorType", "OTHERS")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.conditions[0].code").value("GENERAL_ELECTIVE"))
+                .andExpect(jsonPath("$.data.conditions[0].satisfied").value(false));
+
+        mockMvc.perform(get("/api/v1/students/me/graduation/GENERAL_ELECTIVE/courses")
+                        .param("studentMajorId", String.valueOf(major.getId()))
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.majors[0].satisfied").value(false));
     }
 }

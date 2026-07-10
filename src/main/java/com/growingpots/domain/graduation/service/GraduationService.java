@@ -86,32 +86,17 @@ public class GraduationService {
     private static final List<String> DISTRIBUTED_GE_AREA_CODES =
             List.of("AREA_1", "AREA_2", "AREA_3", "AREA_4", "AREA_5");
 
+    // 응답 조합 목적의 내부 구분자. 공개 API의 MajorTypeFilter(ALL/GE/OTHERS)와 별개로, "전공 하나"를
+    // 본전공/복수전공 구분 없이 균일하게 다루기 위해 MAJOR로 통일한다(예전 PRIMARY/MULTI 이분법을 대체).
+    private enum ConditionsTab { MAJOR, GE, OTHERS }
+
     @Transactional(readOnly = true)
-    public GraduationResponse getGraduation(Long memberId, MajorTypeFilter majorTypeFilter, GraduationSource source) {
+    public GraduationResponse getGraduation(
+            Long memberId, MajorTypeFilter majorTypeFilter, Long studentMajorId, GraduationSource source) {
         StudentProfile profile = studentProfileRepository.findWithDetailsByMemberId(memberId)
                 .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
 
         List<StudentMajor> majors = studentMajorRepository.findWithDepartmentByStudentProfile(profile);
-
-        StudentMajor mainMajor = majors.stream()
-                .filter(m -> m.getMajorType() == MajorType.MAIN)
-                .findFirst()
-                .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
-
-        GraduationAnalysisSummary mainSummary = requireSummary(mainMajor);
-        Optional<StudentMajor> doubleMajorOpt = majors.stream()
-                .filter(m -> m.getMajorType() == MajorType.DOUBLE)
-                .findFirst();
-        GraduationAnalysisSummary doubleSummary = doubleMajorOpt
-                .flatMap(graduationAnalysisSummaryRepository::findByStudentMajor)
-                .orElse(null);
-
-        List<CertResult> mainCerts = certResultRepository.findByStudentMajor(mainMajor);
-        List<CertResult> doubleCerts = doubleMajorOpt
-                .map(certResultRepository::findByStudentMajor)
-                .orElse(List.of());
-        List<CertResult> allCerts = new ArrayList<>(mainCerts);
-        allCerts.addAll(doubleCerts);
 
         // PLANNED: 플래너 선택 버전의 계획 과목 중 이미 이수/수강 중인 과목을 제외한 신규 항목만 사용
         // 플래너가 없거나 신규 항목이 없으면 COMPLETED와 동일한 응답
@@ -125,23 +110,21 @@ public class GraduationService {
                     .toList();
         }
 
-        // graduatable은 탭 무관 항상 전체 요건 기준으로 계산.
-        // judgeGraduationRequired는 학생 전체 이수내역을 다시 조회하는 비용이 있어, 탭마다(그리고
-        // ALL 탭이면 primary/multi 섹션마다) 매번 다시 부르지 않도록 여기서 한 번씩만 계산해 재사용한다.
-        // allPlannedItems도 같이 넘겨 source=PLANNED면 졸업필수도 계획 과목을 반영하게 한다.
+        // 전공별(본전공 + 복수전공 몇 개든 전부) 스냅샷/졸업필수 판정/PLANNED 반영을 한 번씩만 계산해
+        // 재사용한다. 예전엔 본전공+복수전공 1개로 고정돼 있었지만, 복수전공을 여러 개 가진 학생도 있어
+        // 리스트로 다룬다.
         List<PlannerVersionItem> plannedItemsForJudgement = allPlannedItems;
-        GraduationRequiredJudgement mainJudgement =
-                judgeGraduationRequired(profile, mainMajor.getDepartment(), plannedItemsForJudgement);
-        GraduationRequiredJudgement doubleJudgement = doubleMajorOpt
-                .map(dm -> judgeGraduationRequired(profile, dm.getDepartment(), plannedItemsForJudgement))
-                .orElse(null);
-
-        GraduationAnalysisSummary effectiveMainSummary = allPlannedItems.isEmpty() ? mainSummary
-                : buildAdjustedSummary(mainSummary, allPlannedItems, mainMajor.getDepartment());
-        GraduationAnalysisSummary effectiveDoubleSummary = (doubleSummary == null || allPlannedItems.isEmpty())
-                ? doubleSummary
-                : buildAdjustedSummary(doubleSummary, allPlannedItems,
-                        doubleMajorOpt.map(StudentMajor::getDepartment).orElse(null));
+        List<StudentMajorContext> majorContexts = majors.stream()
+                .map(major -> {
+                    GraduationAnalysisSummary summary = requireSummary(major);
+                    GraduationRequiredJudgement judgement =
+                            judgeGraduationRequired(profile, major.getDepartment(), plannedItemsForJudgement);
+                    GraduationAnalysisSummary effectiveSummary = plannedItemsForJudgement.isEmpty() ? summary
+                            : buildAdjustedSummary(summary, plannedItemsForJudgement, major.getDepartment());
+                    List<CertResult> certs = certResultRepository.findByStudentMajor(major);
+                    return new StudentMajorContext(major, effectiveSummary, judgement, certs);
+                })
+                .toList();
 
         DistributedGeAreaResult geAreaResult = null;
         if (profile.getAdmissionYear() >= DISTRIBUTED_GE_AREA_YEAR_CUTOFF) {
@@ -149,40 +132,36 @@ public class GraduationService {
             geAreaResult = computeDistributedGeAreas(distCourses, allPlannedItems, profile);
         }
 
-        boolean graduatable = computeGraduatable(effectiveMainSummary, effectiveDoubleSummary, allCerts, geAreaResult)
-                && mainJudgement.satisfied()
-                && (doubleJudgement == null || doubleJudgement.satisfied());
+        List<CertResult> allCerts = majorContexts.stream().flatMap(c -> c.certs().stream()).toList();
+        boolean graduatable = computeGraduatable(majorContexts, allCerts, geAreaResult);
 
+        if (studentMajorId != null) {
+            StudentMajorContext target = findMajorContextByStudentMajorId(majorContexts, studentMajorId);
+            return buildSingleTabResponse(profile, target.effectiveSummary(), ConditionsTab.MAJOR,
+                    target.major().getDepartment(), target.judgement(), graduatable, target.certs(),
+                    allPlannedItems, null);
+        }
+
+        StudentMajorContext mainContext = mainContext(majorContexts);
         return switch (majorTypeFilter) {
-            case PRIMARY -> buildSingleTabResponse(profile, effectiveMainSummary, MajorTypeFilter.PRIMARY,
-                    mainMajor.getDepartment(), mainJudgement, graduatable, mainCerts, allPlannedItems, null);
-            case MULTI -> {
-                StudentMajor doubleMajor = doubleMajorOpt
-                        .orElseThrow(() -> new BaseException(ErrorCode.DOUBLE_MAJOR_NOT_FOUND));
-                GraduationAnalysisSummary multiSummary = Optional.ofNullable(effectiveDoubleSummary)
-                        .orElseThrow(() -> new BaseException(ErrorCode.REQUIREMENT_NOT_FOUND));
-                yield buildSingleTabResponse(profile, multiSummary, MajorTypeFilter.MULTI,
-                        doubleMajor.getDepartment(), doubleJudgement, graduatable, doubleCerts, allPlannedItems, null);
-            }
-            case GE, OTHERS -> buildSingleTabResponse(profile, effectiveMainSummary, majorTypeFilter,
-                    null, null, graduatable, mainCerts, allPlannedItems, geAreaResult);
-            case ALL -> buildAllTabResponse(profile, mainMajor, effectiveMainSummary, mainJudgement,
-                    doubleMajorOpt.orElse(null), effectiveDoubleSummary, doubleJudgement,
-                    graduatable, mainCerts, allPlannedItems, geAreaResult);
+            case GE, OTHERS -> buildSingleTabResponse(profile, mainContext.effectiveSummary(),
+                    majorTypeFilter == MajorTypeFilter.GE ? ConditionsTab.GE : ConditionsTab.OTHERS,
+                    null, null, graduatable, mainContext.certs(), allPlannedItems, geAreaResult);
+            case ALL -> buildAllTabResponse(profile, majorContexts, graduatable, allPlannedItems, geAreaResult);
         };
     }
 
-    // PRIMARY/MULTI/GE/OTHERS 탭 단건 응답
+    // 전공 하나(본전공이든 복수전공이든 구분 없이) 또는 GE/OTHERS 탭 단건 응답
     private GraduationResponse buildSingleTabResponse(
             StudentProfile profile,
             GraduationAnalysisSummary summary,
-            MajorTypeFilter tab,
-            Department department,  // PRIMARY/MULTI: 해당 전공 학과, GE/OTHERS: null
-            GraduationRequiredJudgement judgement,  // PRIMARY/MULTI만 값 있음, GE/OTHERS는 null
+            ConditionsTab tab,
+            Department department,  // 전공 탭: 해당 전공 학과, GE/OTHERS: null
+            GraduationRequiredJudgement judgement,  // 전공 탭만 값 있음, GE/OTHERS는 null
             boolean graduatable,
             List<CertResult> certs,
             List<PlannerVersionItem> plannedItems,
-            DistributedGeAreaResult geAreaResult  // GE/OTHERS 탭만 전달, PRIMARY/MULTI는 null
+            DistributedGeAreaResult geAreaResult  // GE/OTHERS 탭만 전달, 전공 탭은 null
     ) {
         return GraduationResponse.builder()
                 .summary(buildSummary(profile, summary))
@@ -194,73 +173,88 @@ public class GraduationService {
                 .build();
     }
 
-    // ALL 탭: 본전공/복수전공/교양/기타 4개 섹션 분리 응답
+    // ALL 탭: 보유 전공 전부(본전공 + 복수전공 몇 개든) + 교양 + 기타 섹션 분리 응답
     private GraduationResponse buildAllTabResponse(
             StudentProfile profile,
-            StudentMajor mainMajor,
-            GraduationAnalysisSummary mainSummary,
-            GraduationRequiredJudgement mainJudgement,
-            StudentMajor doubleMajor,
-            GraduationAnalysisSummary doubleSummary,
-            GraduationRequiredJudgement doubleJudgement,
+            List<StudentMajorContext> majorContexts,
             boolean graduatable,
-            List<CertResult> certs,
             List<PlannerVersionItem> plannedItems,
             DistributedGeAreaResult geAreaResult
     ) {
-        TabSection primarySection = TabSection.builder()
-                .majorName(mainMajor.getDepartment().getName())
-                .conditions(buildConditionsForTab(profile, mainSummary,
-                        MajorTypeFilter.PRIMARY, mainMajor.getDepartment(), plannedItems, null))
-                .graduationRequired(toGraduationRequiredSummary(mainJudgement))
-                .build();
+        List<TabSection> majorSections = majorContexts.stream()
+                .map(ctx -> TabSection.builder()
+                        .majorName(ctx.major().getDepartment().getName())
+                        .majorType(ctx.major().getMajorType().name())
+                        .conditions(buildConditionsForTab(profile, ctx.effectiveSummary(),
+                                ConditionsTab.MAJOR, ctx.major().getDepartment(), plannedItems, null))
+                        .graduationRequired(toGraduationRequiredSummary(ctx.judgement()))
+                        .build())
+                .toList();
 
-        TabSection multiSection = null;
-        if (doubleMajor != null && doubleSummary != null) {
-            multiSection = TabSection.builder()
-                    .majorName(doubleMajor.getDepartment().getName())
-                    .conditions(buildConditionsForTab(profile, doubleSummary,
-                            MajorTypeFilter.MULTI, doubleMajor.getDepartment(), plannedItems, null))
-                    .graduationRequired(toGraduationRequiredSummary(doubleJudgement))
-                    .build();
-        }
+        StudentMajorContext mainContext = mainContext(majorContexts);
 
         TabSection geSection = TabSection.builder()
-                .conditions(buildConditionsForTab(profile, mainSummary, MajorTypeFilter.GE, null, plannedItems, geAreaResult))
+                .conditions(buildConditionsForTab(profile, mainContext.effectiveSummary(),
+                        ConditionsTab.GE, null, plannedItems, geAreaResult))
                 .build();
 
         TabSection othersSection = TabSection.builder()
-                .conditions(buildConditionsForTab(profile, mainSummary, MajorTypeFilter.OTHERS, null, plannedItems, null))
+                .conditions(buildConditionsForTab(profile, mainContext.effectiveSummary(),
+                        ConditionsTab.OTHERS, null, plannedItems, null))
                 .build();
 
         return GraduationResponse.builder()
-                .summary(buildSummary(profile, mainSummary))
+                .summary(buildSummary(profile, mainContext.effectiveSummary()))
                 .graduatable(graduatable)
                 .conditions(null)
                 .sections(AllSections.builder()
-                        .primary(primarySection)
-                        .multi(multiSection)
+                        .majors(majorSections)
                         .ge(geSection)
                         .others(othersSection)
                         .build())
-                .certs(toCertInfos(certs))
+                .certs(toCertInfos(mainContext.certs()))
                 .build();
     }
 
+    private StudentMajorContext mainContext(List<StudentMajorContext> majorContexts) {
+        return majorContexts.stream()
+                .filter(c -> c.major().getMajorType() == MajorType.MAIN)
+                .findFirst()
+                .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
+    }
+
+    private StudentMajorContext findMajorContextByStudentMajorId(
+            List<StudentMajorContext> majorContexts, Long studentMajorId) {
+        return majorContexts.stream()
+                .filter(c -> c.major().getId().equals(studentMajorId))
+                .findFirst()
+                .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_MAJOR_NOT_FOUND));
+    }
+
+    // getGraduation() 안에서 전공 하나(StudentMajor)에 대해 필요한 값들을 한 번씩만 계산해 재사용하기
+    // 위한 묶음. effectiveSummary는 PLANNED 반영 후 값(계획 없으면 스냅샷 그대로).
+    private record StudentMajorContext(
+            StudentMajor major,
+            GraduationAnalysisSummary effectiveSummary,
+            GraduationRequiredJudgement judgement,
+            List<CertResult> certs
+    ) {
+    }
+
     // 탭별 조건 목록 생성
-    // - 전공 탭(PRIMARY/MULTI): MAJOR_* + 영어/SW(전공 이수구분 + 해당 학과 개설 과목)
+    // - 전공 탭(MAJOR, 본전공/복수전공 구분 없이 전공 하나): MAJOR_* + 영어/SW(전공 이수구분 + 해당 학과 개설 과목)
     // - 교양 탭(GE): REQUIRED_GE/DISTRIBUTED_GE/FREE_GE + 영어/SW(교양 이수구분)
     // - 기타 탭(OTHERS): GENERAL_ELECTIVE (영어·SW 미포함)
     private List<ConditionInfo> buildConditionsForTab(
             StudentProfile profile,
             GraduationAnalysisSummary summary,
-            MajorTypeFilter tab,
+            ConditionsTab tab,
             Department department,
             List<PlannerVersionItem> plannedItems,
             DistributedGeAreaResult geAreaResult
     ) {
         List<GraduationConditionType> types = switch (tab) {
-            case PRIMARY, MULTI -> List.of(
+            case MAJOR -> List.of(
                     GraduationConditionType.MAJOR_BASIC,
                     GraduationConditionType.MAJOR_REQUIRED,
                     GraduationConditionType.MAJOR_ELECTIVE);
@@ -269,7 +263,6 @@ public class GraduationService {
                     GraduationConditionType.DISTRIBUTED_GE,
                     GraduationConditionType.FREE_GE);
             case OTHERS -> List.of(GraduationConditionType.GENERAL_ELECTIVE);
-            case ALL -> throw new IllegalStateException("ALL uses buildAllTabResponse");
         };
 
         List<ConditionInfo> result = new ArrayList<>();
@@ -282,9 +275,9 @@ public class GraduationService {
         }
 
         // 영어/SW: 이수구분 기준으로 탭 배치.
-        // 전공 탭은 offeringDepartment(appliedDepartment 우선)로 본전공/복수전공 구분
+        // 전공 탭은 offeringDepartment(appliedDepartment 우선)로 해당 전공 학과만 필터링
         // OTHERS(기타) 탭에는 포함하지 않음 - 영어·SW는 기타 이수구분이 아님
-        if (tab != MajorTypeFilter.OTHERS) {
+        if (tab != ConditionsTab.OTHERS) {
             List<DivisionCategory> cats = getDivisionCategoriesForTab(tab);
             result.add(buildEnglishConditionInfo(profile, cats, summary, department, plannedItems));
             result.add(buildSwConditionInfo(profile, cats, summary, department, plannedItems));
@@ -293,12 +286,11 @@ public class GraduationService {
         return result;
     }
 
-    private List<DivisionCategory> getDivisionCategoriesForTab(MajorTypeFilter tab) {
+    private List<DivisionCategory> getDivisionCategoriesForTab(ConditionsTab tab) {
         return switch (tab) {
-            case PRIMARY, MULTI -> MAJOR_CATEGORIES;
+            case MAJOR -> MAJOR_CATEGORIES;
             case GE -> GE_CATEGORIES;
             case OTHERS -> OTHERS_CATEGORIES;
-            case ALL -> List.of(DivisionCategory.values());
         };
     }
 
@@ -384,7 +376,10 @@ public class GraduationService {
     private ConditionInfo toConditionInfoFromSnapshot(GraduationConditionType type, GraduationAnalysisSummary summary) {
         int current = type.getCurrentExtractor().applyAsInt(summary);
         Integer required = type.getRequiredExtractor() != null ? type.getRequiredExtractor().apply(summary) : null;
-        boolean satisfied = required == null || current >= required;
+        // GENERAL_ELECTIVE(기타)는 요구 학점 자체가 없어(required=null) 항상 satisfied=true로 계산되던
+        // 걸 요청에 따라 무조건 false로 고정한다 - 졸업 요건이 아니라 참고용 집계라 "충족" 배지를 아예
+        // 안 보여주기 위함.
+        boolean satisfied = type != GraduationConditionType.GENERAL_ELECTIVE && (required == null || current >= required);
         return ConditionInfo.builder()
                 .code(type.name())
                 .name(type.getDisplayName())
@@ -496,7 +491,8 @@ public class GraduationService {
     }
 
     @Transactional(readOnly = true)
-    public GraduationCourseResponse getCoursesByDivision(Long memberId, String divisionCodeStr, MajorTypeFilter majorTypeFilter) {
+    public GraduationCourseResponse getCoursesByDivision(
+            Long memberId, String divisionCodeStr, MajorTypeFilter majorTypeFilter, Long studentMajorId) {
         GraduationConditionType conditionType = parseDivisionCode(divisionCodeStr);
 
         StudentProfile profile = studentProfileRepository.findWithDetailsByMemberId(memberId)
@@ -504,12 +500,12 @@ public class GraduationService {
 
         List<StudentMajor> majors = studentMajorRepository.findWithDepartmentByStudentProfile(profile);
 
-        // ENGLISH_COURSE/SW_CERT_COURSE는 이수구분이 아닌 course 플래그 기반이라 majorType별 처리가 다르다.
-        // OTHERS: 졸업현황 OTHERS 섹션에 영어·SW 조건이 없으므로 빈 응답
-        // ALL: 탭·학과 구분 없이 전체 합산해서 단일 항목으로 반환
-        // PRIMARY/MULTI/GE: 기존 buildMajorCourses 경로가 이미 올바르게 처리
-        if (conditionType == GraduationConditionType.ENGLISH_COURSE
-                || conditionType == GraduationConditionType.SW_CERT_COURSE) {
+        // ENGLISH_COURSE/SW_CERT_COURSE는 이수구분이 아닌 course 플래그 기반이라 처리가 다르다.
+        // studentMajorId 없이 OTHERS: 졸업현황 OTHERS 섹션에 영어·SW 조건이 없으므로 빈 응답
+        // studentMajorId 없이 ALL: 탭·학과 구분 없이 전체 합산해서 단일 항목으로 반환
+        // studentMajorId 있으면(전공 하나 지정) 아래 공통 흐름을 그대로 탄다.
+        if (studentMajorId == null && (conditionType == GraduationConditionType.ENGLISH_COURSE
+                || conditionType == GraduationConditionType.SW_CERT_COURSE)) {
             if (majorTypeFilter == MajorTypeFilter.OTHERS) {
                 return GraduationCourseResponse.builder()
                         .divisionCode(conditionType.name())
@@ -522,14 +518,25 @@ public class GraduationService {
             }
         }
 
-        List<StudentMajor> targetMajors = filterMajors(majors, majorTypeFilter);
-
-        if (majorTypeFilter == MajorTypeFilter.MULTI && targetMajors.isEmpty()) {
-            throw new BaseException(ErrorCode.DOUBLE_MAJOR_NOT_FOUND);
+        List<StudentMajor> targetMajors;
+        ConditionsTab tab;
+        if (studentMajorId != null) {
+            targetMajors = List.of(findMajorByStudentMajorId(majors, studentMajorId));
+            tab = ConditionsTab.MAJOR;
+        } else {
+            targetMajors = switch (majorTypeFilter) {
+                case ALL -> majors;
+                case GE, OTHERS -> majors.stream().filter(m -> m.getMajorType() == MajorType.MAIN).toList();
+            };
+            tab = switch (majorTypeFilter) {
+                case ALL -> ConditionsTab.MAJOR;
+                case GE -> ConditionsTab.GE;
+                case OTHERS -> ConditionsTab.OTHERS;
+            };
         }
 
         List<MajorCourses> majorCoursesList = targetMajors.stream()
-                .map(major -> buildMajorCourses(profile, major, conditionType, majorTypeFilter))
+                .map(major -> buildMajorCourses(profile, major, conditionType, tab))
                 .toList();
 
         return GraduationCourseResponse.builder()
@@ -537,6 +544,13 @@ public class GraduationService {
                 .divisionName(conditionType.getDisplayName())
                 .majors(majorCoursesList)
                 .build();
+    }
+
+    private StudentMajor findMajorByStudentMajorId(List<StudentMajor> majors, Long studentMajorId) {
+        return majors.stream()
+                .filter(m -> m.getId().equals(studentMajorId))
+                .findFirst()
+                .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_MAJOR_NOT_FOUND));
     }
 
     // ENGLISH_COURSE/SW_CERT_COURSE + majorType=ALL 전용.
@@ -589,14 +603,14 @@ public class GraduationService {
     }
 
     private MajorCourses buildMajorCourses(StudentProfile profile, StudentMajor major,
-            GraduationConditionType conditionType, MajorTypeFilter filter) {
+            GraduationConditionType conditionType, ConditionsTab filter) {
         if (conditionType == GraduationConditionType.GRADUATION_REQUIRED) {
             return buildGraduationRequiredMajorCourses(profile, major);
         }
 
         GraduationAnalysisSummary summary = requireSummary(major);
 
-        // 영어/SW: major.getDepartment() 전달 → fetchTakenCourses에서 PRIMARY/MULTI면 학과 필터 적용
+        // 영어/SW: major.getDepartment() 전달 → fetchTakenCourses에서 전공 탭이면 학과 필터 적용
         List<StudentCourse> takenCourses = fetchTakenCourses(profile, conditionType, filter, major.getDepartment());
 
         // 영어/SW는 실시간 목록 집계, 나머지는 스냅샷 값 사용
@@ -619,7 +633,11 @@ public class GraduationService {
             areaResult = computeDistributedGeAreas(takenCourses, List.of(), profile);
         }
 
-        boolean satisfied = required == null || current >= required;
+        // GENERAL_ELECTIVE(기타)는 요구 학점 자체가 없어(required=null) 항상 satisfied=true로 계산되던
+        // 걸 요청에 따라 무조건 false로 고정한다 - 졸업 요건이 아니라 참고용 집계라 "충족" 배지를 아예
+        // 안 보여주기 위함.
+        boolean satisfied = conditionType != GraduationConditionType.GENERAL_ELECTIVE
+                && (required == null || current >= required);
         if (areaResult != null) {
             satisfied = satisfied && areaResult.satisfied();
         }
@@ -711,14 +729,14 @@ public class GraduationService {
     }
 
     // judgeGraduationRequired 결과를 홈 화면 요약 DTO로 변환한다. judgement가 없는 탭(GE/OTHERS처럼
-    // 학과 자체가 없는 탭)만 null을 반환한다. PRIMARY/MULTI는 해당 학과에 요건이 없어도 항상 객체를
-    // 반환하고 hasGraduationRequired=false로 표시한다 — FE가 null 체크 대신 이 플래그 하나로 탭 노출
-    // 여부를 판단할 수 있게 하기 위함(요건이 없는 학과가 대부분이라 이쪽이 더 다루기 쉽다).
-    // hasGraduationRequired는 items().isEmpty()가 아니라 totalRequirementCount()로 판단해야 한다 —
+    // 학과 자체가 없는 탭)이거나, 해당 학과에 이 요건 자체가 없으면(대부분의 학과) null을 반환한다 —
+    // FE는 이 필드가 null인지 아닌지로 "졸업 필수" 탭/카드를 보여줄지 판단한다(스포츠의학과 등 일부만
+    // non-null로 채워짐).
+    // "요건이 있는지"는 items().isEmpty()가 아니라 totalRequirementCount()로 판단해야 한다 —
     // RequirementCourse는 있는데 RequirementCourseItem을 깜빡하고 안 넣은 경우, items()는 비어있지만
     // 요건 자체는 존재하는 거라 미충족(satisfied=false)으로 정확히 보여줘야지 숨기면 안 된다.
     private GraduationRequiredSummary toGraduationRequiredSummary(GraduationRequiredJudgement judgement) {
-        if (judgement == null) {
+        if (judgement == null || judgement.totalRequirementCount() == 0) {
             return null;
         }
         List<RequirementProgress> items = judgement.itemProgress().stream()
@@ -852,17 +870,15 @@ public class GraduationService {
     ) {
     }
 
-    // 영어/SW: 전공 탭(PRIMARY/MULTI)은 이수구분 + 개설학과 기준 필터링으로 본전공/복수전공 구분
+    // 영어/SW: 전공 탭(MAJOR)은 이수구분 + 개설학과 기준 필터링으로 그 전공 하나만 구분
     //          교양/기타 탭은 이수구분 기준만 적용
-    //          ALL은 전체 영어/SW 조회 (기존 동작 유지)
+    // majorType=ALL(탭·학과 구분 없는 전체 합산)은 이 메서드에 도달하지 않는다
+    // (getCoursesByDivision에서 buildMergedFlagCourseResponse로 먼저 처리됨).
     private List<StudentCourse> fetchTakenCourses(StudentProfile profile,
-            GraduationConditionType conditionType, MajorTypeFilter filter, Department department) {
+            GraduationConditionType conditionType, ConditionsTab filter, Department department) {
         if (conditionType == GraduationConditionType.ENGLISH_COURSE) {
-            if (filter == MajorTypeFilter.ALL) {
-                return studentCourseRepository.findByStudentProfileAndCourseIsEnglish(profile);
-            }
             List<DivisionCategory> cats = getDivisionCategoriesForTab(filter);
-            if (filter == MajorTypeFilter.PRIMARY || filter == MajorTypeFilter.MULTI) {
+            if (filter == ConditionsTab.MAJOR) {
                 return studentCourseRepository
                         .findByStudentProfileAndCourseIsEnglishAndDivisionCategoryInAndDepartment(
                                 profile, cats, department);
@@ -871,11 +887,8 @@ public class GraduationService {
                     .findByStudentProfileAndCourseIsEnglishAndDivisionCategoryIn(profile, cats);
         }
         if (conditionType == GraduationConditionType.SW_CERT_COURSE) {
-            if (filter == MajorTypeFilter.ALL) {
-                return studentCourseRepository.findByStudentProfileAndCourseIsSw(profile);
-            }
             List<DivisionCategory> cats = getDivisionCategoriesForTab(filter);
-            if (filter == MajorTypeFilter.PRIMARY || filter == MajorTypeFilter.MULTI) {
+            if (filter == ConditionsTab.MAJOR) {
                 return studentCourseRepository
                         .findByStudentProfileAndCourseIsSwAndDivisionCategoryInAndDepartment(
                                 profile, cats, department);
@@ -1019,27 +1032,20 @@ public class GraduationService {
         }
     }
 
-    // GE/OTHERS는 전공 무관 학생 전체 공통값이므로 본전공 기준으로 조회
-    private List<StudentMajor> filterMajors(List<StudentMajor> majors, MajorTypeFilter filter) {
-        return switch (filter) {
-            case PRIMARY -> majors.stream().filter(m -> m.getMajorType() == MajorType.MAIN).toList();
-            case MULTI -> majors.stream().filter(m -> m.getMajorType() == MajorType.DOUBLE).toList();
-            case ALL -> majors;
-            case GE, OTHERS -> majors.stream().filter(m -> m.getMajorType() == MajorType.MAIN).toList();
-        };
-    }
-
     // 졸업 가능 여부: 학점 요건 + 비학점 요건(평점, 논문/졸업능력인정 등 인증) 전부 충족 시 true
-    // 전공 요건은 각 전공별 독립 확인, 교양/영어/SW는 공통 기준(mainSummary)
+    // 전공 요건(학점 + 졸업필수)은 보유 전공 전부 독립적으로 확인, 교양/영어/SW는 공통 기준(본전공)
     private boolean computeGraduatable(
-            GraduationAnalysisSummary mainSummary,
-            GraduationAnalysisSummary doubleSummary,
+            List<StudentMajorContext> majorContexts,
             List<CertResult> allCerts,
             DistributedGeAreaResult geAreaResult
     ) {
-        // 학점 요건
-        if (!isMajorRequirementMet(mainSummary)) return false;
-        if (doubleSummary != null && !isMajorRequirementMet(doubleSummary)) return false;
+        // 전공별 학점 요건 + 졸업필수 요건
+        for (StudentMajorContext ctx : majorContexts) {
+            if (!isMajorRequirementMet(ctx.effectiveSummary())) return false;
+            if (!ctx.judgement().satisfied()) return false;
+        }
+
+        GraduationAnalysisSummary mainSummary = mainContext(majorContexts).effectiveSummary();
 
         if (mainSummary.getRequiredGeCurrent() < mainSummary.getRequiredGeRequired()) return false;
         if (mainSummary.getDistributedGeCurrent() < mainSummary.getDistributedGeRequired()) return false;
