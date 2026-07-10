@@ -937,10 +937,11 @@ public class GraduationService {
     }
 
     private List<String> buildDistAreaDescriptions(DistributedGeAreaResult result) {
-        return result.areas().stream()
+        String text = result.areas().stream()
                 .filter(AreaStatusInfo::completed)
-                .map(a -> "[" + a.name() + "]영역 이수 완료")
-                .toList();
+                .map(a -> "[" + a.name() + "]영역")
+                .collect(Collectors.joining(", "));
+        return text.isEmpty() ? List.of() : List.of(text + " 이수 완료");
     }
 
     private record AreaStatusInfo(String code, String name, boolean completed) {}

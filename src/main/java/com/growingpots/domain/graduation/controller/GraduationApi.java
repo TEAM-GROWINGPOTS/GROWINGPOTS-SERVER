@@ -390,7 +390,7 @@ public @interface GraduationApi {
                                             "satisfied": false,
                                             "hasRequiredList": false,
                                             "unmetDescriptions": [],
-                                            "distAreaDescriptions": ["[생명, 우주, 인간]영역 이수 완료", "[사회와 문화]영역 이수 완료"],
+                                            "distAreaDescriptions": ["[생명, 우주, 인간]영역, [사회와 문화]영역 이수 완료"],
                                             "courses": [
                                               {
                                                 "studentCourseId": 201,
