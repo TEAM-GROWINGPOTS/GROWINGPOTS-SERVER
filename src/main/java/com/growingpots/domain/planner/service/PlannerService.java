@@ -77,7 +77,7 @@ public class PlannerService {
             return List.of();
         }
 
-        List<PlannerTerm> terms = plannerTermRepository.findByPlannerSimulationOrderByTermOrder(simulation);
+        List<PlannerTerm> terms = plannerTermRepository.findByPlannerSimulationOrderByYearLevelAscSemesterAsc(simulation);
         if (terms.isEmpty()) {
             return List.of();
         }
@@ -100,7 +100,7 @@ public class PlannerService {
     private PlannerResponse.PlannedTerm toPlannedTerm(
             PlannerTerm term, List<PlannerTermVersion> versions, Map<Long, List<PlannerVersionItem>> itemsByVersionId) {
         List<PlannerResponse.Version> versionResponses = versions.stream()
-                .sorted(Comparator.comparingInt(PlannerTermVersion::getVersionNo))
+                .sorted(Comparator.comparingInt(PlannerTermVersion::getVersionOrder))
                 .map(version -> toVersion(version, itemsByVersionId.getOrDefault(version.getId(), List.of())))
                 .toList();
 
@@ -108,8 +108,6 @@ public class PlannerService {
                 .plannerTermId(term.getId())
                 .yearLevel(term.getYearLevel())
                 .semester(term.getSemester())
-                .termOrder(term.getTermOrder())
-                .locked(false)
                 .versions(versionResponses)
                 .build();
     }
@@ -121,6 +119,7 @@ public class PlannerService {
                 .versionNo(version.getVersionNo())
                 .name(version.getName())
                 .isSelected(version.isSelected())
+                .versionOrder(version.getVersionOrder())
                 .totalCredit(totalCredit)
                 .courses(items.stream().map(this::toPlannedCourse).toList())
                 .build();
@@ -197,7 +196,6 @@ public class PlannerService {
                 .name(yearLevel + "학년 " + semester + "학기")
                 .status(inProgress ? "IN_PROGRESS" : "COMPLETED")
                 .totalCredit(totalCredit)
-                .locked(true)
                 .courses(courses.stream().map(this::toCompletedCourse).toList())
                 .build();
     }
@@ -370,13 +368,17 @@ public class PlannerService {
         Map<Long, Division> recognizedDivisionByCourseId = loadRecognizedDivisionByCourseId(profile);
         List<PlannerSaveResponse.TermResponse> termResponses = new ArrayList<>();
 
-        for (PlannerSaveRequest.TermRequest termReq : request.terms()) {
+        List<PlannerSaveRequest.TermRequest> sortedTerms = request.terms().stream()
+                .sorted(Comparator.comparingInt(PlannerSaveRequest.TermRequest::yearLevel)
+                        .thenComparingInt(PlannerSaveRequest.TermRequest::semester))
+                .toList();
+
+        for (PlannerSaveRequest.TermRequest termReq : sortedTerms) {
             PlannerTerm term = plannerTermRepository.save(
                     PlannerTerm.builder()
                             .plannerSimulation(simulation)
                             .yearLevel(termReq.yearLevel())
                             .semester(termReq.semester())
-                            .termOrder(termReq.termOrder())
                             .build()
             );
 
@@ -388,6 +390,7 @@ public class PlannerService {
                                 .versionNo(versionReq.versionNo())
                                 .name(versionReq.name())
                                 .isSelected(versionReq.isSelected())
+                                .versionOrder(versionReq.versionOrder())
                                 .build()
                 );
 
