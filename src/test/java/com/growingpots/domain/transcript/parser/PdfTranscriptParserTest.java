@@ -79,7 +79,11 @@ class PdfTranscriptParserTest {
         assertThat(countInSection(result.courses(), "배분이수")).isEqualTo(6);
         assertThat(countInSection(result.courses(), "자유이수")).isEqualTo(5);
         assertThat(countInSection(result.courses(), "기타")).isEqualTo(3);
-        assertThat(countInSection(result.courses(), "영화트랙")).isEqualTo(5);
+        // 이 학과는 "연극영화학"/"영화트랙" 두 트랙 표에 같은 과목(같은 학기·학점)이 중복으로 나열되는데,
+        // 실제 수강 이력은 한 번뿐이니 먼저 나온 "연극영화학" 쪽만 남고 "영화트랙" 중복은 전부 제거돼야 한다.
+        assertThat(countInSection(result.courses(), "영화트랙")).isEqualTo(0);
+        assertThat(countInSection(result.courses(), "연극영화학")).isEqualTo(15);
+        assertThat(result.courses()).hasSize(41);
         assertThat(inSection(result.courses(), "배분이수"))
                 .anySatisfy(course -> assertThat(course.get("courseCode")).isEqualTo("GED11020"))
                 .anySatisfy(course -> assertThat(course.get("courseCode")).isEqualTo("GED11107"));
@@ -89,6 +93,24 @@ class PdfTranscriptParserTest {
         assertThat(result.graduationSummary().get("swCertification")).isEqualTo("미통과");
         // 전공내역 표의 "기타 공통 일반선택 8" 블록 아래 "학점계: 8"에서 취득 학점을 가져온다.
         assertThat(result.graduationSummary().get("generalElectiveEarned")).isEqualTo("8");
+    }
+
+    // "연극영화학"/"영화트랙" 두 트랙 표에 모두 나열되는 과목(FT2011 등)은 실제로는 한 번만 수강한
+    // 것이므로, 파싱 결과에도 courseCode당 1개 row만 남아야 한다(section은 먼저 나온 "연극영화학").
+    @Test
+    void 두_트랙_표에_모두_나열된_과목은_한_번만_반영된다() throws Exception {
+        Path pdfPath = Path.of("/Users/test/Desktop/광운대/3학년/동아리/sopt/growingpots/졸업관리표/연극영화과/23연극영화과_졸업사정관리표.pdf");
+        assumeTrue(Files.exists(pdfPath));
+
+        ParsedTranscript result = parser.parse(Files.readAllBytes(pdfPath));
+
+        for (String duplicatedCode : List.of("FT2011", "FT2009", "FT3071", "FT2023", "FT2021")) {
+            List<Map<String, String>> matches = result.courses().stream()
+                    .filter(course -> duplicatedCode.equals(course.get("courseCode")))
+                    .toList();
+            assertThat(matches).as("courseCode=%s", duplicatedCode).hasSize(1);
+            assertThat(matches.get(0).get("section")).isEqualTo("연극영화학");
+        }
     }
 
     @Test

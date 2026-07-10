@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -87,7 +88,8 @@ public class PdfTranscriptParser {
                 .toList();
 
         List<Map<String, String>> majorRequirements = extractMajorRequirements(lines);
-        List<Map<String, String>> regularCourses = extractCourses(pageTexts, defaultMajorSection(majorRequirements));
+        List<Map<String, String>> regularCourses = deduplicateByCodeAndSemester(
+                extractCourses(pageTexts, defaultMajorSection(majorRequirements)));
         List<Map<String, String>> currentSemesterCourses = extractCurrentSemesterCourses(pageTexts);
         List<Map<String, String>> courses = mergeCourses(regularCourses, currentSemesterCourses);
 
@@ -116,6 +118,26 @@ public class PdfTranscriptParser {
                 .toList());
         merged.addAll(currentSemesterCourses);
         return merged;
+    }
+
+    // 트랙(복수 세부전공)이 있는 학과는 "본전공 트랙"/"부전공 트랙" 표에 겹치는 과목이 (동일 학기·동일
+    // 학점으로) 두 번 나열된다 - PDF에 "중복과목"이라고 직접 표시돼 있다. 이수 내역엔 실제 수강 이력을
+    // 한 번만 반영해야 하므로, 같은 과목코드+학기 조합이 여러 번 나오면 먼저 나온 것만 남긴다. "재수강"은
+    // 실제로 다른 학기에 다시 들은 별도 이력이라 이 dedup 대상에서 항상 제외한다.
+    private List<Map<String, String>> deduplicateByCodeAndSemester(List<Map<String, String>> courses) {
+        Set<String> seen = new HashSet<>();
+        List<Map<String, String>> deduplicated = new ArrayList<>();
+        for (Map<String, String> course : courses) {
+            if ("재수강".equals(course.get("section"))) {
+                deduplicated.add(course);
+                continue;
+            }
+            String key = course.get("courseCode") + "|" + course.get("semester");
+            if (seen.add(key)) {
+                deduplicated.add(course);
+            }
+        }
+        return deduplicated;
     }
 
     private String defaultMajorSection(List<Map<String, String>> majorRequirements) {
