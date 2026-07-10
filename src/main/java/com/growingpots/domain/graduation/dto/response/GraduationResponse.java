@@ -18,10 +18,11 @@ public class GraduationResponse {
     @Schema(description = "졸업 가능 여부. 학점·평점·비학점 인증 요건을 모두 충족한 경우 true")
     private final boolean graduatable;
 
-    @Schema(description = "조건 목록. PRIMARY/MULTI/GE/OTHERS 탭 조회 시 채워짐. ALL 탭이면 null")
+    @Schema(description = "조건 목록. studentMajorId로 조회하거나 GE/OTHERS 탭 조회 시 채워짐. ALL 탭이면 null")
     private final List<ConditionInfo> conditions;
 
-    @Schema(description = "학과 독립 졸업요건 요약. PRIMARY/MULTI 탭이고 해당 학과에 졸업필수 요건이 있을 때만 채워짐. 그 외 null")
+    @Schema(description = "학과 독립 졸업요건 요약. studentMajorId로 조회했고 해당 전공에 졸업필수 요건이 "
+            + "있을 때만 채워짐. 그 외(요건 없음, GE/OTHERS 탭, ALL 탭) null", nullable = true)
     private final GraduationRequiredSummary graduationRequired;
 
     @Schema(description = "4섹션 분리 응답. ALL 탭 조회 시 채워짐. 그 외 null")
@@ -164,8 +165,8 @@ public class GraduationResponse {
     }
 
     @Schema(description = "학과 독립 졸업요건 요약 (이수구분 무관, 예: 스포츠의학과 졸업필수). "
-            + "PRIMARY/MULTI 탭이면 항상 채워짐 — hasGraduationRequired로 해당 학과에 요건 자체가 "
-            + "있는지 판단한다(false면 나머지 필드는 기본값이라 탭을 숨기면 됨).")
+            + "해당 전공에 이 요건이 실제로 있을 때만 채워지고(hasGraduationRequired는 항상 true), "
+            + "없으면 이 객체 자체가 null - FE는 null 여부로 탭/카드 노출을 판단하면 됨.")
     @Getter
     @Builder
     public static class GraduationRequiredSummary {

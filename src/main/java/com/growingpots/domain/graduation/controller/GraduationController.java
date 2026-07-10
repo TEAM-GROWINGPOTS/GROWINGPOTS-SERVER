@@ -30,18 +30,18 @@ public class GraduationController {
     @GetMapping
     public ResponseEntity<BaseResponse<GraduationResponse>> getGraduation(
             @Parameter(description = """
-                    전공 필터. department 파라미터가 있으면 무시됨. 기본값: ALL
+                    전공 필터. studentMajorId 파라미터가 있으면 무시됨. 기본값: ALL
                     - ALL: 보유 전공 전부(sections.majors) + 교양 + 기타 (4섹션 이상 분리)
                     - GE: 교양 (REQUIRED_GE·DISTRIBUTED_GE·FREE_GE + 영어·SW)
                     - OTHERS: 기타 (GENERAL_ELECTIVE만, 영어·SW 미포함)""")
             @RequestParam(defaultValue = "ALL") MajorTypeFilter majorType,
 
             @Parameter(description = """
-                    특정 전공 하나만 조회할 학과명(예: 경영학과). 있으면 majorType은 무시하고 그 전공
-                    하나의 단건 응답(conditions/graduationRequired 채움, sections=null)을 반환한다.
-                    본전공이든 복수전공이든 구분 없이 학생이 등록한 학과명으로 조회한다. 학생의 전공에
-                    없는 학과명이면 404.""")
-            @RequestParam(required = false) String department,
+                    특정 전공 하나만 조회할 학생 전공 PK (GET /students/me 응답의 majors[].studentMajorId).
+                    있으면 majorType은 무시하고 그 전공 하나의 단건 응답(conditions/graduationRequired
+                    채움, sections=null)을 반환한다. 본전공이든 복수전공이든 구분 없이 조회 가능. 이
+                    학생 소유가 아닌 studentMajorId면 404.""")
+            @RequestParam(required = false) Long studentMajorId,
 
             @Parameter(description = """
                     조회 기준. 기본값: COMPLETED
@@ -52,7 +52,7 @@ public class GraduationController {
             Authentication authentication
     ) {
         Long memberId = Long.parseLong(authentication.getName());
-        GraduationResponse response = graduationService.getGraduation(memberId, majorType, department, source);
+        GraduationResponse response = graduationService.getGraduation(memberId, majorType, studentMajorId, source);
         return ResponseEntity.ok(BaseResponse.success(SuccessCode.GRADUATION_STATUS_FOUND, response));
     }
 
@@ -78,22 +78,23 @@ public class GraduationController {
             @PathVariable String divisionCode,
 
             @Parameter(description = """
-                    전공 필터. department 파라미터가 있으면 무시됨. 기본값: ALL
+                    전공 필터. studentMajorId 파라미터가 있으면 무시됨. 기본값: ALL
                     - ALL: 보유 전공 전부 / GE·OTHERS: 본전공 스냅샷 기준
                     - ENGLISH_COURSE·SW_CERT_COURSE + ALL: 탭·학과 구분 없이 전체 합산 (majors 1개, majorType=null)
                     - ENGLISH_COURSE·SW_CERT_COURSE + OTHERS: 빈 응답 (majors=[])""")
             @RequestParam(defaultValue = "ALL") MajorTypeFilter majorType,
 
             @Parameter(description = """
-                    특정 전공 하나만 조회할 학과명(예: 경영학과). 있으면 majorType은 무시하고
-                    그 전공 하나만 majors 배열에 담아 반환한다. 학생의 전공에 없는 학과명이면 404.""")
-            @RequestParam(required = false) String department,
+                    특정 전공 하나만 조회할 학생 전공 PK (GET /students/me 응답의 majors[].studentMajorId).
+                    있으면 majorType은 무시하고 그 전공 하나만 majors 배열에 담아 반환한다. 이 학생 소유가
+                    아닌 studentMajorId면 404.""")
+            @RequestParam(required = false) Long studentMajorId,
 
             Authentication authentication
     ) {
         Long memberId = Long.parseLong(authentication.getName());
         GraduationCourseResponse response =
-                graduationService.getCoursesByDivision(memberId, divisionCode, majorType, department);
+                graduationService.getCoursesByDivision(memberId, divisionCode, majorType, studentMajorId);
         return ResponseEntity.ok(BaseResponse.success(SuccessCode.GRADUATION_COURSE_FOUND, response));
     }
 }

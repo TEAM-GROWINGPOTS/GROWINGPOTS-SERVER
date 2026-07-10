@@ -29,10 +29,10 @@ public @interface GraduationApi {
                     **전공 조회 방식**
                     본전공/복수전공을 PRIMARY·MULTI로 나누던 방식은 폐지됐다(복수전공을 여러 개 가진
                     학생도 있어 이분법으로 표현이 안 됨). 대신:
-                    - department 파라미터(학과명, 예: 화학공학과)가 있으면 그 전공 하나만 단건 응답
-                      (conditions/graduationRequired 채움, sections=null). 본전공/복수전공 구분 없이
-                      학생이 등록한 학과명으로 조회한다.
-                    - department가 없으면 majorType으로 조회: ALL(보유 전공 전부 + 교양 + 기타,
+                    - studentMajorId 파라미터(GET /students/me 응답의 majors[].studentMajorId)가 있으면
+                      그 전공 하나만 단건 응답(conditions/graduationRequired 채움, sections=null)을
+                      반환한다. 본전공/복수전공 구분 없이 조회 가능.
+                    - studentMajorId가 없으면 majorType으로 조회: ALL(보유 전공 전부 + 교양 + 기타,
                       sections 사용, conditions=null) / GE(REQUIRED_GE·DISTRIBUTED_GE·FREE_GE + 영어·SW)
                       / OTHERS(GENERAL_ELECTIVE 단일 조건, 영어·SW 미포함)
 
@@ -43,7 +43,7 @@ public @interface GraduationApi {
                     19~23학번: 학점 기준만 적용.
 
                     **graduationRequired**
-                    department로 조회 시 top-level data.graduationRequired에 채워짐. majorType=ALL
+                    studentMajorId로 조회 시 top-level data.graduationRequired에 채워짐. majorType=ALL
                     조회 시엔 sections.majors 각 항목(전공)마다 채워짐. 둘 다 그 학과에 이수구분과 무관한
                     독립 졸업요건(예: 스포츠의학과 졸업필수)이 실제로 있을 때만 non-null이고, 없으면
                     null(대부분의 학과) - FE는 null 여부로 그 전공에 "졸업 필수" 카드를 보여줄지 판단하면
@@ -163,8 +163,8 @@ public @interface GraduationApi {
                                     }
                                     """),
                                     @ExampleObject(
-                                            name = "department_졸업필수_있는_학과",
-                                            summary = "department=스포츠의학과처럼 특정 전공 하나만 조회, 졸업필수 요건이 있는 경우(hasGraduationRequired=true, items에 하위 요건별 진행 현황)",
+                                            name = "studentMajorId_졸업필수_있는_학과",
+                                            summary = "studentMajorId로 특정 전공 하나만 조회, 졸업필수 요건이 있는 경우(hasGraduationRequired=true, items에 하위 요건별 진행 현황)",
                                             value = """
                                     {
                                       "success": true,
@@ -244,7 +244,7 @@ public @interface GraduationApi {
                                               "data": null
                                             }
                                             """),
-                                    @ExampleObject(name = "REQ_002", summary = "department가 학생의 전공에 없음", value = """
+                                    @ExampleObject(name = "REQ_002", summary = "studentMajorId가 학생의 전공에 없음", value = """
                                             {
                                               "success": false,
                                               "code": "REQ_002",
@@ -268,11 +268,11 @@ public @interface GraduationApi {
                     hasRequiredList=true이면 미이수 필수과목이 courses에 포함된다.
 
                     **전공 조회 방식**
-                    PRIMARY·MULTI 이분법은 폐지됐다. department 파라미터(학과명)가 있으면 그 전공
-                    하나만 majors 배열에 담아 반환(본전공/복수전공 구분 없이 학생이 등록한 학과명으로
-                    조회). 없으면 majorType으로 조회: ALL(보유 전공 전부) / GE·OTHERS(본전공 스냅샷 기준)
+                    PRIMARY·MULTI 이분법은 폐지됐다. studentMajorId 파라미터가 있으면 그 전공 하나만
+                    majors 배열에 담아 반환(본전공/복수전공 구분 없이 조회 가능). 없으면 majorType으로
+                    조회: ALL(보유 전공 전부) / GE·OTHERS(본전공 스냅샷 기준)
 
-                    **majorType별 동작(department 없을 때)**
+                    **majorType별 동작(studentMajorId 없을 때)**
                     - ENGLISH_COURSE·SW_CERT_COURSE + ALL: 탭·학과 구분 없이 전체 합산 (majors 1개, majorType=null)
                     - ENGLISH_COURSE·SW_CERT_COURSE + GE: 해당 탭 이수구분에 속하는 과목만 반환
                     - ENGLISH_COURSE·SW_CERT_COURSE + OTHERS: 기타 섹션에 조건이 없어 majors=[] 빈 응답
@@ -394,7 +394,7 @@ public @interface GraduationApi {
                                               "data": null
                                             }
                                             """),
-                                    @ExampleObject(name = "REQ_002", summary = "department가 학생의 전공에 없음", value = """
+                                    @ExampleObject(name = "REQ_002", summary = "studentMajorId가 학생의 전공에 없음", value = """
                                             {
                                               "success": false,
                                               "code": "REQ_002",

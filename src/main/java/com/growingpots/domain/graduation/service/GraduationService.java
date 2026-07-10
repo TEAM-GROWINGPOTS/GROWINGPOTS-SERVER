@@ -92,7 +92,7 @@ public class GraduationService {
 
     @Transactional(readOnly = true)
     public GraduationResponse getGraduation(
-            Long memberId, MajorTypeFilter majorTypeFilter, String department, GraduationSource source) {
+            Long memberId, MajorTypeFilter majorTypeFilter, Long studentMajorId, GraduationSource source) {
         StudentProfile profile = studentProfileRepository.findWithDetailsByMemberId(memberId)
                 .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
 
@@ -135,8 +135,8 @@ public class GraduationService {
         List<CertResult> allCerts = majorContexts.stream().flatMap(c -> c.certs().stream()).toList();
         boolean graduatable = computeGraduatable(majorContexts, allCerts, geAreaResult);
 
-        if (department != null) {
-            StudentMajorContext target = findMajorContextByDepartmentName(majorContexts, department);
+        if (studentMajorId != null) {
+            StudentMajorContext target = findMajorContextByStudentMajorId(majorContexts, studentMajorId);
             return buildSingleTabResponse(profile, target.effectiveSummary(), ConditionsTab.MAJOR,
                     target.major().getDepartment(), target.judgement(), graduatable, target.certs(),
                     allPlannedItems, null);
@@ -223,10 +223,10 @@ public class GraduationService {
                 .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
     }
 
-    private StudentMajorContext findMajorContextByDepartmentName(
-            List<StudentMajorContext> majorContexts, String departmentName) {
+    private StudentMajorContext findMajorContextByStudentMajorId(
+            List<StudentMajorContext> majorContexts, Long studentMajorId) {
         return majorContexts.stream()
-                .filter(c -> c.major().getDepartment().getName().equals(departmentName))
+                .filter(c -> c.major().getId().equals(studentMajorId))
                 .findFirst()
                 .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_MAJOR_NOT_FOUND));
     }
@@ -492,7 +492,7 @@ public class GraduationService {
 
     @Transactional(readOnly = true)
     public GraduationCourseResponse getCoursesByDivision(
-            Long memberId, String divisionCodeStr, MajorTypeFilter majorTypeFilter, String department) {
+            Long memberId, String divisionCodeStr, MajorTypeFilter majorTypeFilter, Long studentMajorId) {
         GraduationConditionType conditionType = parseDivisionCode(divisionCodeStr);
 
         StudentProfile profile = studentProfileRepository.findWithDetailsByMemberId(memberId)
@@ -501,10 +501,10 @@ public class GraduationService {
         List<StudentMajor> majors = studentMajorRepository.findWithDepartmentByStudentProfile(profile);
 
         // ENGLISH_COURSE/SW_CERT_COURSE는 이수구분이 아닌 course 플래그 기반이라 처리가 다르다.
-        // department 없이 OTHERS: 졸업현황 OTHERS 섹션에 영어·SW 조건이 없으므로 빈 응답
-        // department 없이 ALL: 탭·학과 구분 없이 전체 합산해서 단일 항목으로 반환
-        // department 있으면(전공 하나 지정) 아래 공통 흐름을 그대로 탄다.
-        if (department == null && (conditionType == GraduationConditionType.ENGLISH_COURSE
+        // studentMajorId 없이 OTHERS: 졸업현황 OTHERS 섹션에 영어·SW 조건이 없으므로 빈 응답
+        // studentMajorId 없이 ALL: 탭·학과 구분 없이 전체 합산해서 단일 항목으로 반환
+        // studentMajorId 있으면(전공 하나 지정) 아래 공통 흐름을 그대로 탄다.
+        if (studentMajorId == null && (conditionType == GraduationConditionType.ENGLISH_COURSE
                 || conditionType == GraduationConditionType.SW_CERT_COURSE)) {
             if (majorTypeFilter == MajorTypeFilter.OTHERS) {
                 return GraduationCourseResponse.builder()
@@ -520,8 +520,8 @@ public class GraduationService {
 
         List<StudentMajor> targetMajors;
         ConditionsTab tab;
-        if (department != null) {
-            targetMajors = List.of(findMajorByDepartmentName(majors, department));
+        if (studentMajorId != null) {
+            targetMajors = List.of(findMajorByStudentMajorId(majors, studentMajorId));
             tab = ConditionsTab.MAJOR;
         } else {
             targetMajors = switch (majorTypeFilter) {
@@ -546,9 +546,9 @@ public class GraduationService {
                 .build();
     }
 
-    private StudentMajor findMajorByDepartmentName(List<StudentMajor> majors, String departmentName) {
+    private StudentMajor findMajorByStudentMajorId(List<StudentMajor> majors, Long studentMajorId) {
         return majors.stream()
-                .filter(m -> m.getDepartment().getName().equals(departmentName))
+                .filter(m -> m.getId().equals(studentMajorId))
                 .findFirst()
                 .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_MAJOR_NOT_FOUND));
     }

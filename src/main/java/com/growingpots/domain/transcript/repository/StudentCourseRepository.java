@@ -54,7 +54,7 @@ public interface StudentCourseRepository extends JpaRepository<StudentCourse, Lo
             @Param("studentProfile") StudentProfile studentProfile,
             @Param("categories") List<DivisionCategory> categories);
 
-    // 영어강의 중 특정 이수구분 + 개설학과 기준 조회 (PRIMARY/MULTI 탭 구분용)
+    // 영어강의 중 특정 이수구분 + 개설학과 기준 조회 (studentMajorId로 특정 전공 하나만 조회할 때용)
     // appliedDepartment가 있으면 우선 적용, 없으면 course.offeringDepartment로 판별
     @Query("SELECT sc FROM StudentCourse sc JOIN FETCH sc.course c LEFT JOIN FETCH c.offeringDepartment "
             + "WHERE sc.studentProfile = :studentProfile AND c.isEnglish = true "
@@ -66,7 +66,7 @@ public interface StudentCourseRepository extends JpaRepository<StudentCourse, Lo
             @Param("categories") List<DivisionCategory> categories,
             @Param("department") Department department);
 
-    // SW인증강의 중 특정 이수구분 + 개설학과 기준 조회 (PRIMARY/MULTI 탭 구분용)
+    // SW인증강의 중 특정 이수구분 + 개설학과 기준 조회 (studentMajorId로 특정 전공 하나만 조회할 때용)
     @Query("SELECT sc FROM StudentCourse sc JOIN FETCH sc.course c LEFT JOIN FETCH c.offeringDepartment "
             + "WHERE sc.studentProfile = :studentProfile AND c.isSw = true "
             + "AND sc.appliedDivision IS NOT NULL AND sc.appliedDivision.category IN :categories "
