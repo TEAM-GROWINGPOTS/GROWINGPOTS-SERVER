@@ -295,15 +295,15 @@ public @interface GraduationApi {
                     - majors[].satisfied: 요건 충족 여부.
                     - majors[].hasRequiredList: true이면 courses에 미이수 필수과목(taken=false) 포함.
                     - majors[].unmetDescriptions: 학점 기준 미충족 하위조건 문구. GRADUATION_REQUIRED 전용. 과목수 기준은 미포함.
-                    - majors[].areaRequirement: 배분이수 영역 달성 현황. DISTRIBUTED_GE + 24학번 이상만 채워짐. 그 외 null.
+                    - majors[].distAreaDescriptions: 배분이수 완료 영역 안내 문구 목록. DISTRIBUTED_GE + 24학번 이상일 때만 채워짐. 완료 영역마다 한 항목 (예: '[생명, 우주, 인간]영역 이수 완료'). 그 외 빈 리스트.
                     - majors[].courses[].studentCourseId: 이수 기록 PK. taken=false(미이수)이면 null.
                     - majors[].courses[].taken: true(이수 완료) | false(미이수 필수과목).
                     - majors[].courses[].semester: 이수과목은 이수 학기, 미이수과목은 개설 학기. 정보 없으면 null.
                     - majors[].courses[].area: 배분이수 영역 정보(칩 표시용). DISTRIBUTED_GE + 영역 정보 있는 과목만 채워짐. 그 외 null.
 
                     **DISTRIBUTED_GE**
-                    - 24학번 이상: areaRequirement 채워짐(5개 영역 완료 현황). satisfied는 학점 충족 AND 3개 이상 영역 이수 모두 필요.
-                    - 19~23학번: areaRequirement=null. satisfied는 학점 기준만 적용.
+                    - 24학번 이상: distAreaDescriptions 채워짐(완료 영역마다 한 항목). satisfied는 학점 충족 AND 3개 이상 영역 이수 모두 필요.
+                    - 19~23학번: distAreaDescriptions=[] 빈 리스트. satisfied는 학점 기준만 적용.
 
                     **GRADUATION_REQUIRED**
                     - 학과 독립 졸업요건에 연결된 과목을 이수/미이수 하나의 리스트로 반환.
@@ -319,7 +319,11 @@ public @interface GraduationApi {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = GraduationCourseResponse.class),
-                            examples = @ExampleObject(value = """
+                            examples = {
+                                    @ExampleObject(
+                                            name = "MAJOR_REQUIRED",
+                                            summary = "전공 필수 — 미이수 필수과목 포함, distAreaDescriptions=[]",
+                                            value = """
                                     {
                                       "success": true,
                                       "code": "REQ_200_2",
@@ -336,7 +340,7 @@ public @interface GraduationApi {
                                             "satisfied": false,
                                             "hasRequiredList": true,
                                             "unmetDescriptions": [],
-                                            "areaRequirement": null,
+                                            "distAreaDescriptions": [],
                                             "courses": [
                                               {
                                                 "studentCourseId": 101,
@@ -365,7 +369,108 @@ public @interface GraduationApi {
                                         ]
                                       }
                                     }
+                                    """),
+                                    @ExampleObject(
+                                            name = "DISTRIBUTED_GE_24학번이상",
+                                            summary = "배분이수 — 24학번 이상, 2개 영역 완료. distAreaDescriptions 채워짐, courses[].area 칩 포함",
+                                            value = """
+                                    {
+                                      "success": true,
+                                      "code": "REQ_200_2",
+                                      "message": "이수구분별 과목을 조회했습니다.",
+                                      "data": {
+                                        "divisionCode": "DISTRIBUTED_GE",
+                                        "divisionName": "배분 이수 교과",
+                                        "majors": [
+                                          {
+                                            "majorType": "MAIN",
+                                            "departmentName": "화학공학과",
+                                            "current": 6,
+                                            "required": 9,
+                                            "satisfied": false,
+                                            "hasRequiredList": false,
+                                            "unmetDescriptions": [],
+                                            "distAreaDescriptions": ["[생명, 우주, 인간]영역 이수 완료", "[사회와 문화]영역 이수 완료"],
+                                            "courses": [
+                                              {
+                                                "studentCourseId": 201,
+                                                "name": "인간과 우주",
+                                                "departmentName": "교양학부",
+                                                "credit": 3,
+                                                "semester": "1학기",
+                                                "taken": true,
+                                                "isEnglish": false,
+                                                "isSw": false,
+                                                "area": { "code": "AREA_1", "name": "생명, 우주, 인간" }
+                                              },
+                                              {
+                                                "studentCourseId": 202,
+                                                "name": "현대사회의 이해",
+                                                "departmentName": "교양학부",
+                                                "credit": 3,
+                                                "semester": "2학기",
+                                                "taken": true,
+                                                "isEnglish": false,
+                                                "isSw": false,
+                                                "area": { "code": "AREA_2", "name": "사회와 문화" }
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    }
+                                    """),
+                                    @ExampleObject(
+                                            name = "GRADUATION_REQUIRED",
+                                            summary = "졸업필수 — 학점 미충족 조건 있음. unmetDescriptions 채워짐, distAreaDescriptions=[]",
+                                            value = """
+                                    {
+                                      "success": true,
+                                      "code": "REQ_200_2",
+                                      "message": "이수구분별 과목을 조회했습니다.",
+                                      "data": {
+                                        "divisionCode": "GRADUATION_REQUIRED",
+                                        "divisionName": "졸업필수",
+                                        "majors": [
+                                          {
+                                            "majorType": "MAIN",
+                                            "departmentName": "스포츠의학과",
+                                            "current": 2,
+                                            "required": 5,
+                                            "satisfied": false,
+                                            "hasRequiredList": true,
+                                            "unmetDescriptions": ["[전문실기] 2/4학점 이수완료"],
+                                            "distAreaDescriptions": [],
+                                            "courses": [
+                                              {
+                                                "studentCourseId": 301,
+                                                "name": "전문실기1",
+                                                "departmentName": "스포츠의학과",
+                                                "credit": 1,
+                                                "semester": "1학기",
+                                                "taken": true,
+                                                "isEnglish": false,
+                                                "isSw": false,
+                                                "area": null
+                                              },
+                                              {
+                                                "studentCourseId": null,
+                                                "name": "전문실기2",
+                                                "departmentName": "스포츠의학과",
+                                                "credit": 1,
+                                                "semester": "1학기",
+                                                "taken": false,
+                                                "isEnglish": false,
+                                                "isSw": false,
+                                                "area": null
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    }
                                     """)
+                            }
                     )
             ),
             @ApiResponse(
