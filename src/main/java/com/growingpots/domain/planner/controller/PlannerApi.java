@@ -183,14 +183,16 @@ public @interface PlannerApi {
                                                 "plannerTermVersionId": 4001,
                                                 "versionNo": 1,
                                                 "isSelected": true,
+                                                "versionOrder": 0,
                                                 "items": [
-                                                  { "plannerVersionItemId": 5001, "courseId": 78 }
+                                                  { "plannerVersionItemId": 5001, "courseId": 78, "coursePositionOrder": 0 }
                                                 ]
                                               },
                                               {
                                                 "plannerTermVersionId": 4002,
                                                 "versionNo": 2,
                                                 "isSelected": false,
+                                                "versionOrder": 1,
                                                 "items": []
                                               }
                                             ]
