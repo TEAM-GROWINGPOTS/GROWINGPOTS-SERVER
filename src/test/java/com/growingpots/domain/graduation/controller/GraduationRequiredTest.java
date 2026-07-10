@@ -349,7 +349,7 @@ class GraduationRequiredTest {
                 .plannerTerm(term).versionNo(1).name("폴더 1").isSelected(true).versionOrder(0).build());
         plannerVersionItemRepository.save(PlannerVersionItem.builder()
                 .plannerTermVersion(version).course(cpe202).plannedDivision(null)
-                .credit(2).positionOrder(0).build());
+                .credit(2).coursePositionOrder(0).build());
 
         // COMPLETED면 계획 과목이 반영되지 않아 여전히 미충족
         mockMvc.perform(get("/api/v1/students/me/graduation")

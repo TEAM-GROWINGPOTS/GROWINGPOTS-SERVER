@@ -126,7 +126,7 @@ class PlannerSaveTest {
                           "isSelected": true,
                           "versionOrder": 0,
                           "items": [
-                            { "courseId": %d, "positionOrder": 0 }
+                            { "courseId": %d, "coursePositionOrder": 0 }
                           ]
                         }
                       ]
@@ -175,7 +175,7 @@ class PlannerSaveTest {
                           "isSelected": true,
                           "versionOrder": 0,
                           "items": [
-                            { "courseId": %d, "positionOrder": 0 }
+                            { "courseId": %d, "coursePositionOrder": 0 }
                           ]
                         }
                       ]
@@ -221,7 +221,7 @@ class PlannerSaveTest {
                           "isSelected": true,
                           "versionOrder": 0,
                           "items": [
-                            { "courseId": %d, "positionOrder": 0 }
+                            { "courseId": %d, "coursePositionOrder": 0 }
                           ]
                         }
                       ]

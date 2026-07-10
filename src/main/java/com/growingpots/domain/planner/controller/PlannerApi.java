@@ -101,7 +101,7 @@ public @interface PlannerApi {
                                                     "recommendedYearHigh": 2,
                                                     "openedSemester": "FIRST",
                                                     "credit": 3,
-                                                    "positionOrder": 0
+                                                    "coursePositionOrder": 0
                                                   }
                                                 ]
                                               }

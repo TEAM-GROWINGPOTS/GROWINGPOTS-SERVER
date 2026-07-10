@@ -256,11 +256,11 @@ class PlannerGetTest {
                 .plannerTerm(term).versionNo(1).name("폴더 1").isSelected(true).versionOrder(0).build());
         plannerVersionItemRepository.save(PlannerVersionItem.builder()
                 .plannerTermVersion(version).course(course1).plannedDivision(majorRequired)
-                .credit(3).positionOrder(0).build());
+                .credit(3).coursePositionOrder(0).build());
         // course2는 defaultDivision이 없는 과목이라 plannedDivision도 null로 저장된 케이스
         plannerVersionItemRepository.save(PlannerVersionItem.builder()
                 .plannerTermVersion(version).course(course2).plannedDivision(null)
-                .credit(2).positionOrder(1).build());
+                .credit(2).coursePositionOrder(1).build());
 
         mockMvc.perform(get("/api/v1/planner")
                         .with(authentication(authenticationOf(profile.getMember().getId()))))
