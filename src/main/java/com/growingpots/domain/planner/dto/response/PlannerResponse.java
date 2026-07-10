@@ -40,9 +40,6 @@ public class PlannerResponse {
         @Schema(description = "총 이수 학점")
         private final int totalCredit;
 
-        @Schema(description = "편집 잠금 여부. completedTerms는 조회전용이라 항상 true")
-        private final boolean locked;
-
         @Schema(description = "이수 과목 목록")
         private final List<CompletedCourse> courses;
     }
@@ -99,12 +96,6 @@ public class PlannerResponse {
         @Schema(description = "학기 (1 또는 2)", example = "1")
         private final int semester;
 
-        @Schema(description = "전체 플래너 내 학기 순서 (1-based)")
-        private final int termOrder;
-
-        @Schema(description = "편집 잠금 여부. plannedTerms는 편집대상이라 항상 false")
-        private final boolean locked;
-
         @Schema(description = "버전(폴더) 목록")
         private final List<Version> versions;
     }
@@ -122,6 +113,9 @@ public class PlannerResponse {
 
         @Schema(description = "버전(폴더) 이름", example = "폴더 1")
         private final String name;
+
+        @Schema(description = "버전(폴더) 표시 순서 (0-based)")
+        private final int versionOrder;
 
         // Lombok이 boolean isSelected에 대해 isSelected() 게터를 만드는데, Jackson은 "is" 접두사를
         // 벗겨 "selected"로 직렬화해버려 스펙과 어긋난다(CourseSearchResponse.isEnglish/isSw와 동일 이슈).
