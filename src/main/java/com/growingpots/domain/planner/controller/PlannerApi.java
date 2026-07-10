@@ -31,9 +31,6 @@ public @interface PlannerApi {
                     - completedTerms[].plannerTermVersionId는 실제 PLANNER_TERM_VERSION row가 없어
                       만든 합성 값이라 항상 음수다(plannedTerms 쪽 plannerTermVersionId는 실제 PK라
                       항상 양수). 다른 API에 넘기는 용도로 쓰면 안 된다.
-                    - completedTerms[].locked는 조회전용이라 항상 true, plannedTerms[].locked는
-                      항상 false다. 두 배열을 하나의 카드 리스트로 합쳐서 다룰 때 배열 출처를 안
-                      따지고 이 값 하나로 편집 아이콘 노출 여부를 정할 수 있게 두 쪽 다 내려준다.
                     - plannedTerms는 PLANNER_SIMULATION → PLANNER_TERM → PLANNER_TERM_VERSION →
                       PLANNER_VERSION_ITEM 트리를 그대로 반환한다. 한 번도 저장한 적 없는 학생은
                       빈 배열이 내려간다. isSelected=true인 버전이 노드뷰에 연결되는 폴더다.
@@ -63,7 +60,6 @@ public @interface PlannerApi {
                                             "name": "1학년 1학기",
                                             "status": "COMPLETED",
                                             "totalCredit": 3,
-                                            "locked": true,
                                             "courses": [
                                               {
                                                 "studentCourseId": 7001,
@@ -85,14 +81,13 @@ public @interface PlannerApi {
                                             "plannerTermId": 3003,
                                             "yearLevel": 2,
                                             "semester": 1,
-                                            "termOrder": 3,
-                                            "locked": false,
                                             "versions": [
                                               {
                                                 "plannerTermVersionId": 4003,
                                                 "versionNo": 1,
                                                 "name": "폴더 1",
                                                 "isSelected": true,
+                                                "versionOrder": 0,
                                                 "totalCredit": 3,
                                                 "courses": [
                                                   {
