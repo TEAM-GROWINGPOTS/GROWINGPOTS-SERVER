@@ -35,7 +35,7 @@ public record PlannerSaveRequest(
     @Schema(description = "과목 항목 요청")
     public record ItemRequest(
             @Schema(description = "과목 PK") @NotNull Long courseId,
-            @Schema(description = "카드뷰 내 과목 순서 (0-based)", example = "0") @NotNull @Min(0) Integer positionOrder
+            @Schema(description = "카드뷰 내 과목 순서 (0-based)", example = "0") @NotNull @Min(0) Integer coursePositionOrder
     ) {
     }
 }

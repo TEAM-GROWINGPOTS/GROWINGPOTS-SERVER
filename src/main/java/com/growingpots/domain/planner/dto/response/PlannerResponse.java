@@ -170,6 +170,6 @@ public class PlannerResponse {
         private final int credit;
 
         @Schema(description = "카드뷰 내 과목 순서 (0-based)")
-        private final int positionOrder;
+        private final int coursePositionOrder;
     }
 }
