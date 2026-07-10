@@ -148,7 +148,7 @@ public @interface GraduationApi {
                                             "majorName": null,
                                             "majorType": null,
                                             "conditions": [
-                                              { "code": "GENERAL_ELECTIVE", "name": "기타", "current": 21, "required": null, "unit": "CREDITS", "satisfied": true, "chartTarget": false }
+                                              { "code": "GENERAL_ELECTIVE", "name": "기타", "current": 21, "required": null, "unit": "CREDITS", "satisfied": false, "chartTarget": false }
                                             ],
                                             "graduationRequired": null
                                           }
