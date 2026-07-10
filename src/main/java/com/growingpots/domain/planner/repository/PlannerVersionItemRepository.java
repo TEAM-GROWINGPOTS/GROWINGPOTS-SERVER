@@ -16,7 +16,7 @@ public interface PlannerVersionItemRepository extends JpaRepository<PlannerVersi
             + "JOIN FETCH pvi.course c LEFT JOIN FETCH c.offeringDepartment "
             + "LEFT JOIN FETCH pvi.plannedDivision "
             + "WHERE pvi.plannerTermVersion IN :versions "
-            + "ORDER BY pvi.plannerTermVersion.id, pvi.positionOrder")
+            + "ORDER BY pvi.plannerTermVersion.id, pvi.coursePositionOrder")
     List<PlannerVersionItem> findWithDetailsByPlannerTermVersionIn(@Param("versions") List<PlannerTermVersion> versions);
 
     // 학생의 플래너에서 현재 선택된 버전의 계획 과목 전체 조회 (source=PLANNED 졸업현황 계산용)

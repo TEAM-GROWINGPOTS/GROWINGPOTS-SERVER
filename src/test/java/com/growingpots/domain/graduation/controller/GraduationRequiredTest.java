@@ -349,12 +349,12 @@ class GraduationRequiredTest {
         PlannerSimulation simulation = plannerSimulationRepository.save(PlannerSimulation.builder()
                 .studentProfile(profile).name("내 플래너").build());
         PlannerTerm term = plannerTermRepository.save(PlannerTerm.builder()
-                .plannerSimulation(simulation).yearLevel(2).semester(1).termOrder(3).build());
+                .plannerSimulation(simulation).yearLevel(2).semester(1).build());
         PlannerTermVersion version = plannerTermVersionRepository.save(PlannerTermVersion.builder()
-                .plannerTerm(term).versionNo(1).name("폴더 1").isSelected(true).build());
+                .plannerTerm(term).versionNo(1).name("폴더 1").isSelected(true).versionOrder(0).build());
         plannerVersionItemRepository.save(PlannerVersionItem.builder()
                 .plannerTermVersion(version).course(cpe202).plannedDivision(null)
-                .credit(2).positionOrder(0).build());
+                .credit(2).coursePositionOrder(0).build());
 
         // COMPLETED면 계획 과목이 반영되지 않아 여전히 미충족
         mockMvc.perform(get("/api/v1/students/me/graduation")
