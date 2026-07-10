@@ -140,7 +140,7 @@ public class PlannerService {
                 .recommendedYearHigh(course.getRecommendedYearHigh())
                 .openedSemester(course.getOpenedSemester() != null ? course.getOpenedSemester().name() : null)
                 .credit(item.getCredit())
-                .positionOrder(item.getPositionOrder())
+                .coursePositionOrder(item.getCoursePositionOrder())
                 .build();
     }
 
@@ -300,8 +300,12 @@ public class PlannerService {
                 throw new BaseException(ErrorCode.PLANNER_INVALID_DATA);
             }
             Set<Integer> seen = new HashSet<>();
+            Set<Integer> seenOrders = new HashSet<>();
             for (PlannerSaveRequest.VersionRequest versionReq : termReq.versions()) {
                 if (!seen.add(versionReq.versionNo())) {
+                    throw new BaseException(ErrorCode.PLANNER_INVALID_DATA);
+                }
+                if (!seenOrders.add(versionReq.versionOrder())) {
                     throw new BaseException(ErrorCode.PLANNER_INVALID_DATA);
                 }
             }
@@ -408,7 +412,7 @@ public class PlannerService {
                                     .course(course)
                                     .plannedDivision(plannedDivision)
                                     .credit(course.getCredit())
-                                    .positionOrder(itemReq.positionOrder())
+                                    .coursePositionOrder(itemReq.coursePositionOrder())
                                     .build()
                     );
                     itemResponses.add(new PlannerSaveResponse.ItemResponse(item.getId(), course.getId()));
