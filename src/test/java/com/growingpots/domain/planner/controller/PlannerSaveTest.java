@@ -119,12 +119,12 @@ class PlannerSaveTest {
                     {
                       "yearLevel": 2,
                       "semester": 1,
-                      "termOrder": 3,
                       "versions": [
                         {
                           "versionNo": 1,
                           "name": "폴더 1",
                           "isSelected": true,
+                          "versionOrder": 0,
                           "items": [
                             { "courseId": %d, "positionOrder": 0 }
                           ]
@@ -168,12 +168,12 @@ class PlannerSaveTest {
                     {
                       "yearLevel": 2,
                       "semester": 1,
-                      "termOrder": 3,
                       "versions": [
                         {
                           "versionNo": 1,
                           "name": "폴더 1",
                           "isSelected": true,
+                          "versionOrder": 0,
                           "items": [
                             { "courseId": %d, "positionOrder": 0 }
                           ]
@@ -214,12 +214,12 @@ class PlannerSaveTest {
                     {
                       "yearLevel": 2,
                       "semester": 1,
-                      "termOrder": 3,
                       "versions": [
                         {
                           "versionNo": 1,
                           "name": "폴더 1",
                           "isSelected": true,
+                          "versionOrder": 0,
                           "items": [
                             { "courseId": %d, "positionOrder": 0 }
                           ]

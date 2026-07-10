@@ -344,9 +344,9 @@ class GraduationRequiredTest {
         PlannerSimulation simulation = plannerSimulationRepository.save(PlannerSimulation.builder()
                 .studentProfile(profile).name("내 플래너").build());
         PlannerTerm term = plannerTermRepository.save(PlannerTerm.builder()
-                .plannerSimulation(simulation).yearLevel(2).semester(1).termOrder(3).build());
+                .plannerSimulation(simulation).yearLevel(2).semester(1).build());
         PlannerTermVersion version = plannerTermVersionRepository.save(PlannerTermVersion.builder()
-                .plannerTerm(term).versionNo(1).name("폴더 1").isSelected(true).build());
+                .plannerTerm(term).versionNo(1).name("폴더 1").isSelected(true).versionOrder(0).build());
         plannerVersionItemRepository.save(PlannerVersionItem.builder()
                 .plannerTermVersion(version).course(cpe202).plannedDivision(null)
                 .credit(2).positionOrder(0).build());
