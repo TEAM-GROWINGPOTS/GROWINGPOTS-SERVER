@@ -26,20 +26,35 @@ public @interface PlannerApi {
     @Operation(
             summary = "학기 플래너 전체 조회 (카드뷰/노드뷰)",
             description = """
-                    completedTerms(이수완료/이수중, 조회전용)와 plannedTerms(계획, 편집대상)를 함께 반환한다.
+                    completedTerms(이수완료·이수중)와 plannedTerms(계획 학기)를 함께 반환한다.
 
-                    - completedTerms는 STUDENT_COURSE를 (수강년도, 수강학기)로 그룹핑해 구성한다.
-                      여름학기는 1학기, 겨울학기는 2학기 묶음에 합산된다. status가 IN_PROGRESS인
-                      학기가 "이수 중", COMPLETED인 학기가 "이수 완료"다.
-                    - completedTerms[].plannerTermVersionId는 실제 PLANNER_TERM_VERSION row가 없어
-                      만든 합성 값이라 항상 음수다(plannedTerms 쪽 plannerTermVersionId는 실제 PK라
-                      항상 양수). 다른 API에 넘기는 용도로 쓰면 안 된다.
-                    - plannedTerms는 PLANNER_SIMULATION → PLANNER_TERM → PLANNER_TERM_VERSION →
-                      PLANNER_VERSION_ITEM 트리를 그대로 반환한다. 한 번도 저장한 적 없는 학생은
-                      빈 배열이 내려간다. isSelected=true인 버전이 노드뷰에 연결되는 폴더다.
-                    - plannedTerms의 과목은 직접추가를 지원하지 않아 courseId가 항상 존재한다.
-                    - divisionCategory/divisionName은 completedTerms에선 항상 값이 있지만,
-                      plannedTerms에선 과목 자체에 기본 이수구분이 없으면 null일 수 있다.
+                    **completedTerms 응답 필드**
+                    - yearLevel / semester: 수강 순서 기준으로 산정한 학년·학기 (1-based).
+                    - plannerTermVersionId: 실제 DB row 없이 만든 합성 값(항상 음수). 다른 API에 전달 불가.
+                    - status: IN_PROGRESS(이수중) | COMPLETED(이수완료).
+                    - courses[].studentCourseId: 이수 기록 PK.
+                    - courses[].divisionCategory / divisionName: 이수구분 코드·표시명. 항상 존재.
+
+                    **completedTerms 구성 방식**
+                    STUDENT_COURSE를 (수강년도, 수강학기)로 그룹핑한다.
+                    여름학기는 1학기, 겨울학기는 2학기 묶음에 합산된다.
+
+                    **plannedTerms 응답 필드**
+                    - plannerTermId: 학기 PK.
+                    - versions[].plannerTermVersionId: 버전(폴더) PK.
+                    - versions[].versionNo: 버전 번호(1부터 시작).
+                    - versions[].versionOrder: 폴더 표시 순서(0-based).
+                    - versions[].isSelected: true인 버전이 노드뷰에 연결되는 폴더.
+                    - versions[].totalCredit: 해당 버전에 담긴 과목의 총 학점.
+                    - versions[].courses[].plannerVersionItemId: 과목 항목 PK.
+                    - versions[].courses[].coursePositionOrder: 카드뷰 내 과목 순서(0-based).
+                    - versions[].courses[].divisionCategory / divisionName: 기본 이수구분이 없는 과목은 null.
+                    - versions[].courses[].courseId: 직접추가를 지원하지 않아 항상 존재.
+
+                    **plannedTerms 구성 방식**
+                    PLANNER_SIMULATION → PLANNER_TERM → PLANNER_TERM_VERSION → PLANNER_VERSION_ITEM 트리 구조.
+                    한 번도 저장한 적 없는 학생은 빈 배열이 내려간다.
+                    학기 목록은 yearLevel → semester 오름차순으로 정렬된다.
                     """
     )
     @ApiResponses({
@@ -154,10 +169,31 @@ public @interface PlannerApi {
     @Retention(RetentionPolicy.RUNTIME)
     @Operation(
             summary = "학기 플래너 저장",
-            description = "학기 플래너를 full-replace 방식으로 저장한다. "
-                    + "plannerSimulationId가 null이면 새 플래너를 생성하고, 값이 있으면 기존 플래너를 전체 교체한다. "
-                    + "각 학기(term)에는 정확히 1개의 isSelected=true 버전이 있어야 한다. "
-                    + "1학기 개설 과목은 1학기 term에만, 2학기 개설 과목은 2학기 term에만 추가할 수 있다."
+            description = """
+                    학기 플래너를 full-replace 방식으로 저장한다.
+
+                    **저장 방식**
+                    - plannerSimulationId가 null이면 기존 플래너를 찾아 쓰거나 신규 생성한다. 값이 있으면 해당 플래너를 전체 교체한다.
+                    - 각 학기(term)에는 정확히 1개의 isSelected=true 버전이 있어야 한다.
+                    - 학기 내 versionNo와 versionOrder는 각각 중복 불가.
+                    - 1학기 개설 과목은 semester=1 term에만, 2학기 개설 과목은 semester=2 term에만 추가할 수 있다.
+                    - 저장 후 terms는 yearLevel → semester 오름차순으로 정렬되어 반환된다.
+
+                    **요청 주요 필드**
+                    - plannerSimulationId: 플래너 PK. null이면 신규 생성 또는 기존 플래너 재사용.
+                    - terms[].versions[].versionNo: 버전 번호(1부터 시작, 학기 내 중복 불가).
+                    - terms[].versions[].versionOrder: 폴더 표시 순서(0-based, 학기 내 중복 불가).
+                    - terms[].versions[].isSelected: 선택된 폴더 여부. 학기당 정확히 1개 true.
+                    - terms[].versions[].items[].coursePositionOrder: 카드뷰 내 과목 순서(0-based).
+
+                    **응답 주요 필드**
+                    - plannerSimulationId: 생성·교체된 플래너 PK.
+                    - terms[].plannerTermId: 생성된 학기 PK.
+                    - terms[].versions[].plannerTermVersionId: 생성된 버전(폴더) PK.
+                    - terms[].versions[].versionOrder: 저장된 폴더 표시 순서.
+                    - terms[].versions[].items[].plannerVersionItemId: 생성된 과목 항목 PK.
+                    - terms[].versions[].items[].coursePositionOrder: 저장된 과목 순서.
+                    """
     )
     @ApiResponses({
             @ApiResponse(
@@ -214,10 +250,18 @@ public @interface PlannerApi {
     @Retention(RetentionPolicy.RUNTIME)
     @Operation(
             summary = "선수과목 검사",
-            description = "요청한 courseId 목록에 대해 미이수 선수과목을 반환한다. "
-                    + "COMPLETED/IN_PROGRESS 과목은 이수한 것으로 간주한다. "
-                    + "학과 특정 선수과목 규칙이 공통(null) 규칙보다 우선 적용된다. "
-                    + "선수과목이 없거나 모두 이수한 과목은 결과에 포함되지 않는다."
+            description = """
+                    요청한 courseId 목록에 대해 미이수 선수과목을 반환한다.
+
+                    **규칙**
+                    - COMPLETED·IN_PROGRESS 상태 과목은 이수한 것으로 간주한다.
+                    - 학과 특정 선수과목 규칙이 공통(null) 규칙보다 우선 적용된다.
+                    - 선수과목이 없거나 모두 이수한 과목은 results에 포함되지 않는다.
+
+                    **응답 주요 필드**
+                    - results[].courseId: 선수과목 미이수 상태인 검사 대상 과목 PK.
+                    - results[].missingPrerequisites[].type: REQUIRED(필수 선수과목) | RECOMMENDED(권장 선수과목).
+                    """
     )
     @ApiResponses({
             @ApiResponse(
@@ -268,10 +312,21 @@ public @interface PlannerApi {
     @Retention(RetentionPolicy.RUNTIME)
     @Operation(
             summary = "선택 버전(폴더) 변경",
-            description = "지정한 학기(plannerTermId)의 선택 버전을 변경한다. "
-                    + "한 트랜잭션 안에서 해당 학기의 모든 버전 isSelected=false → 지정 버전만 true로 전환한다. "
-                    + "이미 선택된 버전을 다시 지정해도 200을 반환한다(멱등). "
-                    + "다른 학기에 속한 versionId를 지정하면 404를 반환한다."
+            description = """
+                    지정한 학기(plannerTermId)의 선택 버전(폴더)을 변경한다.
+
+                    **동작**
+                    - 한 트랜잭션에서 해당 학기의 모든 버전 isSelected=false → 지정 버전만 true로 전환한다.
+                    - 이미 선택된 버전을 다시 지정해도 200을 반환한다(멱등).
+                    - 다른 학기에 속한 plannerTermVersionId를 지정하면 404를 반환한다.
+
+                    **요청 필드**
+                    - plannerTermVersionId: 선택할 버전(폴더) PK.
+
+                    **응답 필드**
+                    - plannerTermId: 변경된 학기 PK.
+                    - selectedVersionId: 선택된 버전 PK.
+                    """
     )
     @ApiResponses({
             @ApiResponse(
