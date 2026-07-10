@@ -176,7 +176,7 @@ public @interface PlannerApi {
                     - plannerSimulationId가 null이면 기존 플래너를 찾아 쓰거나 신규 생성한다. 값이 있으면 해당 플래너를 전체 교체한다.
                     - 각 학기(term)에는 정확히 1개의 isSelected=true 버전이 있어야 한다.
                     - 학기 내 versionNo와 versionOrder는 각각 중복 불가.
-                    - 1학기 개설 과목은 semester=1 term에만, 2학기 개설 과목은 semester=2 term에만 추가할 수 있다.
+                    - 과목의 개설 학기와 무관하게 모든 학기 term에 추가할 수 있다.
                     - 저장 후 terms는 yearLevel → semester 오름차순으로 정렬되어 반환된다.
 
                     **요청 주요 필드**

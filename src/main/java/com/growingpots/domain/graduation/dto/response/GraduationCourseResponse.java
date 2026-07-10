@@ -63,9 +63,9 @@ public class GraduationCourseResponse {
         @Builder.Default
         private final List<String> unmetDescriptions = List.of();
 
-        @Schema(description = "배분이수 완료 영역 안내 문구 목록. "
-                + "DISTRIBUTED_GE + 24학번 이상일 때만 채워짐. 그 외는 항상 빈 리스트. "
-                + "완료된 영역마다 한 항목 (예: '[생명, 우주, 인간]영역 이수 완료'). 완료 영역 없으면 빈 리스트.")
+        @Schema(description = "배분이수 완료 영역 안내 문구. "
+                + "DISTRIBUTED_GE + 24학번 이상 + 완료 영역 1개 이상일 때 단일 항목 리스트로 채워짐 (예: ['[생명, 우주, 인간]영역, [사회와 문화]영역 이수 완료']). "
+                + "19~23학번이거나 완료 영역 없거나 다른 이수구분이면 빈 리스트.")
         @Builder.Default
         private final List<String> distAreaDescriptions = List.of();
 

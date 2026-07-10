@@ -23,7 +23,6 @@ import com.growingpots.domain.university.entity.Course;
 import com.growingpots.domain.university.entity.CoursePrerequisite;
 import com.growingpots.domain.university.entity.CrossMajorRecognizedCourse;
 import com.growingpots.domain.university.entity.Division;
-import com.growingpots.domain.university.entity.enums.OpenedSemester;
 import com.growingpots.domain.university.repository.CoursePrerequisiteRepository;
 import com.growingpots.domain.university.repository.CourseRepository;
 import com.growingpots.domain.university.repository.CrossMajorRecognizedCourseRepository;
@@ -248,8 +247,6 @@ public class PlannerService {
 
         Map<Long, Course> courseMap = loadCourseMap(request, profile);
 
-        validateSemesterCompatibility(request, courseMap);
-
         deleteExistingData(simulation.getId());
 
         return buildAndSave(simulation, request, courseMap, profile);
@@ -331,25 +328,6 @@ public class PlannerService {
             }
         }
         return map;
-    }
-
-    private void validateSemesterCompatibility(PlannerSaveRequest request, Map<Long, Course> courseMap) {
-        for (PlannerSaveRequest.TermRequest termReq : request.terms()) {
-            for (PlannerSaveRequest.VersionRequest versionReq : termReq.versions()) {
-                if (versionReq.items() == null) continue;
-                for (PlannerSaveRequest.ItemRequest itemReq : versionReq.items()) {
-                    Course course = courseMap.get(itemReq.courseId());
-                    OpenedSemester openedSemester = course.getOpenedSemester();
-                    if (openedSemester == OpenedSemester.BOTH) continue;
-                    if (openedSemester == OpenedSemester.FIRST && termReq.semester() != 1) {
-                        throw new BaseException(ErrorCode.PLANNER_INVALID_DATA);
-                    }
-                    if (openedSemester == OpenedSemester.SECOND && termReq.semester() != 2) {
-                        throw new BaseException(ErrorCode.PLANNER_INVALID_DATA);
-                    }
-                }
-            }
-        }
     }
 
     private void deleteExistingData(Long simulationId) {
