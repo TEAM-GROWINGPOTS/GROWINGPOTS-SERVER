@@ -63,48 +63,16 @@ public class GraduationCourseResponse {
         @Builder.Default
         private final List<String> unmetDescriptions = List.of();
 
-        @Schema(description = "배분이수 영역 달성 현황. "
-                + "DISTRIBUTED_GE 조회 시 24학번 이상이면 채워짐, 19~23학번이거나 다른 이수구분이면 null",
-                nullable = true)
-        private final AreaRequirement areaRequirement;
+        @Schema(description = "배분이수 완료 영역 안내 문구 목록. "
+                + "DISTRIBUTED_GE + 24학번 이상일 때만 채워짐. 그 외는 항상 빈 리스트. "
+                + "완료된 영역마다 한 항목 (예: '[생명, 우주, 인간]영역 이수 완료'). 완료 영역 없으면 빈 리스트.")
+        @Builder.Default
+        private final List<String> distAreaDescriptions = List.of();
 
         @Schema(description = "과목 목록. "
                 + "이수과목(taken=true) + 미이수 필수과목(taken=false, hasRequiredList=true일 때). "
                 + "이름순 정렬.")
         private final List<CourseInfo> courses;
-    }
-
-    @Schema(description = "배분이수 영역 달성 현황 (24학번 이상 전용)")
-    @Getter
-    @Builder
-    public static class AreaRequirement {
-
-        @Schema(description = "필요 이수 영역 수 (m). 24학번 이상 기준 3", example = "3")
-        private final int requiredCount;
-
-        @Schema(description = "완료된 영역 수 (1과목 이상 이수한 영역)", example = "2")
-        private final int completedCount;
-
-        @Schema(description = "completedCount >= requiredCount")
-        private final boolean satisfied;
-
-        @Schema(description = "전체 영역 목록 (5개). 각 영역의 이수 완료 여부 포함")
-        private final List<AreaStatus> areas;
-
-        @Schema(description = "개별 영역 완료 현황")
-        @Getter
-        @Builder
-        public static class AreaStatus {
-
-            @Schema(description = "영역 코드", example = "AREA_1")
-            private final String code;
-
-            @Schema(description = "영역명", example = "생명, 우주, 인간")
-            private final String name;
-
-            @Schema(description = "해당 영역 완료 여부 (1과목 이상 이수 시 true)")
-            private final boolean completed;
-        }
     }
 
     @Schema(description = "교양 영역 기본 정보 (과목카드 영역 칩 표시용)")

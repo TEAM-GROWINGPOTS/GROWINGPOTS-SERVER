@@ -2,8 +2,6 @@ package com.growingpots.domain.graduation.service;
 
 import com.growingpots.domain.graduation.dto.response.GraduationCourseResponse;
 import com.growingpots.domain.graduation.dto.response.GraduationCourseResponse.AreaInfo;
-import com.growingpots.domain.graduation.dto.response.GraduationCourseResponse.AreaRequirement;
-import com.growingpots.domain.graduation.dto.response.GraduationCourseResponse.AreaRequirement.AreaStatus;
 import com.growingpots.domain.graduation.dto.response.GraduationCourseResponse.CourseInfo;
 import com.growingpots.domain.graduation.dto.response.GraduationCourseResponse.MajorCourses;
 import com.growingpots.domain.graduation.dto.response.GraduationResponse;
@@ -686,7 +684,7 @@ public class GraduationService {
                 .required(required)
                 .satisfied(satisfied)
                 .hasRequiredList(hasRequiredList)
-                .areaRequirement(areaResult != null ? toAreaRequirementDto(areaResult) : null)
+                .distAreaDescriptions(areaResult != null ? buildDistAreaDescriptions(areaResult) : List.of())
                 .courses(courses)
                 .build();
     }
@@ -929,30 +927,26 @@ public class GraduationService {
         }
         Map<String, String> areaNameMap = geAreaRepository.findBySchool(profile.getSchool()).stream()
                 .collect(Collectors.toMap(GeArea::getCode, GeArea::getName));
-        List<AreaStatus> areas = DISTRIBUTED_GE_AREA_CODES.stream()
-                .map(code -> AreaStatus.builder()
-                        .code(code)
-                        .name(areaNameMap.getOrDefault(code, code))
-                        .completed(coveredCodes.contains(code))
-                        .build())
+        List<AreaStatusInfo> areas = DISTRIBUTED_GE_AREA_CODES.stream()
+                .map(code -> new AreaStatusInfo(code, areaNameMap.getOrDefault(code, code), coveredCodes.contains(code)))
                 .toList();
-        int completedCount = (int) areas.stream().filter(AreaStatus::isCompleted).count();
+        int completedCount = (int) areas.stream().filter(AreaStatusInfo::completed).count();
         return new DistributedGeAreaResult(
                 completedCount, DISTRIBUTED_GE_REQUIRED_AREA_COUNT,
                 completedCount >= DISTRIBUTED_GE_REQUIRED_AREA_COUNT, areas);
     }
 
-    private AreaRequirement toAreaRequirementDto(DistributedGeAreaResult result) {
-        return AreaRequirement.builder()
-                .requiredCount(result.requiredCount())
-                .completedCount(result.completedCount())
-                .satisfied(result.satisfied())
-                .areas(result.areas())
-                .build();
+    private List<String> buildDistAreaDescriptions(DistributedGeAreaResult result) {
+        return result.areas().stream()
+                .filter(AreaStatusInfo::completed)
+                .map(a -> "[" + a.name() + "]영역 이수 완료")
+                .toList();
     }
 
+    private record AreaStatusInfo(String code, String name, boolean completed) {}
+
     private record DistributedGeAreaResult(
-            int completedCount, int requiredCount, boolean satisfied, List<AreaStatus> areas
+            int completedCount, int requiredCount, boolean satisfied, List<AreaStatusInfo> areas
     ) {}
 
     private Optional<DivisionCategory> toDivisionCategory(GraduationConditionType conditionType) {
