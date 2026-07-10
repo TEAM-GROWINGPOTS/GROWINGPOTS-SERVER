@@ -148,7 +148,7 @@ public @interface GraduationApi {
                                             "majorName": null,
                                             "majorType": null,
                                             "conditions": [
-                                              { "code": "GENERAL_ELECTIVE", "name": "일반 선택", "current": 21, "required": null, "unit": "CREDITS", "satisfied": false, "chartTarget": false }
+                                              { "code": "GENERAL_ELECTIVE", "name": "기타", "current": 21, "required": null, "unit": "CREDITS", "satisfied": false, "chartTarget": false }
                                             ],
                                             "graduationRequired": null
                                           }
@@ -313,6 +313,7 @@ public @interface GraduationApi {
                                             "satisfied": false,
                                             "hasRequiredList": true,
                                             "unmetDescriptions": [],
+                                            "areaRequirement": null,
                                             "courses": [
                                               {
                                                 "studentCourseId": 101,
@@ -322,7 +323,8 @@ public @interface GraduationApi {
                                                 "semester": "1학기",
                                                 "taken": true,
                                                 "isEnglish": false,
-                                                "isSw": false
+                                                "isSw": false,
+                                                "area": null
                                               },
                                               {
                                                 "studentCourseId": null,
@@ -332,7 +334,8 @@ public @interface GraduationApi {
                                                 "semester": "1학기",
                                                 "taken": false,
                                                 "isEnglish": false,
-                                                "isSw": false
+                                                "isSw": false,
+                                                "area": null
                                               }
                                             ]
                                           }

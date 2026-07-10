@@ -129,8 +129,8 @@ public @interface StudentApi {
                             examples = @ExampleObject(value = """
                                     {
                                       "success": true,
-                                      "code": "USER_200",
-                                      "message": "사용자 조회에 성공했습니다.",
+                                      "code": "USER_200_2",
+                                      "message": "학적 정보 조회에 성공했습니다.",
                                       "data": {
                                         "studentProfileId": 5001,
                                         "name": "김경민",
