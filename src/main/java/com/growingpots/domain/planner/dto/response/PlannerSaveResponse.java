@@ -22,6 +22,7 @@ public record PlannerSaveResponse(
             @Schema(description = "플래너 학기 버전 PK") Long plannerTermVersionId,
             @Schema(description = "버전 번호 (1부터 시작)", example = "1") int versionNo,
             @Schema(description = "선택된 버전 여부") boolean isSelected,
+            @Schema(description = "버전 순서 (0-based)") int versionOrder,
             @Schema(description = "버전에 포함된 과목 항목 목록") List<ItemResponse> items
     ) {
     }
@@ -29,7 +30,8 @@ public record PlannerSaveResponse(
     @Schema(description = "저장된 과목 항목 응답")
     public record ItemResponse(
             @Schema(description = "플래너 버전 항목 PK") Long plannerVersionItemId,
-            @Schema(description = "과목 PK") Long courseId
+            @Schema(description = "과목 PK") Long courseId,
+            @Schema(description = "과목 카드 순서 (0-based)") int coursePositionOrder
     ) {
     }
 }

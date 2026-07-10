@@ -415,11 +415,11 @@ public class PlannerService {
                                     .coursePositionOrder(itemReq.coursePositionOrder())
                                     .build()
                     );
-                    itemResponses.add(new PlannerSaveResponse.ItemResponse(item.getId(), course.getId()));
+                    itemResponses.add(new PlannerSaveResponse.ItemResponse(item.getId(), course.getId(), item.getCoursePositionOrder()));
                 }
 
                 versionResponses.add(new PlannerSaveResponse.VersionResponse(
-                        version.getId(), version.getVersionNo(), version.isSelected(), itemResponses));
+                        version.getId(), version.getVersionNo(), version.isSelected(), version.getVersionOrder(), itemResponses));
             }
 
             termResponses.add(new PlannerSaveResponse.TermResponse(
