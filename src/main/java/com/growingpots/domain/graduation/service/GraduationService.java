@@ -490,6 +490,11 @@ public class GraduationService {
                 .filter(c -> c.getCertType() != CertType.ENGLISH && c.getCertType() != CertType.SW)
                 .map(c -> new CertInfo(c.getCertType().name(), c.getResult().name()))
                 .forEach(result::add);
+        boolean hasGraduationCert = certs.stream()
+                .anyMatch(c -> c.getCertType() == CertType.GRADUATION_CERT);
+        if (!hasGraduationCert) {
+            result.add(new CertInfo(CertType.GRADUATION_CERT.name(), CertJudgement.NONE.name()));
+        }
         return result;
     }
 
