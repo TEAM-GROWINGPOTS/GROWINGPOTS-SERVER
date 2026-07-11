@@ -12,7 +12,7 @@ import java.util.List;
 public record PlannerSaveRequest(
         @Schema(description = "플래너 시뮬레이션 PK. null이면 새 플래너 생성, 값이 있으면 기존 플래너 전체 교체", nullable = true)
         Long plannerSimulationId,
-        @Schema(description = "학기 목록") @NotEmpty @Valid List<TermRequest> terms
+        @Schema(description = "학기 목록. 빈 배열이면 모든 학기 삭제(계획 전체 비우기)") @NotNull @Valid List<TermRequest> terms
 ) {
     @Schema(description = "학기 요청")
     public record TermRequest(
