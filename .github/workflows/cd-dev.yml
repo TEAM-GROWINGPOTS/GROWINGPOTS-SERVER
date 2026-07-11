@@ -66,10 +66,10 @@ jobs:
           pkill -f "java -jar ${APP_JAR}" || true
           cd "${APP_DIR}"
           nohup env \
-            DB_URL='${{ secrets.DEV_DB_URL }}' \
+            DEV_DB_URL='${{ secrets.DEV_DB_URL }}' \
             DB_USERNAME='${{ secrets.DB_USERNAME }}' \
             DB_PASSWORD='${{ secrets.DB_PASSWORD }}' \
-            JWT_SECRET='${{ secrets.JWT_SECRET }}' \
+            DEV_JWT_SECRET='${{ secrets.DEV_JWT_SECRET }}' \
             DISCORD_WEBHOOK_URL='${{ secrets.DISCORD_WEBHOOK_URL }}' \
             java -jar "${APP_JAR}" --spring.profiles.active=dev > "${APP_LOG}" 2>&1 &
 
