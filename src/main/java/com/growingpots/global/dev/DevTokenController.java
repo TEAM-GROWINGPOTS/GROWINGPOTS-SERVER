@@ -57,7 +57,7 @@ public class DevTokenController {
                 .secure(cookieSecure)
                 .path("/api/v1/auth/reissue")
                 .maxAge(jwtTokenProvider.getRefreshExpirationSeconds())
-                .sameSite("Lax")
+                .sameSite("None")
                 .build()
                 .toString());
 
