@@ -20,6 +20,9 @@ jwt:
 app:
   base-url: http://localhost:8080
 
+cookie:
+  secure: false
+
 discord:
   webhook-url: ${DISCORD_WEBHOOK_URL:}
 

@@ -9,8 +9,12 @@ import com.growingpots.global.response.success.SuccessCode;
 import com.growingpots.global.security.JwtTokenProvider;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -28,6 +32,9 @@ public class DevTokenController {
     private final MemberRepository memberRepository;
     private final JwtTokenProvider jwtTokenProvider;
 
+    @Value("${cookie.secure:true}")
+    private boolean cookieSecure;
+
     @Operation(
             summary = "[개발용] 임시 토큰 발급",
             description = "실제 로그인 없이 지정한 memberId로 accessToken/refreshToken을 발급한다. "
@@ -36,13 +43,22 @@ public class DevTokenController {
     )
     @GetMapping("/api/v1/dev/token")
     @Transactional
-    public BaseResponse<DevTokenResponse> issueToken(@RequestParam Long memberId) {
+    public BaseResponse<DevTokenResponse> issueToken(@RequestParam Long memberId, HttpServletResponse response) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND));
 
         String accessToken = jwtTokenProvider.generateToken(memberId.toString());
         String refreshToken = jwtTokenProvider.generateRefreshToken(memberId.toString());
         member.updateRefreshToken(refreshToken);
+
+        response.addHeader(HttpHeaders.SET_COOKIE, ResponseCookie.from("refreshToken", refreshToken)
+                .httpOnly(true)
+                .secure(cookieSecure)
+                .path("/api/v1/auth/reissue")
+                .maxAge(jwtTokenProvider.getRefreshExpirationSeconds())
+                .sameSite("None")
+                .build()
+                .toString());
 
         return BaseResponse.success(SuccessCode.OK, new DevTokenResponse(accessToken, refreshToken));
     }
