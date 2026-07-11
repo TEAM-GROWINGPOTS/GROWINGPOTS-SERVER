@@ -276,6 +276,54 @@ class PlannerGetTest {
                 .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].courses[1].divisionCategory").doesNotExist());
     }
 
+    // isEnglish/isSw는 course 매칭 여부와 무관하게 항상 응답에 채워져야 하고(completedTerms는 매칭 안
+    // 되면 false로 안전하게 떨어짐), plannedTerms는 course가 항상 존재하므로 그대로 반영돼야 한다.
+    @Test
+    void 이수완료와_계획_과목_둘_다_isEnglish_isSw가_반환된다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-7707").build());
+        Department cs = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과").build());
+        Division majorRequired = divisionRepository.save(Division.builder()
+                .school(school).code("04").category(DivisionCategory.MAJOR_REQUIRED).build());
+        Course englishSwCourse = courseRepository.save(Course.builder()
+                .school(school).courseCode("CSE301").name("영어SW강의").credit(3)
+                .offeringDepartment(cs).recommendedYearLow(3).recommendedYearHigh(3)
+                .openedSemester(OpenedSemester.FIRST).isEnglish(true).isSw(true).build());
+        StudentProfile profile = onboardedStudent("7707", cs, 2023);
+
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(englishSwCourse).appliedDivision(majorRequired)
+                .rawCourseCode("CSE301").rawCourseName("영어SW강의").credit(3)
+                .takenYear(2023).takenSemester(Semester.FIRST)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).isRetake(false).build());
+        // course 매칭 안 된 이수완료 과목은 isEnglish/isSw가 false로 안전하게 떨어져야 한다.
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(null).appliedDivision(majorRequired)
+                .rawCourseCode(null).rawCourseName("미매칭과목").credit(3)
+                .takenYear(2023).takenSemester(Semester.SECOND)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).isRetake(false).build());
+
+        PlannerSimulation simulation = plannerSimulationRepository.save(PlannerSimulation.builder()
+                .studentProfile(profile).name("내 플래너").build());
+        PlannerTerm term = plannerTermRepository.save(PlannerTerm.builder()
+                .plannerSimulation(simulation).yearLevel(3).semester(1).build());
+        PlannerTermVersion version = plannerTermVersionRepository.save(PlannerTermVersion.builder()
+                .plannerTerm(term).versionNo(1).name("폴더 1").isSelected(true).versionOrder(0).build());
+        plannerVersionItemRepository.save(PlannerVersionItem.builder()
+                .plannerTermVersion(version).course(englishSwCourse).plannedDivision(majorRequired)
+                .credit(3).coursePositionOrder(0).build());
+
+        mockMvc.perform(get("/api/v1/planner")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.completedTerms[0].courses[0].isEnglish").value(true))
+                .andExpect(jsonPath("$.data.completedTerms[0].courses[0].isSw").value(true))
+                .andExpect(jsonPath("$.data.completedTerms[1].courses[0].isEnglish").value(false))
+                .andExpect(jsonPath("$.data.completedTerms[1].courses[0].isSw").value(false))
+                .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].courses[0].isEnglish").value(true))
+                .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].courses[0].isSw").value(true));
+    }
+
     @Test
     void 시뮬레이션을_한번도_저장한적_없으면_plannedTerms는_빈배열이다() throws Exception {
         School school = schoolRepository.save(School.builder().name("경희대학교-7704").build());

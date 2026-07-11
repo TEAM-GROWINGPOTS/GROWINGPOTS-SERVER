@@ -30,10 +30,15 @@ public @interface PlannerApi {
 
                     **completedTerms 응답 필드**
                     - yearLevel / semester: 수강 순서 기준으로 산정한 학년·학기 (1-based).
-                    - plannerTermVersionId: 실제 DB row 없이 만든 합성 값(항상 음수). 다른 API에 전달 불가.
+                    - plannerTermVersionId: completedTerms는 조회전용이라 실제 PLANNER_TERM_VERSION row가
+                      없어 만든 합성 값이다. 진짜 PK는 AUTO_INCREMENT라 항상 양수이므로 절대 안 겹치도록
+                      항상 음수로 만든다 - 실수로 이 값을 진짜 PK인 것처럼 다른 API(예: 버전 선택)에 넘기더라도
+                      DB에 존재할 수 없는 값이라 엉뚱한 데 매칭되지 않고 즉시 404로 실패하게 하기 위한
+                      안전장치다. 다른 API에 절대 전달하면 안 된다.
                     - status: IN_PROGRESS(이수중) | COMPLETED(이수완료).
                     - courses[].studentCourseId: 이수 기록 PK.
                     - courses[].divisionCategory / divisionName: 이수구분 코드·표시명. 항상 존재.
+                    - courses[].isEnglish / isSw: 영어강의·SW인증강의 여부. course 매칭 안 된 과목은 false.
 
                     **completedTerms 구성 방식**
                     STUDENT_COURSE를 (수강년도, 수강학기)로 그룹핑한다.
@@ -50,6 +55,7 @@ public @interface PlannerApi {
                     - versions[].courses[].coursePositionOrder: 카드뷰 내 과목 순서(0-based).
                     - versions[].courses[].divisionCategory / divisionName: 기본 이수구분이 없는 과목은 null.
                     - versions[].courses[].courseId: 직접추가를 지원하지 않아 항상 존재.
+                    - versions[].courses[].isEnglish / isSw: 영어강의·SW인증강의 여부.
 
                     **plannedTerms 구성 방식**
                     PLANNER_SIMULATION → PLANNER_TERM → PLANNER_TERM_VERSION → PLANNER_VERSION_ITEM 트리 구조.
@@ -89,7 +95,9 @@ public @interface PlannerApi {
                                                 "recommendedYearLow": 1,
                                                 "recommendedYearHigh": 1,
                                                 "openedSemester": "FIRST",
-                                                "credit": 3
+                                                "credit": 3,
+                                                "isEnglish": false,
+                                                "isSw": false
                                               }
                                             ]
                                           }
@@ -119,7 +127,9 @@ public @interface PlannerApi {
                                                     "recommendedYearHigh": 2,
                                                     "openedSemester": "FIRST",
                                                     "credit": 3,
-                                                    "coursePositionOrder": 0
+                                                    "coursePositionOrder": 0,
+                                                    "isEnglish": false,
+                                                    "isSw": false
                                                   }
                                                 ]
                                               }

@@ -140,6 +140,8 @@ public class PlannerService {
                 .openedSemester(course.getOpenedSemester() != null ? course.getOpenedSemester().name() : null)
                 .credit(item.getCredit())
                 .coursePositionOrder(item.getCoursePositionOrder())
+                .isEnglish(course.isEnglish())
+                .isSw(course.isSw())
                 .build();
     }
 
@@ -217,6 +219,8 @@ public class PlannerService {
                 .recommendedYearHigh(course != null ? course.getRecommendedYearHigh() : null)
                 .openedSemester(course != null && course.getOpenedSemester() != null ? course.getOpenedSemester().name() : null)
                 .credit(studentCourse.getCredit())
+                .isEnglish(course != null && course.isEnglish())
+                .isSw(course != null && course.isSw())
                 .build();
     }
 

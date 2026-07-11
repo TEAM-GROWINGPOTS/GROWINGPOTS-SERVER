@@ -28,7 +28,13 @@ public class PlannerResponse {
         @Schema(description = "학기 (1 또는 2)", example = "1")
         private final int semester;
 
-        @Schema(description = "합성 버전 ID (항상 음수, 다른 API에 전달 불가)")
+        // completedTerms는 조회전용이라 실제 PLANNER_TERM_VERSION row가 없어 합성 ID를 만들어 넣는다.
+        // 진짜 PK는 AUTO_INCREMENT라 항상 양수이므로 절대 안 겹치게 항상 음수로 둔다 - 실수로 이 값을
+        // 진짜 PK처럼 다른 API(예: 버전 선택)에 넘겨도 DB에 없는 값이라 조용히 엉뚱한 데 매칭되지 않고
+        // 즉시 404로 실패하게 하기 위한 안전장치다.
+        @Schema(description = "합성 버전 ID. completedTerms엔 실제 PLANNER_TERM_VERSION row가 없어 만든 값이라 "
+                + "항상 음수다(진짜 PK와 안 겹치게 하기 위함 - 실수로 다른 API에 넘겨도 즉시 실패하도록). "
+                + "다른 API에 전달하면 안 됨")
         private final Long plannerTermVersionId;
 
         @Schema(description = "학기 표시명", example = "1학년 1학기")
@@ -80,6 +86,16 @@ public class PlannerResponse {
 
         @Schema(description = "학점", example = "3")
         private final int credit;
+
+        // Lombok이 boolean isEnglish/isSw에 대해 isEnglish()/isSw() 게터를 만드는데, Jackson은
+        // "is" 접두사를 벗겨 "english"/"sw"로 직렬화해버린다. 게터에 @JsonProperty를 얹어 이름 고정.
+        @Schema(description = "영어 강의 여부. course 매칭 안 된 과목은 false")
+        @Getter(onMethod_ = @__(@JsonProperty("isEnglish")))
+        private final boolean isEnglish;
+
+        @Schema(description = "SW 인증 강의 여부. course 매칭 안 된 과목은 false")
+        @Getter(onMethod_ = @__(@JsonProperty("isSw")))
+        private final boolean isSw;
     }
 
     @Schema(description = "계획 학기")
@@ -171,5 +187,15 @@ public class PlannerResponse {
 
         @Schema(description = "카드뷰 내 과목 순서 (0-based)")
         private final int coursePositionOrder;
+
+        // Lombok이 boolean isEnglish/isSw에 대해 isEnglish()/isSw() 게터를 만드는데, Jackson은
+        // "is" 접두사를 벗겨 "english"/"sw"로 직렬화해버린다. 게터에 @JsonProperty를 얹어 이름 고정.
+        @Schema(description = "영어 강의 여부")
+        @Getter(onMethod_ = @__(@JsonProperty("isEnglish")))
+        private final boolean isEnglish;
+
+        @Schema(description = "SW 인증 강의 여부")
+        @Getter(onMethod_ = @__(@JsonProperty("isSw")))
+        private final boolean isSw;
     }
 }
