@@ -2,6 +2,7 @@ package com.growingpots.domain.planner.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -247,6 +248,71 @@ class PlannerSaveTest {
                 .filter(s -> s.getStudentProfile().getId().equals(student.getId()))
                 .count();
         assertThat(simulationCount).isEqualTo(1);
+    }
+
+    @Test
+    void terms를_빈_배열로_저장하면_기존_학기가_전부_삭제된다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-6605").build());
+        Department cs = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과").build());
+        Course course = courseRepository.save(Course.builder()
+                .school(school).courseCode("CS203").name("운영체제").credit(3)
+                .offeringDepartment(cs)
+                .openedSemester(OpenedSemester.BOTH).isEnglish(false).isSw(false).build());
+        StudentProfile student = onboardedStudent("6605", cs);
+
+        String saveWithTerm = """
+                {
+                  "plannerSimulationId": null,
+                  "terms": [
+                    {
+                      "yearLevel": 2,
+                      "semester": 1,
+                      "versions": [
+                        {
+                          "versionNo": 1,
+                          "name": "폴더 1",
+                          "isSelected": true,
+                          "versionOrder": 0,
+                          "items": [
+                            { "courseId": %d, "coursePositionOrder": 0 }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+                """.formatted(course.getId());
+
+        Authentication auth = authenticationOf(student.getMember().getId());
+
+        mockMvc.perform(put("/api/v1/planner")
+                        .with(authentication(auth))
+                        .contentType("application/json")
+                        .content(saveWithTerm))
+                .andExpect(status().isOk());
+
+        Long plannerSimulationId = plannerSimulationRepository.findByStudentProfile(student)
+                .orElseThrow().getId();
+
+        String saveEmpty = """
+                {
+                  "plannerSimulationId": %d,
+                  "terms": []
+                }
+                """.formatted(plannerSimulationId);
+
+        mockMvc.perform(put("/api/v1/planner")
+                        .with(authentication(auth))
+                        .contentType("application/json")
+                        .content(saveEmpty))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.terms.length()").value(0));
+
+        mockMvc.perform(get("/api/v1/planner")
+                        .with(authentication(auth)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.plannedTerms.length()").value(0));
     }
 
     @Test
