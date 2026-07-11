@@ -546,10 +546,10 @@ class GraduationRequiredTest {
                 .andExpect(jsonPath("$.data.majors[0].courses[0].name").value("현재개설과목"));
     }
 
-    // 전공선택처럼 "골라 듣는" 이수구분도, 이제는 그 이수구분에 개설된 활성 과목이 있으면 전부
-    // 미이수 후보로 뜬다(RequirementCourse 큐레이션 없이 Course 테이블만 보는 구조로 바뀌었으므로).
+    // 전공선택처럼 "골라 듣는" 이수구분은 미이수 후보 목록 대상이 아니다 - 졸업필수/전공필수만
+    // Course 테이블 기반 미이수 후보를 노출한다(리뷰 반영: 나머지 이수구분은 requiredCourses를 안 만듦).
     @Test
-    void 전공선택도_해당_이수구분의_활성_과목이면_미이수로_뜬다() throws Exception {
+    void 전공선택은_활성_과목이_있어도_미이수_후보로_안_뜬다() throws Exception {
         School school = schoolRepository.save(School.builder().name("경희대학교-9212").build());
         Department department = departmentRepository.save(Department.builder()
                 .school(school).college("공과대학").name("화학공학과-9212").build());
@@ -573,7 +573,7 @@ class GraduationRequiredTest {
                         .param("studentMajorId", String.valueOf(major.getId()))
                         .with(authentication(authenticationOf(profile.getMember().getId()))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.majors[0].hasRequiredList").value(true))
-                .andExpect(jsonPath("$.data.majors[0].courses[?(@.name=='전공선택과목A')].taken").value(false));
+                .andExpect(jsonPath("$.data.majors[0].hasRequiredList").value(false))
+                .andExpect(jsonPath("$.data.majors[0].courses.length()").value(0));
     }
 }

@@ -646,10 +646,14 @@ public class GraduationService {
         // 미이수 후보: RequirementCourse 큐레이션 대신 Course 테이블을 직접 본다. 이 학과+이수구분에
         // 개설된 현재 활성 과목이 곧 "미이수 후보 목록"이다 - 별도 필수과목 리스트를 관리자가 손으로
         // 유지보수할 필요 없이, 커리큘럼 개정 시 Course.isActive만 갱신하면 자동으로 반영된다.
-        List<Course> requiredCourses = toDivisionCategory(conditionType)
-                .map(category -> courseRepository.findActiveByDepartmentAndDivisionCategory(
-                        major.getDepartment(), category))
-                .orElse(List.of());
+        // 졸업필수/전공필수만 미이수 표기 대상 - 전공선택/GE 등은 선택적으로 이수하는 영역이라
+        // "이 과목을 안 들었다"는 표시가 의미 없다(졸업필수는 buildGraduationRequiredMajorCourses에서 별도 처리).
+        List<Course> requiredCourses = (conditionType == GraduationConditionType.MAJOR_REQUIRED)
+                ? toDivisionCategory(conditionType)
+                        .map(category -> courseRepository.findActiveByDepartmentAndDivisionCategory(
+                                major.getDepartment(), category))
+                        .orElse(List.of())
+                : List.of();
         boolean hasRequiredList = !requiredCourses.isEmpty();
 
         Set<Long> takenCourseIds = new HashSet<>();
