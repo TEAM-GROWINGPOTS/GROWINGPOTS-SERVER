@@ -14,7 +14,7 @@ public class WebConfig implements WebMvcConfigurer {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(List.of("*")); // TODO: 운영 배포 전 실제 도메인으로 교체
+        config.setAllowedOriginPatterns(List.of("http://localhost:3000")); // TODO: 운영 배포 전 실제 도메인으로 교체
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setExposedHeaders(List.of("Authorization"));
