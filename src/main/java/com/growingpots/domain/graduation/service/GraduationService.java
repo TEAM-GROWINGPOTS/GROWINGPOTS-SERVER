@@ -245,7 +245,7 @@ public class GraduationService {
 
     // 탭별 조건 목록 생성
     // - 전공 탭(MAJOR, 본전공/복수전공 구분 없이 전공 하나): MAJOR_* + 영어/SW(전공 이수구분 + 해당 학과 개설 과목)
-    // - 교양 탭(GE): REQUIRED_GE/DISTRIBUTED_GE/FREE_GE + 영어/SW(교양 이수구분)
+    // - 교양 탭(GE): REQUIRED_GE/DISTRIBUTED_GE/FREE_GE + SW(교양 이수구분). 영어는 전공 탭에만 표시.
     // - 기타 탭(OTHERS): GENERAL_ELECTIVE (영어·SW 미포함)
     private List<ConditionInfo> buildConditionsForTab(
             StudentProfile profile,
@@ -277,11 +277,13 @@ public class GraduationService {
         }
 
         // 영어/SW: 이수구분 기준으로 탭 배치.
-        // 전공 탭은 offeringDepartment(appliedDepartment 우선)로 해당 전공 학과만 필터링
-        // OTHERS(기타) 탭에는 포함하지 않음 - 영어·SW는 기타 이수구분이 아님
+        // 전공 탭은 offeringDepartment(appliedDepartment 우선)로 해당 전공 학과만 필터링.
+        // 영어는 전공 탭에만 표시. SW는 전공·교양 탭 모두 표시. OTHERS(기타) 탭에는 둘 다 미포함.
         if (tab != ConditionsTab.OTHERS) {
             List<DivisionCategory> cats = getDivisionCategoriesForTab(tab);
-            result.add(buildEnglishConditionInfo(profile, cats, summary, department, plannedItems));
+            if (tab == ConditionsTab.MAJOR) {
+                result.add(buildEnglishConditionInfo(profile, cats, summary, department, plannedItems));
+            }
             result.add(buildSwConditionInfo(profile, cats, summary, department, plannedItems));
         }
 
