@@ -329,8 +329,8 @@ public @interface GraduationApi {
                                       "code": "REQ_200_2",
                                       "message": "이수구분별 과목을 조회했습니다.",
                                       "data": {
-                                        "divisionCode": "MAJOR_REQUIRED",
-                                        "divisionName": "전공 필수",
+                                        "conditionCode": "MAJOR_REQUIRED",
+                                        "conditionName": "전공 필수",
                                         "majors": [
                                           {
                                             "majorType": "MAIN",
@@ -379,8 +379,8 @@ public @interface GraduationApi {
                                       "code": "REQ_200_2",
                                       "message": "이수구분별 과목을 조회했습니다.",
                                       "data": {
-                                        "divisionCode": "DISTRIBUTED_GE",
-                                        "divisionName": "배분 이수 교과",
+                                        "conditionCode": "DISTRIBUTED_GE",
+                                        "conditionName": "배분 이수 교과",
                                         "majors": [
                                           {
                                             "majorType": "MAIN",
@@ -429,8 +429,8 @@ public @interface GraduationApi {
                                       "code": "REQ_200_2",
                                       "message": "이수구분별 과목을 조회했습니다.",
                                       "data": {
-                                        "divisionCode": "GRADUATION_REQUIRED",
-                                        "divisionName": "졸업필수",
+                                        "conditionCode": "GRADUATION_REQUIRED",
+                                        "conditionName": "졸업필수",
                                         "majors": [
                                           {
                                             "majorType": "MAIN",
