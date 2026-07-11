@@ -5,6 +5,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.growingpots.domain.planner.entity.PlannerSimulation;
+import com.growingpots.domain.planner.entity.PlannerTerm;
+import com.growingpots.domain.planner.entity.PlannerTermVersion;
+import com.growingpots.domain.planner.entity.PlannerVersionItem;
+import com.growingpots.domain.planner.repository.PlannerSimulationRepository;
+import com.growingpots.domain.planner.repository.PlannerTermRepository;
+import com.growingpots.domain.planner.repository.PlannerTermVersionRepository;
+import com.growingpots.domain.planner.repository.PlannerVersionItemRepository;
 import com.growingpots.domain.transcript.entity.StudentCourse;
 import com.growingpots.domain.transcript.entity.enums.CourseStatus;
 import com.growingpots.domain.transcript.entity.enums.RecordSource;
@@ -68,6 +76,18 @@ class CourseSearchTest {
 
     @Autowired
     private StudentCourseRepository studentCourseRepository;
+
+    @Autowired
+    private PlannerSimulationRepository plannerSimulationRepository;
+
+    @Autowired
+    private PlannerTermRepository plannerTermRepository;
+
+    @Autowired
+    private PlannerTermVersionRepository plannerTermVersionRepository;
+
+    @Autowired
+    private PlannerVersionItemRepository plannerVersionItemRepository;
 
     private StudentProfile onboardedStudent(String oauthId, Department department) {
         Member member = memberRepository.save(Member.builder()
@@ -363,6 +383,38 @@ class CourseSearchTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.courses[?(@.courseCode == 'CS101')].alreadyCompleted").value(true))
                 .andExpect(jsonPath("$.data.courses[?(@.courseCode == 'CS102')].alreadyCompleted").value(false));
+    }
+
+    @Test
+    void inPlanner는_현재_선택된_플래너_버전에_담긴_과목만_true다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-9112").build());
+        Department cs = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과").build());
+        Course inPlannerCourse = courseRepository.save(Course.builder()
+                .school(school).courseCode("CS201").name("자료구조").credit(3)
+                .offeringDepartment(cs).recommendedYearLow(2).recommendedYearHigh(2)
+                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).isActive(true).build());
+        courseRepository.save(Course.builder()
+                .school(school).courseCode("CS202").name("운영체제").credit(3)
+                .offeringDepartment(cs).recommendedYearLow(2).recommendedYearHigh(2)
+                .openedSemester(OpenedSemester.SECOND).isEnglish(false).isSw(false).isActive(true).build());
+        StudentProfile studentProfile = onboardedStudent("9112", cs);
+
+        PlannerSimulation simulation = plannerSimulationRepository.save(PlannerSimulation.builder()
+                .studentProfile(studentProfile).name("내 플래너").build());
+        PlannerTerm term = plannerTermRepository.save(PlannerTerm.builder()
+                .plannerSimulation(simulation).yearLevel(2).semester(1).build());
+        PlannerTermVersion version = plannerTermVersionRepository.save(PlannerTermVersion.builder()
+                .plannerTerm(term).versionNo(1).name("폴더 1").isSelected(true).versionOrder(0).build());
+        plannerVersionItemRepository.save(PlannerVersionItem.builder()
+                .plannerTermVersion(version).course(inPlannerCourse).plannedDivision(null)
+                .credit(3).coursePositionOrder(0).build());
+
+        mockMvc.perform(get("/api/v1/courses")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.courses[?(@.courseCode == 'CS201')].inPlanner").value(true))
+                .andExpect(jsonPath("$.data.courses[?(@.courseCode == 'CS202')].inPlanner").value(false));
     }
 
     @Test

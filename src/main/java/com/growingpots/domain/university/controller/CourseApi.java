@@ -35,7 +35,7 @@ public @interface CourseApi {
                       과목의 원래 기본 이수구분이 아니라 학생 학과 기준으로 인정되는 이수구분명으로 표시됩니다.
                     - `credits`에 4가 포함되면 "4학점 이상"(>=4)으로 처리하고, 나머지 값은 정확히 일치하는 값만 매칭합니다.
                     - `recommendedYearLow`/`recommendedYearHigh`가 다르면 권장 학년이 범위(예: 1~2학년)라는 뜻입니다.
-                    - `inPlanner`는 플래너 기능이 아직 없어 항상 false입니다.
+                    - `inPlanner`는 학생의 현재 선택된 플래너 버전에 이 과목이 담겨 있으면 true입니다.
                     """
     )
     @ApiResponses({
