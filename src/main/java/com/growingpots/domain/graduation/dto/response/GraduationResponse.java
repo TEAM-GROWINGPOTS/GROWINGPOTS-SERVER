@@ -115,9 +115,8 @@ public class GraduationResponse {
 
         @Schema(
                 description = "인증 유형. "
-                        + "THESIS(논문) · GRADUATION_CERT(졸업능력인정) · ENGLISH(영어인증) · "
-                        + "SW(SW인증) · TOPIK(한국어능력시험)",
-                allowableValues = {"THESIS", "ENGLISH", "SW", "TOPIK", "GRADUATION_CERT"})
+                        + "GPA(평점) · THESIS(논문) · GRADUATION_CERT(졸업능력인정) · TOPIK(한국어능력시험)",
+                allowableValues = {"GPA", "THESIS", "GRADUATION_CERT", "TOPIK"})
         private final String certType;
 
         @Schema(

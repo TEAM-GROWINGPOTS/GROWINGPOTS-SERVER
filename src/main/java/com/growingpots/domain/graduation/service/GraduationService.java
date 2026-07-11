@@ -23,6 +23,7 @@ import com.growingpots.domain.transcript.entity.CertResult;
 import com.growingpots.domain.transcript.entity.GraduationAnalysisSummary;
 import com.growingpots.domain.transcript.entity.StudentCourse;
 import com.growingpots.domain.transcript.entity.enums.CertJudgement;
+import com.growingpots.domain.transcript.entity.enums.CertType;
 import com.growingpots.domain.transcript.entity.enums.CourseStatus;
 import com.growingpots.domain.transcript.entity.enums.Semester;
 import com.growingpots.domain.transcript.repository.CertResultRepository;
@@ -167,7 +168,7 @@ public class GraduationService {
                 .conditions(buildConditionsForTab(profile, summary, tab, department, plannedItems, geAreaResult))
                 .graduationRequired(toGraduationRequiredSummary(judgement))
                 .sections(null)
-                .certs(toCertInfos(certs))
+                .certs(buildCertInfos(certs, summary))
                 .build();
     }
 
@@ -210,7 +211,7 @@ public class GraduationService {
                         .ge(geSection)
                         .others(othersSection)
                         .build())
-                .certs(toCertInfos(mainContext.certs()))
+                .certs(buildCertInfos(mainContext.certs(), mainContext.effectiveSummary()))
                 .build();
     }
 
@@ -482,10 +483,27 @@ public class GraduationService {
                 .build();
     }
 
-    private List<CertInfo> toCertInfos(List<CertResult> certs) {
-        return certs.stream()
+    private List<CertInfo> buildCertInfos(List<CertResult> certs, GraduationAnalysisSummary summary) {
+        List<CertInfo> result = new ArrayList<>();
+        result.add(buildGpaCertInfo(summary));
+        certs.stream()
+                .filter(c -> c.getCertType() != CertType.ENGLISH && c.getCertType() != CertType.SW)
                 .map(c -> new CertInfo(c.getCertType().name(), c.getResult().name()))
-                .toList();
+                .forEach(result::add);
+        return result;
+    }
+
+    private CertInfo buildGpaCertInfo(GraduationAnalysisSummary summary) {
+        String judged;
+        if (summary.getGpaRequired() == null) {
+            judged = CertJudgement.NONE.name();
+        } else if (summary.getGpaCurrent() == null
+                || summary.getGpaCurrent().compareTo(summary.getGpaRequired()) < 0) {
+            judged = CertJudgement.FAIL.name();
+        } else {
+            judged = CertJudgement.PASS.name();
+        }
+        return new CertInfo("GPA", judged);
     }
 
     @Transactional(readOnly = true)
@@ -506,8 +524,8 @@ public class GraduationService {
                 || conditionType == GraduationConditionType.SW_CERT_COURSE)) {
             if (majorTypeFilter == MajorTypeFilter.OTHERS) {
                 return GraduationCourseResponse.builder()
-                        .divisionCode(conditionType.name())
-                        .divisionName(conditionType.getDisplayName())
+                        .conditionCode(conditionType.name())
+                        .conditionName(conditionType.getDisplayName())
                         .majors(List.of())
                         .build();
             }
@@ -538,8 +556,8 @@ public class GraduationService {
                 .toList();
 
         return GraduationCourseResponse.builder()
-                .divisionCode(conditionType.name())
-                .divisionName(conditionType.getDisplayName())
+                .conditionCode(conditionType.name())
+                .conditionName(conditionType.getDisplayName())
                 .majors(majorCoursesList)
                 .build();
     }
@@ -586,8 +604,8 @@ public class GraduationService {
                 .toList();
 
         return GraduationCourseResponse.builder()
-                .divisionCode(conditionType.name())
-                .divisionName(conditionType.getDisplayName())
+                .conditionCode(conditionType.name())
+                .conditionName(conditionType.getDisplayName())
                 .majors(List.of(MajorCourses.builder()
                         .majorType(null)
                         .departmentName(null)
@@ -665,12 +683,13 @@ public class GraduationService {
         }
 
         // 미이수 과목: RequirementCourseItem 중 이수하지 않은 것. courseId 기준 중복 제거.
+        Division division = divisionOpt.orElse(null);
         if (hasRequiredList) {
             Set<Long> addedIds = new HashSet<>();
             for (RequirementCourseItem item : allItems) {
                 Long courseId = item.getCourse().getId();
                 if (!takenCourseIds.contains(courseId) && addedIds.add(courseId)) {
-                    courses.add(toNotTakenCourseInfo(item));
+                    courses.add(toNotTakenCourseInfo(item, division));
                 }
             }
         }
@@ -709,7 +728,7 @@ public class GraduationService {
         for (RequirementCourseItem item : judgement.items()) {
             Long courseId = item.getCourse().getId();
             if (!takenCourseIds.contains(courseId) && addedIds.add(courseId)) {
-                courses.add(toNotTakenCourseInfo(item));
+                courses.add(toNotTakenCourseInfo(item, item.getCourse().getDefaultDivision()));
             }
         }
         courses.sort(Comparator.comparing(CourseInfo::getName));
@@ -965,9 +984,12 @@ public class GraduationService {
     private CourseInfo toTakenCourseInfo(StudentCourse sc, AreaInfo area) {
         String departmentName = sc.getCourse() != null && sc.getCourse().getOfferingDepartment() != null
                 ? sc.getCourse().getOfferingDepartment().getName() : null;
+        Division div = sc.getAppliedDivision();
         return CourseInfo.builder()
                 .studentCourseId(sc.getId())
                 .name(sc.getRawCourseName())
+                .divisionCode(div != null ? div.getCategory().name() : null)
+                .divisionName(div != null ? div.getCategory().getDisplayName() : null)
                 .departmentName(departmentName)
                 .credit(sc.getCredit())
                 .semester(sc.getTakenSemester() != null ? semesterName(sc.getTakenSemester()) : null)
@@ -985,13 +1007,15 @@ public class GraduationService {
         return new AreaInfo(geArea.getCode(), geArea.getName());
     }
 
-    private CourseInfo toNotTakenCourseInfo(RequirementCourseItem item) {
+    private CourseInfo toNotTakenCourseInfo(RequirementCourseItem item, Division division) {
         var course = item.getCourse();
         String departmentName = course.getOfferingDepartment() != null
                 ? course.getOfferingDepartment().getName() : null;
         return CourseInfo.builder()
                 .studentCourseId(null)
                 .name(course.getName())
+                .divisionCode(division != null ? division.getCategory().name() : null)
+                .divisionName(division != null ? division.getCategory().getDisplayName() : null)
                 .departmentName(departmentName)
                 .credit(course.getCredit())
                 .semester(openedSemesterName(course.getOpenedSemester()))

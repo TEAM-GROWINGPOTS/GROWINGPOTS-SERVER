@@ -7,16 +7,18 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 
-@Schema(description = "이수구분별 과목 조회 응답")
+@Schema(description = "졸업 조건별 과목 조회 응답")
 @Getter
 @Builder
 public class GraduationCourseResponse {
 
-    @Schema(description = "요청한 이수구분 코드 (요청값 그대로 반환)", example = "MAJOR_REQUIRED")
-    private final String divisionCode;
+    @Schema(description = "조회한 졸업 조건 코드 (요청값 그대로 반환). "
+            + "이수구분(MAJOR_REQUIRED 등) 외에 GRADUATION_REQUIRED·ENGLISH_COURSE·SW_CERT_COURSE 포함",
+            example = "MAJOR_REQUIRED")
+    private final String conditionCode;
 
-    @Schema(description = "이수구분 이름 (예: 전공 필수, 영어 강의)", example = "전공 필수")
-    private final String divisionName;
+    @Schema(description = "졸업 조건 이름", example = "전공 필수")
+    private final String conditionName;
 
     @Schema(description = "전공별 과목 목록. "
             + "ENGLISH_COURSE·SW_CERT_COURSE + majorType=ALL이면 단일 항목(majorType=null). "
@@ -97,6 +99,16 @@ public class GraduationCourseResponse {
 
         @Schema(description = "과목명", example = "자료구조")
         private final String name;
+
+        @Schema(description = "이수구분 코드. "
+                + "이수 과목(taken=true): 학생 성적표에 적용된 이수구분(appliedDivision). 매칭 실패 시 null. "
+                + "미이수 과목(taken=false): 과목의 기본 이수구분(defaultDivision). 미설정 시 null.",
+                example = "MAJOR_REQUIRED", nullable = true)
+        private final String divisionCode;
+
+        @Schema(description = "이수구분 이름. divisionCode가 null이면 null",
+                example = "전공필수", nullable = true)
+        private final String divisionName;
 
         @Schema(description = "개설 학과명. 정보가 없으면 null", nullable = true)
         private final String departmentName;
