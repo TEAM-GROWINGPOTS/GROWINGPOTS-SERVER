@@ -27,6 +27,7 @@ import com.growingpots.domain.transcript.entity.enums.CertType;
 import com.growingpots.domain.transcript.entity.enums.CourseStatus;
 import com.growingpots.domain.transcript.entity.enums.Semester;
 import com.growingpots.domain.transcript.repository.CertResultRepository;
+import com.growingpots.domain.university.entity.Course;
 import com.growingpots.domain.university.entity.Department;
 import com.growingpots.domain.university.entity.enums.DivisionCategory;
 import com.growingpots.domain.transcript.repository.GraduationAnalysisSummaryRepository;
@@ -36,6 +37,7 @@ import com.growingpots.domain.university.entity.GeArea;
 import com.growingpots.domain.university.entity.RequirementCourse;
 import com.growingpots.domain.university.entity.RequirementCourseItem;
 import com.growingpots.domain.university.entity.enums.OpenedSemester;
+import com.growingpots.domain.university.repository.CourseRepository;
 import com.growingpots.domain.university.repository.DivisionRepository;
 import com.growingpots.domain.university.repository.GeAreaRepository;
 import com.growingpots.domain.university.repository.RequirementCourseItemRepository;
@@ -68,6 +70,7 @@ public class GraduationService {
     private final GraduationAnalysisSummaryRepository graduationAnalysisSummaryRepository;
     private final CertResultRepository certResultRepository;
     private final StudentCourseRepository studentCourseRepository;
+    private final CourseRepository courseRepository;
     private final DivisionRepository divisionRepository;
     private final RequirementCourseRepository requirementCourseRepository;
     private final RequirementCourseItemRepository requirementCourseItemRepository;
@@ -664,19 +667,18 @@ public class GraduationService {
             satisfied = satisfied && areaResult.satisfied();
         }
 
-        int admissionYear = profile.getAdmissionYear();
-        Optional<Division> divisionOpt = toDivisionCategory(conditionType)
-                .flatMap(cat -> divisionRepository.findBySchoolAndCategory(profile.getSchool(), cat));
-
-        List<RequirementCourse> requirementCourses = divisionOpt
-                .map(div -> requirementCourseRepository.findApplicable(
-                        major.getDepartment(), div, admissionYear))
-                .orElse(List.of());
-        boolean hasRequiredList = !requirementCourses.isEmpty();
-
-        List<RequirementCourseItem> allItems = hasRequiredList
-                ? requirementCourseItemRepository.findWithCourseByRequirementCourseIn(requirementCourses)
+        // 미이수 후보: RequirementCourse 큐레이션 대신 Course 테이블을 직접 본다. 이 학과+이수구분에
+        // 개설된 현재 활성 과목이 곧 "미이수 후보 목록"이다 - 별도 필수과목 리스트를 관리자가 손으로
+        // 유지보수할 필요 없이, 커리큘럼 개정 시 Course.isActive만 갱신하면 자동으로 반영된다.
+        // 졸업필수/전공필수만 미이수 표기 대상 - 전공선택/GE 등은 선택적으로 이수하는 영역이라
+        // "이 과목을 안 들었다"는 표시가 의미 없다(졸업필수는 buildGraduationRequiredMajorCourses에서 별도 처리).
+        List<Course> requiredCourses = (conditionType == GraduationConditionType.MAJOR_REQUIRED)
+                ? toDivisionCategory(conditionType)
+                        .map(category -> courseRepository.findActiveByDepartmentAndDivisionCategory(
+                                major.getDepartment(), category))
+                        .orElse(List.of())
                 : List.of();
+        boolean hasRequiredList = !requiredCourses.isEmpty();
 
         Set<Long> takenCourseIds = new HashSet<>();
         List<CourseInfo> courses = new ArrayList<>();
@@ -688,15 +690,9 @@ public class GraduationService {
             courses.add(toTakenCourseInfo(sc, extractAreaInfo(sc, conditionType)));
         }
 
-        // 미이수 과목: RequirementCourseItem 중 이수하지 않은 것. courseId 기준 중복 제거.
-        Division division = divisionOpt.orElse(null);
-        if (hasRequiredList) {
-            Set<Long> addedIds = new HashSet<>();
-            for (RequirementCourseItem item : allItems) {
-                Long courseId = item.getCourse().getId();
-                if (!takenCourseIds.contains(courseId) && addedIds.add(courseId)) {
-                    courses.add(toNotTakenCourseInfo(item, division));
-                }
+        for (Course course : requiredCourses) {
+            if (!takenCourseIds.contains(course.getId())) {
+                courses.add(toNotTakenCourseInfo(course, course.getDefaultDivision()));
             }
         }
 
@@ -1014,7 +1010,10 @@ public class GraduationService {
     }
 
     private CourseInfo toNotTakenCourseInfo(RequirementCourseItem item, Division division) {
-        var course = item.getCourse();
+        return toNotTakenCourseInfo(item.getCourse(), division);
+    }
+
+    private CourseInfo toNotTakenCourseInfo(Course course, Division division) {
         String departmentName = course.getOfferingDepartment() != null
                 ? course.getOfferingDepartment().getName() : null;
         return CourseInfo.builder()

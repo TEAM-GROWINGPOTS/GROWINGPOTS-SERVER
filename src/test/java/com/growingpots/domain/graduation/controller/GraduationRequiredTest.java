@@ -22,12 +22,15 @@ import com.growingpots.domain.transcript.repository.GraduationAnalysisSummaryRep
 import com.growingpots.domain.transcript.repository.StudentCourseRepository;
 import com.growingpots.domain.university.entity.Course;
 import com.growingpots.domain.university.entity.Department;
+import com.growingpots.domain.university.entity.Division;
 import com.growingpots.domain.university.entity.RequirementCourse;
 import com.growingpots.domain.university.entity.RequirementCourseItem;
 import com.growingpots.domain.university.entity.School;
+import com.growingpots.domain.university.entity.enums.DivisionCategory;
 import com.growingpots.domain.university.entity.enums.OpenedSemester;
 import com.growingpots.domain.university.repository.CourseRepository;
 import com.growingpots.domain.university.repository.DepartmentRepository;
+import com.growingpots.domain.university.repository.DivisionRepository;
 import com.growingpots.domain.university.repository.RequirementCourseItemRepository;
 import com.growingpots.domain.university.repository.RequirementCourseRepository;
 import com.growingpots.domain.university.repository.SchoolRepository;
@@ -78,6 +81,9 @@ class GraduationRequiredTest {
 
     @Autowired
     private CourseRepository courseRepository;
+
+    @Autowired
+    private DivisionRepository divisionRepository;
 
     @Autowired
     private RequirementCourseRepository requirementCourseRepository;
@@ -500,5 +506,74 @@ class GraduationRequiredTest {
                         .with(authentication(authenticationOf(profile.getMember().getId()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.majors[0].satisfied").value(false));
+    }
+
+    // 미이수 후보는 이제 RequirementCourse 큐레이션이 아니라 Course 테이블(해당 학과+이수구분)에서
+    // 직접 가져온다. 커리큘럼 개정으로 폐지된 과목(isActive=false)은 플래너 검색에도 안 뜨는데
+    // 여기서 "미이수"로 보여주면 학생이 추가할 방법이 없는 과목을 들으라고 하는 셈이라 제외해야 한다.
+    @Test
+    void 폐지된_과목은_전공필수_미이수_목록에_안_뜬다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-9211").build());
+        Department department = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("화학공학과-9211").build());
+        Division majorRequired = divisionRepository.save(Division.builder()
+                .school(school).code("04").category(DivisionCategory.MAJOR_REQUIRED).build());
+        Member member = memberRepository.save(Member.builder()
+                .nickname("테스트유저").oauthProvider(OauthProvider.KAKAO).oauthId("9211").email(null).build());
+        StudentProfile profile = studentProfileRepository.save(StudentProfile.builder()
+                .member(member).school(school).department(department).admissionYear(2023).build());
+        StudentMajor major = studentMajorRepository.save(StudentMajor.builder()
+                .studentProfile(profile).department(department).majorType(MajorType.MAIN).build());
+        graduationAnalysisSummaryRepository.save(GraduationAnalysisSummary.builder().studentMajor(major).build());
+
+        courseRepository.save(Course.builder()
+                .school(school).courseCode("CHE900").name("현재개설과목").credit(3)
+                .offeringDepartment(department).defaultDivision(majorRequired)
+                .recommendedYearLow(2).recommendedYearHigh(2).openedSemester(OpenedSemester.FIRST)
+                .isEnglish(false).isSw(false).isActive(true).build());
+        courseRepository.save(Course.builder()
+                .school(school).courseCode("CHE901").name("폐지된과목").credit(3)
+                .offeringDepartment(department).defaultDivision(majorRequired)
+                .recommendedYearLow(2).recommendedYearHigh(2).openedSemester(OpenedSemester.FIRST)
+                .isEnglish(false).isSw(false).isActive(false).build());
+
+        mockMvc.perform(get("/api/v1/students/me/graduation/MAJOR_REQUIRED/courses")
+                        .param("studentMajorId", String.valueOf(major.getId()))
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.majors[0].hasRequiredList").value(true))
+                .andExpect(jsonPath("$.data.majors[0].courses.length()").value(1))
+                .andExpect(jsonPath("$.data.majors[0].courses[0].name").value("현재개설과목"));
+    }
+
+    // 전공선택처럼 "골라 듣는" 이수구분은 미이수 후보 목록 대상이 아니다 - 졸업필수/전공필수만
+    // Course 테이블 기반 미이수 후보를 노출한다(리뷰 반영: 나머지 이수구분은 requiredCourses를 안 만듦).
+    @Test
+    void 전공선택은_활성_과목이_있어도_미이수_후보로_안_뜬다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-9212").build());
+        Department department = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("화학공학과-9212").build());
+        Division majorElective = divisionRepository.save(Division.builder()
+                .school(school).code("05").category(DivisionCategory.MAJOR_ELECTIVE).build());
+        Member member = memberRepository.save(Member.builder()
+                .nickname("테스트유저").oauthProvider(OauthProvider.KAKAO).oauthId("9212").email(null).build());
+        StudentProfile profile = studentProfileRepository.save(StudentProfile.builder()
+                .member(member).school(school).department(department).admissionYear(2023).build());
+        StudentMajor major = studentMajorRepository.save(StudentMajor.builder()
+                .studentProfile(profile).department(department).majorType(MajorType.MAIN).build());
+        graduationAnalysisSummaryRepository.save(GraduationAnalysisSummary.builder().studentMajor(major).build());
+
+        courseRepository.save(Course.builder()
+                .school(school).courseCode("CHE910").name("전공선택과목A").credit(3)
+                .offeringDepartment(department).defaultDivision(majorElective)
+                .recommendedYearLow(3).recommendedYearHigh(3).openedSemester(OpenedSemester.FIRST)
+                .isEnglish(false).isSw(false).isActive(true).build());
+
+        mockMvc.perform(get("/api/v1/students/me/graduation/MAJOR_ELECTIVE/courses")
+                        .param("studentMajorId", String.valueOf(major.getId()))
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.majors[0].hasRequiredList").value(false))
+                .andExpect(jsonPath("$.data.majors[0].courses.length()").value(0));
     }
 }
