@@ -1,4 +1,4 @@
-name: Dev CD
+name: Prod CD
 
 on:
   push:
@@ -51,14 +51,14 @@ jobs:
       - name: Upload jar to EC2
         run: |
           scp -i ~/.ssh/ec2_key -P "${{ secrets.EC2_PORT }}" app.jar \
-            "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USER }}/app-dev/app.jar"
+            "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USER }}/app/app.jar"
 
       - name: Restart application
         run: |
           ssh -i ~/.ssh/ec2_key -p "${{ secrets.EC2_PORT }}" \
             "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" << 'EOF'
           set -e
-          APP_DIR="/home/${USER}/app-dev"
+          APP_DIR="/home/${USER}/app"
           APP_JAR="${APP_DIR}/app.jar"
           APP_LOG="${APP_DIR}/app.log"
 
@@ -66,15 +66,15 @@ jobs:
           pkill -f "java -jar ${APP_JAR}" || true
           cd "${APP_DIR}"
           nohup env \
-            DB_URL='${{ secrets.DEV_DB_URL }}' \
+            DB_URL='${{ secrets.DB_URL }}' \
             DB_USERNAME='${{ secrets.DB_USERNAME }}' \
             DB_PASSWORD='${{ secrets.DB_PASSWORD }}' \
             JWT_SECRET='${{ secrets.JWT_SECRET }}' \
             DISCORD_WEBHOOK_URL='${{ secrets.DISCORD_WEBHOOK_URL }}' \
-            java -jar "${APP_JAR}" --spring.profiles.active=dev > "${APP_LOG}" 2>&1 &
+            java -jar "${APP_JAR}" --spring.profiles.active=prod > "${APP_LOG}" 2>&1 &
 
           for i in $(seq 1 30); do
-            if curl -sf http://localhost:8081/actuator/health > /dev/null 2>&1; then
+            if curl -sf http://localhost:8080/actuator/health > /dev/null 2>&1; then
               echo "Application started successfully"
               break
             fi
@@ -98,8 +98,8 @@ jobs:
           -H "Content-Type: application/json" \
           -d '{
             "embeds": [{
-              "title": "✅ Dev 배포 성공",
-              "description": "`${{ github.ref_name }}` 브랜치가 dev 서버(8081)에 배포됐어요.",
+              "title": "✅ 배포 성공",
+              "description": "`${{ github.ref_name }}` 브랜치가 배포됐어요.",
               "color": 5763719,
               "fields": [
                 {"name": "커밋", "value": "${{ github.sha }}", "inline": true},
@@ -118,7 +118,7 @@ jobs:
           -H "Content-Type: application/json" \
           -d '{
             "embeds": [{
-              "title": "❌ Dev 배포 실패",
+              "title": "❌ 배포 실패",
               "description": "Actions를 확인해주세요.",
               "color": 15548997,
               "fields": [

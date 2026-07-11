@@ -1,0 +1,31 @@
+server:
+  port: 8081
+
+spring:
+  datasource:
+    url: ${DEV_DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: false
+    open-in-view: false
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: 1800000
+  refresh-expiration: 1209600000
+
+app:
+  base-url: https://growing-pots.p-e.kr:8081
+
+discord:
+  webhook-url: ${DISCORD_WEBHOOK_URL}
+
+logging:
+  level:
+    com.growingpots: debug
