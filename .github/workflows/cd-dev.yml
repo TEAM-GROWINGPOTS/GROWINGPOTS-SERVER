@@ -80,7 +80,7 @@ jobs:
             java -jar "${APP_JAR}" --spring.profiles.active=dev > "${APP_LOG}" 2>&1 &
 
           for i in $(seq 1 30); do
-            if curl -sf http://localhost:8081/actuator/health > /dev/null 2>&1; then
+            if curl -sf http://localhost:18081/actuator/health > /dev/null 2>&1; then
               echo "Application started successfully"
               break
             fi
