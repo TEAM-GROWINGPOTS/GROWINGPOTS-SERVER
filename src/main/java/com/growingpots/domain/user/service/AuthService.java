@@ -3,9 +3,6 @@ package com.growingpots.domain.user.service;
 import com.growingpots.domain.user.client.KakaoOAuthClient;
 import com.growingpots.domain.user.client.KakaoUserInfoResponse;
 import com.growingpots.domain.user.dto.request.OAuthLoginRequest;
-import com.growingpots.domain.user.dto.request.TokenReissueRequest;
-import com.growingpots.domain.user.dto.response.OAuthLoginResponse;
-import com.growingpots.domain.user.dto.response.TokenReissueResponse;
 import com.growingpots.domain.user.entity.Member;
 import com.growingpots.domain.user.entity.enums.OauthProvider;
 import com.growingpots.domain.user.repository.MemberRepository;
@@ -26,8 +23,11 @@ public class AuthService {
     private final KakaoOAuthClient kakaoOAuthClient;
     private final JwtTokenProvider jwtTokenProvider;
 
+    public record LoginResult(String accessToken, String refreshToken, boolean onboardingCompleted, String nickname) {}
+    public record ReissueResult(String accessToken, String refreshToken) {}
+
     @Transactional
-    public OAuthLoginResponse login(OAuthLoginRequest request) {
+    public LoginResult login(OAuthLoginRequest request) {
         OauthProvider provider = parseProvider(request.provider());
         KakaoUserInfoResponse userInfo = kakaoOAuthClient.getUserInfo(request.oauthAccessToken());
 
@@ -38,12 +38,11 @@ public class AuthService {
         String refreshToken = jwtTokenProvider.generateRefreshToken(member.getId().toString());
         member.updateRefreshToken(refreshToken);
 
-        return new OAuthLoginResponse(accessToken, refreshToken, onboardingCompleted, member.getNickname());
+        return new LoginResult(accessToken, refreshToken, onboardingCompleted, member.getNickname());
     }
 
     @Transactional
-    public TokenReissueResponse reissue(TokenReissueRequest request) {
-        String refreshToken = request.refreshToken();
+    public ReissueResult reissue(String refreshToken) {
         JwtTokenProvider.ValidatedToken validated = jwtTokenProvider.validate(refreshToken);
         if (!validated.isValid()) {
             throw new BaseException(validated.errorCode());
@@ -58,7 +57,7 @@ public class AuthService {
         String newRefreshToken = jwtTokenProvider.generateRefreshToken(subject);
         member.updateRefreshToken(newRefreshToken);
 
-        return new TokenReissueResponse(newAccessToken, newRefreshToken);
+        return new ReissueResult(newAccessToken, newRefreshToken);
     }
 
     private Member findOrCreateMember(OauthProvider provider, KakaoUserInfoResponse userInfo) {
