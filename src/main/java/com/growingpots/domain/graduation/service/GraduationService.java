@@ -502,8 +502,9 @@ public class GraduationService {
         String judged;
         if (summary.getGpaRequired() == null) {
             judged = CertJudgement.NONE.name();
-        } else if (summary.getGpaCurrent() == null
-                || summary.getGpaCurrent().compareTo(summary.getGpaRequired()) < 0) {
+        } else if (summary.getGpaCurrent() == null) {
+            judged = CertJudgement.NONE.name();
+        } else if (summary.getGpaCurrent().compareTo(summary.getGpaRequired()) < 0) {
             judged = CertJudgement.FAIL.name();
         } else {
             judged = CertJudgement.PASS.name();
