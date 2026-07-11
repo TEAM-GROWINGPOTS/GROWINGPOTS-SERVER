@@ -3,6 +3,8 @@ package com.growingpots.domain.user.controller;
 import com.growingpots.domain.user.dto.response.OAuthLoginResponse;
 import com.growingpots.domain.user.dto.response.TokenReissueResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -24,7 +26,10 @@ public @interface AuthApi {
     @Retention(RetentionPolicy.RUNTIME)
     @Operation(
             summary = "소셜 로그인",
-            description = "프론트에서 소셜 SDK로 발급받은 access token으로 로그인/회원가입을 처리하고 서비스 JWT를 발급한다."
+            description = """
+                    프론트에서 소셜 SDK로 발급받은 access token으로 로그인/회원가입을 처리하고 서비스 JWT를 발급한다.
+                    - accessToken: 응답 바디로 반환
+                    - refreshToken: HttpOnly 쿠키(Set-Cookie)로 반환 — JS에서 접근 불가, /api/v1/auth/reissue 경로에만 전송됨"""
     )
     @ApiResponses({
             @ApiResponse(
@@ -40,7 +45,6 @@ public @interface AuthApi {
                                       "message": "로그인에 성공했습니다.",
                                       "data": {
                                         "accessToken": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abc",
-                                        "refreshToken": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.xyz",
                                         "onboardingCompleted": true,
                                         "nickname": "김경민"
                                       }
@@ -59,7 +63,17 @@ public @interface AuthApi {
     @Retention(RetentionPolicy.RUNTIME)
     @Operation(
             summary = "토큰 재발급",
-            description = "refreshToken으로 accessToken과 refreshToken을 함께 재발급한다. accessToken 만료 시 자동 호출된다."
+            description = """
+                    HttpOnly 쿠키로 전달된 refreshToken을 검증하고 accessToken과 refreshToken을 재발급한다.
+                    - refreshToken: 요청 쿠키에서 자동 전송 (브라우저가 HttpOnly 쿠키를 자동 첨부)
+                    - 새 accessToken: 응답 바디로 반환
+                    - 새 refreshToken: HttpOnly 쿠키(Set-Cookie)로 갱신"""
+    )
+    @Parameter(
+            name = "refreshToken",
+            in = ParameterIn.COOKIE,
+            description = "HttpOnly 쿠키로 전달된 refreshToken (브라우저가 자동 첨부)",
+            required = true
     )
     @ApiResponses({
             @ApiResponse(
@@ -74,18 +88,16 @@ public @interface AuthApi {
                                       "code": "AUTH_200_2",
                                       "message": "토큰이 재발급되었습니다.",
                                       "data": {
-                                        "accessToken": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abc",
-                                        "refreshToken": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.xyz"
+                                        "accessToken": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abc"
                                       }
                                     }
                                     """)
                     )
             ),
-            @ApiResponse(responseCode = "400", description = "요청값 검증 실패(CMN_002)"),
             @ApiResponse(
                     responseCode = "401",
                     description = "만료된 refreshToken(AUTH_002), 유효하지 않은 refreshToken(AUTH_001), "
-                            + "저장된 토큰과 불일치(AUTH_005)")
+                            + "쿠키 없음 또는 저장된 토큰과 불일치(AUTH_005)")
     })
     @interface Reissue {
     }
