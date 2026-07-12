@@ -1,7 +1,14 @@
+buildscript {
+	repositories {
+		mavenCentral()
+	}
+}
+
 plugins {
 	id 'java'
 	id 'org.springframework.boot' version '3.5.15'
 	id 'io.spring.dependency-management' version '1.1.7'
+	id 'io.sentry.jvm.gradle' version '6.14.0'
 }
 
 group = 'com.growingpots'
@@ -15,6 +22,14 @@ java {
 
 repositories {
 	mavenCentral()
+}
+
+// 소스 코드를 Sentry에 업로드해 스택트레이스에서 실제 코드 라인을 볼 수 있게 함(CI에서만 authToken 주입).
+sentry {
+	includeSourceContext = true
+	org = "kwangwoon-university-3t"
+	projectName = "java-spring-boot"
+	authToken = System.getenv("SENTRY_AUTH_TOKEN")
 }
 
 dependencies {
