@@ -30,6 +30,8 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build with Gradle
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: ./gradlew clean build
 
       - name: Prepare executable jar
@@ -77,6 +79,7 @@ jobs:
             DB_PASSWORD='${{ secrets.DB_PASSWORD }}' \
             JWT_SECRET='${{ secrets.JWT_SECRET }}' \
             DISCORD_WEBHOOK_URL='${{ secrets.DISCORD_WEBHOOK_URL }}' \
+            SENTRY_DSN='${{ secrets.SENTRY_DSN }}' \
             java -jar "${APP_JAR}" --spring.profiles.active=prod > "${APP_LOG}" 2>&1 &
 
           for i in $(seq 1 30); do
