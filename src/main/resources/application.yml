@@ -37,3 +37,8 @@ springdoc:
 oauth:
   kakao:
     user-info-uri: https://kapi.kakao.com/v2/user/me
+
+sentry:
+  dsn: ${SENTRY_DSN:}
+  environment: ${spring.profiles.active}
+  send-default-pii: false

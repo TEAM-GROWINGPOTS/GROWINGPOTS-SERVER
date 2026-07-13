@@ -6,6 +6,7 @@ import com.growingpots.global.discord.DiscordNotifier;
 import com.growingpots.global.response.BaseResponse;
 import com.growingpots.global.response.error.ErrorCode;
 import com.growingpots.global.response.error.ErrorType;
+import io.sentry.Sentry;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -175,10 +176,11 @@ public class GlobalExceptionHandler {
         return toResponse(ErrorCode.INVALID_INPUT_VALUE);
     }
 
-    // 그 외 모든 예외 — 예상치 못한 서버 오류이므로 항상 알림
+    // 그 외 모든 예외 — 예상치 못한 서버 오류이므로 항상 알림 + Sentry로 전송(진짜 버그만 추적 대상으로 삼음)
     @ExceptionHandler(Exception.class)
     public ResponseEntity<BaseResponse<?>> handleException(Exception e, HttpServletRequest request) {
         log.error("[UnhandledException] {}", e.getMessage(), e);
+        Sentry.captureException(e);
         notify(request, e.getClass().getSimpleName(), e.getMessage());
         return toResponse(ErrorCode.INTERNAL_SERVER_ERROR);
     }
