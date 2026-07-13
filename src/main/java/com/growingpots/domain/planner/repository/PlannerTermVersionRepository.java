@@ -29,7 +29,7 @@ public interface PlannerTermVersionRepository extends JpaRepository<PlannerTermV
     void selectById(@Param("versionId") Long versionId);
 
     @Transactional
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("DELETE FROM PlannerTermVersion ptv WHERE ptv.plannerTerm.id IN :termIds")
     void deleteAllByPlannerTermIdIn(@Param("termIds") List<Long> termIds);
 }
