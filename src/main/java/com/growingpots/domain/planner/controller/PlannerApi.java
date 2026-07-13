@@ -56,6 +56,16 @@ public @interface PlannerApi {
                     - versions[].courses[].divisionCategory / divisionName: 기본 이수구분이 없는 과목은 null.
                     - versions[].courses[].courseId: 직접추가를 지원하지 않아 항상 존재.
                     - versions[].courses[].isEnglish / isSw: 영어강의·SW인증강의 여부.
+                    - versions[].courses[].retakeDisplay: 재수강 표시 유형. 일반 과목은 null이며 JSON 응답에서 필드 자체가 생략된다.
+                      - BADGE: 이미 이수완료(COMPLETED) 또는 이수중(IN_PROGRESS)인 과목이 플래너 여러 학기에 담겨 있을 때, 가장 최신 학기(yearLevel → semester 기준) 항목
+                      - DIMMED: 재수강 과목 중 BADGE가 아닌 이전 학기 항목
+                      - null(필드 생략): 재수강이 아닌 일반 과목
+
+                    **재수강 표시 계산 방식**
+                    서버가 GET 응답 시점에 저장된 전체 플래너 기준으로 매번 재계산하는 read-only 파생 값이다.
+                    PUT(저장) 요청 바디에 포함하지 않으며, 포함해도 무시된다.
+                    동일 과목의 재수강 인스턴스가 1개뿐이면 그 항목이 BADGE(DIMMED 없음).
+                    최신 학기 판정 기준: yearLevel 큰 쪽 우선, 같으면 semester 큰 쪽(2학기 > 1학기).
 
                     **plannedTerms 구성 방식**
                     PLANNER_SIMULATION → PLANNER_TERM → PLANNER_TERM_VERSION → PLANNER_VERSION_ITEM 트리 구조.
@@ -70,7 +80,10 @@ public @interface PlannerApi {
                     content = @Content(
                             mediaType = "application/json",
                             schema = @Schema(implementation = PlannerResponse.class),
-                            examples = @ExampleObject(value = """
+                            examples = @ExampleObject(
+                                    name = "재수강 표시 포함 예시",
+                                    summary = "미디어와사회(이수완료)를 2-1·2-2에 모두 담은 경우: 2-1=DIMMED, 2-2=BADGE. 경영정보시스템은 신규 과목이라 retakeDisplay 필드 생략.",
+                                    value = """
                                     {
                                       "success": true,
                                       "code": "PLAN_200",
@@ -114,10 +127,26 @@ public @interface PlannerApi {
                                                 "name": "폴더 1",
                                                 "isSelected": true,
                                                 "versionOrder": 0,
-                                                "totalCredit": 3,
+                                                "totalCredit": 6,
                                                 "courses": [
                                                   {
                                                     "plannerVersionItemId": 5002,
+                                                    "courseId": 12,
+                                                    "name": "미디어와사회",
+                                                    "departmentName": "미디어학과",
+                                                    "divisionCategory": "MAJOR_REQUIRED",
+                                                    "divisionName": "전공필수",
+                                                    "recommendedYearLow": 1,
+                                                    "recommendedYearHigh": 1,
+                                                    "openedSemester": "FIRST",
+                                                    "credit": 3,
+                                                    "coursePositionOrder": 0,
+                                                    "isEnglish": false,
+                                                    "isSw": false,
+                                                    "retakeDisplay": "DIMMED"
+                                                  },
+                                                  {
+                                                    "plannerVersionItemId": 5003,
                                                     "courseId": 78,
                                                     "name": "경영정보시스템",
                                                     "departmentName": "산업경영공학과",
@@ -127,9 +156,42 @@ public @interface PlannerApi {
                                                     "recommendedYearHigh": 2,
                                                     "openedSemester": "FIRST",
                                                     "credit": 3,
-                                                    "coursePositionOrder": 0,
+                                                    "coursePositionOrder": 1,
                                                     "isEnglish": false,
                                                     "isSw": false
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          },
+                                          {
+                                            "plannerTermId": 3004,
+                                            "yearLevel": 2,
+                                            "semester": 2,
+                                            "versions": [
+                                              {
+                                                "plannerTermVersionId": 4004,
+                                                "versionNo": 1,
+                                                "name": "폴더 1",
+                                                "isSelected": true,
+                                                "versionOrder": 0,
+                                                "totalCredit": 3,
+                                                "courses": [
+                                                  {
+                                                    "plannerVersionItemId": 5004,
+                                                    "courseId": 12,
+                                                    "name": "미디어와사회",
+                                                    "departmentName": "미디어학과",
+                                                    "divisionCategory": "MAJOR_REQUIRED",
+                                                    "divisionName": "전공필수",
+                                                    "recommendedYearLow": 1,
+                                                    "recommendedYearHigh": 1,
+                                                    "openedSemester": "FIRST",
+                                                    "credit": 3,
+                                                    "coursePositionOrder": 0,
+                                                    "isEnglish": false,
+                                                    "isSw": false,
+                                                    "retakeDisplay": "BADGE"
                                                   }
                                                 ]
                                               }
