@@ -62,7 +62,7 @@ public class PlannerResponse {
         private final Long courseId;
 
         @Schema(description = "과목명", example = "미디어와사회")
-        private final String courseName;
+        private final String name;
 
         @Schema(description = "개설 학과명", example = "미디어학과")
         private final String departmentName;
@@ -158,7 +158,7 @@ public class PlannerResponse {
         private final Long courseId;
 
         @Schema(description = "과목명", example = "경영정보시스템")
-        private final String courseName;
+        private final String name;
 
         @Schema(description = "개설 학과명", example = "산업경영공학과")
         private final String departmentName;
