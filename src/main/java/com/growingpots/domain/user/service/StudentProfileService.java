@@ -46,6 +46,10 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class StudentProfileService {
 
+    // MVP라 경희대(국제캠퍼스) 하나만 하드코딩. 교양 과목인데 매칭되는 개설학과가 없으면
+    // 이 이름의 Department가 그 학생 학교에 있는지 찾아 대체로 쓴다(없으면 기존처럼 "교양" 표시값).
+    private static final String GENERAL_EDUCATION_FALLBACK_DEPARTMENT_NAME = "후마니타스칼리지(국제)";
+
     private final MemberRepository memberRepository;
     private final StudentProfileRepository studentProfileRepository;
     private final StudentMajorRepository studentMajorRepository;
@@ -138,8 +142,13 @@ public class StudentProfileService {
 
         List<StudentCourse> courses = studentCourseRepository.findWithCourseByStudentProfile(profile);
 
+        // 매칭되는 개설학과가 없는 교양 과목에 쓸 학교별 대체 학과. 없으면 "교양" 표시값으로 폴백한다.
+        Department geFallbackDepartment = departmentRepository
+                .findBySchoolIdAndName(profile.getSchool().getId(), GENERAL_EDUCATION_FALLBACK_DEPARTMENT_NAME)
+                .orElse(null);
+
         List<StudentCourseListResponse.CourseInfo> courseInfos = courses.stream()
-                .map(this::toCourseInfo)
+                .map(course -> toCourseInfo(course, geFallbackDepartment))
                 .toList();
 
         return StudentCourseListResponse.builder()
@@ -230,14 +239,16 @@ public class StudentProfileService {
         return value;
     }
 
-    private StudentCourseListResponse.CourseInfo toCourseInfo(StudentCourse course) {
+    private StudentCourseListResponse.CourseInfo toCourseInfo(StudentCourse course, Department geFallbackDepartment) {
         return StudentCourseListResponse.CourseInfo.builder()
                 .studentCourseId(course.getId())
                 .courseCode(course.getRawCourseCode())
                 .name(course.getRawCourseName())
-                .departmentName(departmentName(course))
+                .departmentName(departmentName(course, geFallbackDepartment))
+                .departmentId(departmentId(course, geFallbackDepartment))
                 .credit(course.getCredit())
                 .appliedDivisionName(appliedDivisionName(course))
+                .appliedDivisionId(course.getAppliedDivision() == null ? null : course.getAppliedDivision().getId())
                 .takenYear(course.getTakenYear())
                 .takenSemester(takenSemesterName(course.getTakenSemester()))
                 .build();
@@ -256,15 +267,34 @@ public class StudentProfileService {
     }
 
     // 사용자가 검수 화면에서 개설학부를 직접 바꿨으면(appliedDepartment) 그 값을 우선한다.
-    // 아니면 COURSE 매칭 결과를 쓰고, 그마저 없으면 교양 과목일 때만 "교양"으로 표시한다.
-    private String departmentName(StudentCourse course) {
+    // 아니면 COURSE 매칭 결과를 쓰고, 그마저 없으면 교양 과목일 때만 학교의 대체 학과(geFallbackDepartment,
+    // 없으면 "교양" 표시값)로 폴백한다.
+    private String departmentName(StudentCourse course, Department geFallbackDepartment) {
         if (course.getAppliedDepartment() != null) {
             return course.getAppliedDepartment().getName();
         }
         if (course.getCourse() != null && course.getCourse().getOfferingDepartment() != null) {
             return course.getCourse().getOfferingDepartment().getName();
         }
-        return isGeneralEducation(course) ? "교양" : null;
+        if (!isGeneralEducation(course)) {
+            return null;
+        }
+        return geFallbackDepartment != null ? geFallbackDepartment.getName() : "교양";
+    }
+
+    // departmentName()과 같은 우선순위로 실제 PK를 돌려준다. 학교에 대체 학과가 지정돼 있지 않아
+    // "교양"이라는 표시용 문자열로 폴백한 경우에만 대응하는 ID가 없다 - 이 경우 null.
+    private Long departmentId(StudentCourse course, Department geFallbackDepartment) {
+        if (course.getAppliedDepartment() != null) {
+            return course.getAppliedDepartment().getId();
+        }
+        if (course.getCourse() != null && course.getCourse().getOfferingDepartment() != null) {
+            return course.getCourse().getOfferingDepartment().getId();
+        }
+        if (isGeneralEducation(course) && geFallbackDepartment != null) {
+            return geFallbackDepartment.getId();
+        }
+        return null;
     }
 
     // appliedDivision의 category가 교양 계열(4개) 중 하나면 교양 과목으로 본다.

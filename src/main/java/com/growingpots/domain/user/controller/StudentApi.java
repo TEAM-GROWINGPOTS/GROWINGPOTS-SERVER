@@ -192,7 +192,15 @@ public @interface StudentApi {
     @Operation(
             summary = "이수 과목 목록 조회",
             description = "PDF 분석 결과로 저장된 이수 과목 목록을 조회합니다. "
-                    + "departmentName은 COURSE 마스터와 매칭된 경우에만, appliedDivisionName은 교양 과목인 경우에만 값이 채워집니다."
+                    + "departmentName은 COURSE 마스터와 매칭되었거나 학과가 직접 지정된 경우에만, appliedDivisionName은 "
+                    + "이수구분이 지정된 경우에만 값이 채워집니다. 교양 과목인데 매칭된 학과가 없으면 학교에 지정된 대체 "
+                    + "학과(예: 후마니타스칼리지)가 있을 때 그 이름으로, 없으면 \"교양\"이라는 표시용 문자열로 채워집니다. "
+                    + "departmentId/appliedDivisionId는 각각 departmentName/appliedDivisionName의 근거가 된 PK로, 이 과목을 "
+                    + "수정 없이 그대로 PUT /students/me/courses에 다시 보낼 때 departmentId/appliedDivisionId에 그대로 넣으면 "
+                    + "된다. name이 null이거나 \"교양\" 표시용 문자열이면(학교에 대체 학과가 없는 경우) 대응하는 id도 null인데, "
+                    + "이 경우엔 애초에 연결된 실제 학과가 없다는 뜻이라 null을 그대로 보내도 기존 값이 지워지지 않는다(원래 없던 "
+                    + "걸 다시 없다고 보내는 것). 반대로 name이 실제 학과 기반인데 id를 비워서 보내면 서버가 null로 덮어써 "
+                    + "기존 값이 지워지므로 주의."
     )
     @ApiResponses({
             @ApiResponse(
@@ -212,9 +220,11 @@ public @interface StudentApi {
                                             "studentCourseId": 7001,
                                             "courseCode": "THE2001",
                                             "name": "연극문헌과연기",
-                                            "departmentName": null,
+                                            "departmentName": "연극영화학과",
+                                            "departmentId": 12,
                                             "credit": 3,
-                                            "appliedDivisionName": null,
+                                            "appliedDivisionName": "전공필수",
+                                            "appliedDivisionId": 4,
                                             "takenYear": 2023,
                                             "takenSemester": "1학기"
                                           }

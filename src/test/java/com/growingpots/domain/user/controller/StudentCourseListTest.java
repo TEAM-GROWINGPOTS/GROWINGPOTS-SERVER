@@ -140,6 +140,38 @@ class StudentCourseListTest {
         JsonNode courses = objectMapper.readTree(responseBody).path("data").path("courses");
         assertThat(departmentNameOf(courses, "GEC1104")).isEqualTo("교양");
         assertThat(departmentNameOf(courses, "THE2001")).isNull();
+        // "교양"은 실제 Department가 아닌 표시용 문자열이라 대응하는 departmentId가 없다.
+        assertThat(departmentIdOf(courses, "GEC1104")).isNull();
+        assertThat(departmentIdOf(courses, "THE2001")).isNull();
+    }
+
+    @Test
+    void 학교에_후마니타스칼리지가_있으면_매칭_안된_교양과목도_그_학과로_내려간다() throws Exception {
+        StudentProfile studentProfile = onboardedStudent("1002");
+        School school = studentProfile.getSchool();
+        Department geFallback = departmentRepository.save(Department.builder()
+                .school(school)
+                .college("후마니타스칼리지")
+                .name("후마니타스칼리지(국제)")
+                .build());
+        Division freeGe = division(school, "02", DivisionCategory.FREE_GE);
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(studentProfile)
+                .appliedDivision(freeGe)
+                .rawCourseCode("GEC1104")
+                .rawCourseName("World Citizen")
+                .credit(3)
+                .takenYear(2023)
+                .takenSemester(Semester.FIRST)
+                .status(CourseStatus.COMPLETED)
+                .source(RecordSource.PDF)
+                .build());
+
+        mockMvc.perform(get("/api/v1/students/me/courses")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.courses[0].departmentName").value("후마니타스칼리지(국제)"))
+                .andExpect(jsonPath("$.data.courses[0].departmentId").value(geFallback.getId()));
     }
 
     private String departmentNameOf(JsonNode courses, String courseCode) {
@@ -147,6 +179,16 @@ class StudentCourseListTest {
             if (courseCode.equals(course.path("courseCode").asText())) {
                 JsonNode value = course.path("departmentName");
                 return value.isNull() ? null : value.asText();
+            }
+        }
+        throw new AssertionError("과목을 찾을 수 없음: " + courseCode);
+    }
+
+    private Long departmentIdOf(JsonNode courses, String courseCode) {
+        for (JsonNode course : courses) {
+            if (courseCode.equals(course.path("courseCode").asText())) {
+                JsonNode value = course.path("departmentId");
+                return value.isNull() ? null : value.asLong();
             }
         }
         throw new AssertionError("과목을 찾을 수 없음: " + courseCode);
@@ -186,8 +228,40 @@ class StudentCourseListTest {
                         .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.courses[0].departmentName").value("연극영화학과"))
+                .andExpect(jsonPath("$.data.courses[0].departmentId").value(offeringDepartment.getId()))
                 .andExpect(jsonPath("$.data.courses[0].takenSemester").value("1학기"))
-                .andExpect(jsonPath("$.data.courses[0].appliedDivisionName").value("전공필수"));
+                .andExpect(jsonPath("$.data.courses[0].appliedDivisionName").value("전공필수"))
+                .andExpect(jsonPath("$.data.courses[0].appliedDivisionId").value(majorRequired.getId()));
+    }
+
+    @Test
+    void 직접_추가한_과목은_appliedDepartment의_id가_departmentId로_내려간다() throws Exception {
+        StudentProfile studentProfile = onboardedStudent("2003");
+        School school = studentProfile.getSchool();
+        Department appliedDepartment = departmentRepository.save(Department.builder()
+                .school(school)
+                .college("예술·디자인대학")
+                .name("연극영화학과")
+                .build());
+        Division majorElective = division(school, "05", DivisionCategory.MAJOR_ELECTIVE);
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(studentProfile)
+                .appliedDepartment(appliedDepartment)
+                .appliedDivision(majorElective)
+                .rawCourseCode(null)
+                .rawCourseName("직접추가한과목")
+                .credit(3)
+                .takenYear(2024)
+                .takenSemester(Semester.FIRST)
+                .status(CourseStatus.COMPLETED)
+                .source(RecordSource.MANUAL)
+                .build());
+
+        mockMvc.perform(get("/api/v1/students/me/courses")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.courses[0].departmentName").value("연극영화학과"))
+                .andExpect(jsonPath("$.data.courses[0].departmentId").value(appliedDepartment.getId()));
     }
 
     @Test
