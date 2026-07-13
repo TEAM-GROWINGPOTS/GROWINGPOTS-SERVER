@@ -235,8 +235,13 @@ public class TranscriptPersister {
 
         List<StudentMajor> studentMajors = new ArrayList<>();
         for (Map<String, String> majorRequirement : parsed.majorRequirements()) {
+            // TODO(#135): PDF 파싱 자체를 검증하기 위해 임시로 매칭 실패를 예외 대신 스킵으로 완화함.
+            // 검증 끝나면 findOrCreateStudentMajor의 MAJOR_NOT_FOUND throw로 반드시 되돌릴 것.
             StudentMajor studentMajor = findOrCreateStudentMajor(
                     studentProfile, majorRequirement, parsed.studentInfo(), departments, existingMajorsByDepartmentId);
+            if (studentMajor == null) {
+                continue;
+            }
             studentMajors.add(studentMajor);
 
             GraduationAnalysisSummary newSummary = toGraduationAnalysisSummary(
@@ -281,7 +286,8 @@ public class TranscriptPersister {
             matched = findMatchingDepartment(departments, studentInfo.get("department"));
         }
         if (matched == null) {
-            throw new BaseException(ErrorCode.MAJOR_NOT_FOUND, majorName);
+            // TODO(#135): 원래 throw new BaseException(ErrorCode.MAJOR_NOT_FOUND, majorName) — 임시 완화, 되돌릴 것.
+            return null;
         }
 
         Department department = matched;
