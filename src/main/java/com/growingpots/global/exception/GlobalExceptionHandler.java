@@ -40,9 +40,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BaseException.class)
     public ResponseEntity<BaseResponse<?>> handleBaseException(BaseException e, HttpServletRequest request) {
         log.warn("[BaseException] code={}, message={}", e.getErrorType().getCode(), e.getMessage());
-        if (shouldNotify(e.getErrorType().getStatus(), request.getRequestURI())) {
-            notify(request, e.getClass().getSimpleName(), e.getMessage());
-        }
         return toResponse(e.getErrorType());
     }
 
@@ -58,9 +55,6 @@ public class GlobalExceptionHandler {
                         (existing, newValue) -> existing + ", " + newValue
                 ));
         log.warn("[Validation] {}", errors);
-        if (shouldNotify(HttpStatus.BAD_REQUEST, request.getRequestURI())) {
-            notify(request, e.getClass().getSimpleName(), errors.toString());
-        }
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(BaseResponse.error(ErrorCode.INVALID_INPUT_VALUE));
@@ -70,9 +64,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BindException.class)
     public ResponseEntity<BaseResponse<?>> handleBindException(BindException e, HttpServletRequest request) {
         log.warn("[BindException] {}", e.getMessage());
-        if (shouldNotify(HttpStatus.BAD_REQUEST, request.getRequestURI())) {
-            notify(request, e.getClass().getSimpleName(), e.getMessage());
-        }
         return toResponse(ErrorCode.INVALID_INPUT_VALUE);
     }
 
@@ -80,9 +71,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<BaseResponse<?>> handleTypeMismatch(MethodArgumentTypeMismatchException e, HttpServletRequest request) {
         log.warn("[TypeMismatch] param={}", e.getName());
-        if (shouldNotify(HttpStatus.BAD_REQUEST, request.getRequestURI())) {
-            notify(request, e.getClass().getSimpleName(), "param=" + e.getName());
-        }
         return toResponse(ErrorCode.INVALID_FORMAT);
     }
 
@@ -90,9 +78,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MissingServletRequestParameterException.class)
     public ResponseEntity<BaseResponse<?>> handleMissingParam(MissingServletRequestParameterException e, HttpServletRequest request) {
         log.warn("[MissingParam] param={}", e.getParameterName());
-        if (shouldNotify(HttpStatus.BAD_REQUEST, request.getRequestURI())) {
-            notify(request, e.getClass().getSimpleName(), "param=" + e.getParameterName());
-        }
         return toResponse(ErrorCode.MISSING_PARAMETER);
     }
 
@@ -100,28 +85,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MissingServletRequestPartException.class)
     public ResponseEntity<BaseResponse<?>> handleMissingPart(MissingServletRequestPartException e, HttpServletRequest request) {
         log.warn("[MissingPart] part={}", e.getRequestPartName());
-        if (shouldNotify(HttpStatus.BAD_REQUEST, request.getRequestURI())) {
-            notify(request, e.getClass().getSimpleName(), "part=" + e.getRequestPartName());
-        }
         return toResponse(ErrorCode.MISSING_PARAMETER);
     }
 
     // JSON 파싱 실패
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<BaseResponse<?>> handleNotReadable(HttpMessageNotReadableException e, HttpServletRequest request) {
-        String detail;
         if (e.getCause() instanceof InvalidFormatException invalidFormatException) {
             String fieldName = invalidFormatException.getPath().stream()
                     .map(JsonMappingException.Reference::getFieldName)
                     .collect(Collectors.joining("."));
             log.warn("[InvalidFormat] field='{}', value={}", fieldName, invalidFormatException.getValue());
-            detail = "field=" + fieldName;
         } else {
             log.warn("[NotReadable] {}", e.getMessage());
-            detail = e.getMessage();
-        }
-        if (shouldNotify(HttpStatus.BAD_REQUEST, request.getRequestURI())) {
-            notify(request, e.getClass().getSimpleName(), detail);
         }
         return toResponse(ErrorCode.INVALID_FORMAT);
     }
@@ -130,9 +106,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<BaseResponse<?>> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException e, HttpServletRequest request) {
         log.warn("[MaxUploadSizeExceeded] {}", e.getMessage());
-        if (shouldNotify(HttpStatus.PAYLOAD_TOO_LARGE, request.getRequestURI())) {
-            notify(request, e.getClass().getSimpleName(), e.getMessage());
-        }
         return toResponse(ErrorCode.PDF_TOO_LARGE);
     }
 
@@ -140,9 +113,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<BaseResponse<?>> handleNoResourceFound(NoResourceFoundException e, HttpServletRequest request) {
         log.warn("[NoResourceFound] {}", request.getRequestURI());
-        if (shouldNotify(HttpStatus.NOT_FOUND, request.getRequestURI())) {
-            notify(request, e.getClass().getSimpleName(), e.getMessage());
-        }
         return toResponse(ErrorCode.RESOURCE_NOT_FOUND);
     }
 
@@ -150,9 +120,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NoHandlerFoundException.class)
     public ResponseEntity<BaseResponse<?>> handleNoHandler(NoHandlerFoundException e, HttpServletRequest request) {
         log.warn("[NoHandler] {}", e.getRequestURL());
-        if (shouldNotify(HttpStatus.NOT_FOUND, request.getRequestURI())) {
-            notify(request, e.getClass().getSimpleName(), e.getRequestURL());
-        }
         return toResponse(ErrorCode.RESOURCE_NOT_FOUND);
     }
 
@@ -160,9 +127,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<BaseResponse<?>> handleMethodNotAllowed(HttpRequestMethodNotSupportedException e, HttpServletRequest request) {
         log.warn("[MethodNotAllowed] {}", e.getMethod());
-        if (shouldNotify(HttpStatus.METHOD_NOT_ALLOWED, request.getRequestURI())) {
-            notify(request, e.getClass().getSimpleName(), e.getMessage());
-        }
         return toResponse(ErrorCode.METHOD_NOT_ALLOWED);
     }
 
@@ -170,33 +134,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<BaseResponse<?>> handleIllegalArgument(IllegalArgumentException e, HttpServletRequest request) {
         log.warn("[IllegalArgument] {}", e.getMessage());
-        if (shouldNotify(HttpStatus.BAD_REQUEST, request.getRequestURI())) {
-            notify(request, e.getClass().getSimpleName(), e.getMessage());
-        }
         return toResponse(ErrorCode.INVALID_INPUT_VALUE);
     }
 
-    // 그 외 모든 예외 — 예상치 못한 서버 오류이므로 항상 알림 + Sentry로 전송(진짜 버그만 추적 대상으로 삼음)
+    // 그 외 모든 예외 — 예상치 못한 서버 오류이므로 항상 Discord 알림 + Sentry 전송
     @ExceptionHandler(Exception.class)
     public ResponseEntity<BaseResponse<?>> handleException(Exception e, HttpServletRequest request) {
         log.error("[UnhandledException] {}", e.getMessage(), e);
         Sentry.captureException(e);
-        notify(request, e.getClass().getSimpleName(), e.getMessage());
-        return toResponse(ErrorCode.INTERNAL_SERVER_ERROR);
-    }
-
-    // 5xx → 항상 알림 / 401 → 항상 제외 / 나머지 4xx → /api/** 경로만 알림
-    private boolean shouldNotify(HttpStatus status, String requestUri) {
-        if (status.is5xxServerError()) return true;
-        if (status == HttpStatus.UNAUTHORIZED) return false;
-        return status.is4xxClientError() && requestUri.startsWith("/api/");
-    }
-
-    private void notify(HttpServletRequest request, String errorClass, String errorMessage) {
         String message = String.format("**URL**: %s %s\n**Error**: %s\n**Message**: %s",
                 request.getMethod(), request.getRequestURI(),
-                errorClass, errorMessage);
+                e.getClass().getSimpleName(), e.getMessage());
         discordNotifier.sendError("🚨 서버 에러 발생", message);
+        return toResponse(ErrorCode.INTERNAL_SERVER_ERROR);
     }
 
     private ResponseEntity<BaseResponse<?>> toResponse(ErrorType errorType) {
