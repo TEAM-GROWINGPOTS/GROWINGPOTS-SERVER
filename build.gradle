@@ -27,7 +27,7 @@ repositories {
 // 소스 코드를 Sentry에 업로드해 스택트레이스에서 실제 코드 라인을 볼 수 있게 함(CI에서만 authToken 주입).
 sentry {
 	includeSourceContext = true
-	org = "kwangwoon-university-3t"
+	org = "growingpots"
 	projectName = "java-spring-boot"
 	authToken = System.getenv("SENTRY_AUTH_TOKEN")
 }
