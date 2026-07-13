@@ -2,7 +2,6 @@ package com.growingpots.domain.user.controller;
 
 import com.growingpots.domain.user.dto.request.OAuthLoginRequest;
 import com.growingpots.domain.user.dto.response.OAuthLoginResponse;
-import com.growingpots.domain.user.dto.response.TokenReissueResponse;
 import com.growingpots.domain.user.service.AuthService;
 import com.growingpots.global.exception.BaseException;
 import com.growingpots.global.response.BaseResponse;
@@ -40,24 +39,36 @@ public class AuthController {
             @Valid @RequestBody OAuthLoginRequest request,
             HttpServletResponse response) {
         AuthService.LoginResult result = authService.login(request);
+        response.addHeader(HttpHeaders.SET_COOKIE, buildAccessCookie(result.accessToken()).toString());
         response.addHeader(HttpHeaders.SET_COOKIE, buildRefreshCookie(result.refreshToken()).toString());
-        OAuthLoginResponse body = new OAuthLoginResponse(result.accessToken(), result.onboardingCompleted(), result.nickname());
+        OAuthLoginResponse body = new OAuthLoginResponse(result.onboardingCompleted(), result.nickname());
         return ResponseEntity.status(SuccessCode.LOGIN_SUCCESS.getStatus())
                 .body(BaseResponse.success(SuccessCode.LOGIN_SUCCESS, body));
     }
 
     @AuthApi.Reissue
     @PostMapping("/reissue")
-    public ResponseEntity<BaseResponse<TokenReissueResponse>> reissue(
+    public ResponseEntity<BaseResponse<Void>> reissue(
             @CookieValue(name = "refreshToken", required = false) String refreshToken,
             HttpServletResponse response) {
         if (refreshToken == null) {
             throw new BaseException(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
         }
         AuthService.ReissueResult result = authService.reissue(refreshToken);
+        response.addHeader(HttpHeaders.SET_COOKIE, buildAccessCookie(result.accessToken()).toString());
         response.addHeader(HttpHeaders.SET_COOKIE, buildRefreshCookie(result.refreshToken()).toString());
         return ResponseEntity.status(SuccessCode.TOKEN_REISSUED.getStatus())
-                .body(BaseResponse.success(SuccessCode.TOKEN_REISSUED, new TokenReissueResponse(result.accessToken())));
+                .body(BaseResponse.success(SuccessCode.TOKEN_REISSUED, null));
+    }
+
+    private ResponseCookie buildAccessCookie(String token) {
+        return ResponseCookie.from("accessToken", token)
+                .httpOnly(true)
+                .secure(cookieSecure)
+                .path("/api")
+                .maxAge(jwtTokenProvider.getExpirationSeconds())
+                .sameSite("None")
+                .build();
     }
 
     private ResponseCookie buildRefreshCookie(String token) {
