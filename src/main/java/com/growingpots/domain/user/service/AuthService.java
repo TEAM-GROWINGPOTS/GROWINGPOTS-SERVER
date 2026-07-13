@@ -47,6 +47,9 @@ public class AuthService {
         if (!validated.isValid()) {
             throw new BaseException(validated.errorCode());
         }
+        if (!"refresh".equals(validated.type())) {
+            throw new BaseException(ErrorCode.INVALID_TOKEN);
+        }
 
         Long memberId = Long.valueOf(validated.subject());
         Member member = memberRepository.findByIdAndRefreshToken(memberId, refreshToken)

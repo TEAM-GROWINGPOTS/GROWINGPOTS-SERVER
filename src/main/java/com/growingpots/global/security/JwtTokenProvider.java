@@ -51,14 +51,14 @@ public class JwtTokenProvider {
     }
 
     public String generateToken(String subject) {
-        return generateToken(subject, expiration);
+        return generateToken(subject, expiration, "access");
     }
 
     public String generateRefreshToken(String subject) {
-        return generateToken(subject, refreshExpiration);
+        return generateToken(subject, refreshExpiration, "refresh");
     }
 
-    private String generateToken(String subject, long tokenExpiration) {
+    private String generateToken(String subject, long tokenExpiration, String type) {
         Instant now = Instant.now();
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();
         JwtClaimsSet claims = JwtClaimsSet.builder()
@@ -66,6 +66,7 @@ public class JwtTokenProvider {
                 .issuedAt(now)
                 .expiresAt(now.plusMillis(tokenExpiration))
                 .claim("jti", UUID.randomUUID().toString())
+                .claim("type", type)
                 .build();
         return encoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
     }
@@ -86,13 +87,13 @@ public class JwtTokenProvider {
         }
     }
 
-    // extractErrorCode + getSubject를 각각 호출하면 토큰을 두 번 디코딩하게 되어, 한 번의 디코딩으로 묶어 제공한다.
     public ValidatedToken validate(String token) {
         try {
             Jwt jwt = decoder.decode(token);
-            return new ValidatedToken(null, jwt.getSubject());
+            String type = (String) jwt.getClaims().get("type");
+            return new ValidatedToken(null, jwt.getSubject(), type);
         } catch (Exception e) {
-            return new ValidatedToken(toErrorCode(e), null);
+            return new ValidatedToken(toErrorCode(e), null, null);
         }
     }
 
@@ -108,7 +109,7 @@ public class JwtTokenProvider {
         return ErrorCode.INVALID_TOKEN;
     }
 
-    public record ValidatedToken(ErrorCode errorCode, String subject) {
+    public record ValidatedToken(ErrorCode errorCode, String subject, String type) {
         public boolean isValid() {
             return errorCode == null;
         }
