@@ -67,11 +67,18 @@ public class AuthService {
         String oauthId = String.valueOf(userInfo.id());
         return memberRepository.findByOauthProviderAndOauthId(provider, oauthId)
                 .orElseGet(() -> memberRepository.save(Member.builder()
-                        .nickname(userInfo.properties().nickname())
+                        .nickname(extractNickname(userInfo))
                         .oauthProvider(provider)
                         .oauthId(oauthId)
                         .email(userInfo.kakaoAccount() != null ? userInfo.kakaoAccount().email() : null)
                         .build()));
+    }
+
+    private String extractNickname(KakaoUserInfoResponse userInfo) {
+        if (userInfo.properties() == null || userInfo.properties().nickname() == null) {
+            throw new BaseException(ErrorCode.KAKAO_NICKNAME_UNAVAILABLE);
+        }
+        return userInfo.properties().nickname();
     }
 
     private OauthProvider parseProvider(String provider) {

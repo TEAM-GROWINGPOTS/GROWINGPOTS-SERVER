@@ -212,8 +212,8 @@ public class PlannerService {
                 // 다시 덮어쓰면 사용자가 고친 이름이 무시되므로 항상 rawCourseName을 그대로 쓴다.
                 .name(studentCourse.getRawCourseName())
                 .departmentName(departmentName(course))
-                .divisionCategory(division.getCategory().name())
-                .divisionName(division.getCategory().getDisplayName())
+                .divisionCategory(division != null ? division.getCategory().name() : null)
+                .divisionName(division != null ? division.getCategory().getDisplayName() : null)
                 .recommendedYearLow(course != null ? course.getRecommendedYearLow() : null)
                 .recommendedYearHigh(course != null ? course.getRecommendedYearHigh() : null)
                 .openedSemester(course != null && course.getOpenedSemester() != null ? course.getOpenedSemester().name() : null)
