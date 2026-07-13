@@ -29,6 +29,7 @@ import com.growingpots.global.response.error.ErrorCode;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -234,12 +235,15 @@ public class TranscriptPersister {
         List<StudentMajor> existingMajors = new ArrayList<>(existingMajorsByDepartmentId.values());
 
         List<StudentMajor> studentMajors = new ArrayList<>();
+        // 트랙(복수 세부전공)이 있는 학과는 majorRequirements에 같은 학과가 여러 행(본전공+트랙)으로
+        // 나올 수 있다. GRADUATION_ANALYSIS_SUMMARY는 STUDENT_MAJOR 1:1이라, 매 행마다 덮어쓰면
+        // 나중에 처리된 행(보통 더 작은 트랙 값)이 먼저 처리된 본전공 값을 지워버린다. 과목 dedup과
+        // 동일한 원칙으로, 같은 학과는 먼저 나온 행(본전공)만 요약에 반영하고 이후 행은 건너뛴다.
+        Set<Long> summarizedDepartmentIds = new HashSet<>();
         for (Map<String, String> majorRequirement : parsed.majorRequirements()) {
-            // TODO(#135): PDF 파싱 자체를 검증하기 위해 임시로 매칭 실패를 예외 대신 스킵으로 완화함.
-            // 검증 끝나면 findOrCreateStudentMajor의 MAJOR_NOT_FOUND throw로 반드시 되돌릴 것.
             StudentMajor studentMajor = findOrCreateStudentMajor(
                     studentProfile, majorRequirement, parsed.studentInfo(), departments, existingMajorsByDepartmentId);
-            if (studentMajor == null) {
+            if (!summarizedDepartmentIds.add(studentMajor.getDepartment().getId())) {
                 continue;
             }
             studentMajors.add(studentMajor);
