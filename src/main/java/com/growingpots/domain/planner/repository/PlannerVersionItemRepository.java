@@ -30,7 +30,7 @@ public interface PlannerVersionItemRepository extends JpaRepository<PlannerVersi
     List<PlannerVersionItem> findSelectedByStudentProfile(@Param("profile") StudentProfile profile);
 
     @Transactional
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("DELETE FROM PlannerVersionItem pvi WHERE pvi.plannerTermVersion.id IN :versionIds")
     void deleteAllByPlannerTermVersionIdIn(@Param("versionIds") List<Long> versionIds);
 }
