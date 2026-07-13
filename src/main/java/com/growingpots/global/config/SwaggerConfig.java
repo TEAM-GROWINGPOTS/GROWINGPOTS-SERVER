@@ -11,23 +11,22 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class SwaggerConfig {
 
-    private static final String JWT_SCHEME = "Authorization";
+    private static final String COOKIE_SCHEME = "accessToken";
 
     @Bean
     public OpenAPI openAPI() {
         SecurityScheme securityScheme = new SecurityScheme()
-                .type(SecurityScheme.Type.HTTP)
-                .scheme("bearer")
-                .bearerFormat("JWT")
-                .name(JWT_SCHEME);
+                .type(SecurityScheme.Type.APIKEY)
+                .in(SecurityScheme.In.COOKIE)
+                .name(COOKIE_SCHEME);
 
         return new OpenAPI()
                 .info(new Info()
                         .title("GrowingPots API")
                         .description("GrowingPots 서버 API 문서")
                         .version("v1"))
-                .addSecurityItem(new SecurityRequirement().addList(JWT_SCHEME))
+                .addSecurityItem(new SecurityRequirement().addList(COOKIE_SCHEME))
                 .components(new Components()
-                        .addSecuritySchemes(JWT_SCHEME, securityScheme));
+                        .addSecuritySchemes(COOKIE_SCHEME, securityScheme));
     }
 }

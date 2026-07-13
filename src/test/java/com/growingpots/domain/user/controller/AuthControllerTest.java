@@ -21,7 +21,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -88,7 +87,8 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.code").value("AUTH_200"))
                 .andExpect(jsonPath("$.data.nickname").value("김서영"))
                 .andExpect(jsonPath("$.data.onboardingCompleted").value(false))
-                .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
+                .andExpect(cookie().exists("accessToken"))
+                .andExpect(cookie().httpOnly("accessToken", true))
                 .andExpect(cookie().exists("refreshToken"))
                 .andExpect(cookie().httpOnly("refreshToken", true));
     }
@@ -179,7 +179,7 @@ class AuthControllerTest {
         String refreshToken = jwtTokenProvider.generateRefreshToken("1");
 
         mockMvc.perform(get("/api/v1/students/me")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + refreshToken))
+                        .cookie(new Cookie("accessToken", refreshToken)))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTH_001"));
     }
