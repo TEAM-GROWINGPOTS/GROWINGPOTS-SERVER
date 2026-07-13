@@ -52,7 +52,8 @@ public enum ErrorCode implements ErrorType {
     PLANNER_ACCESS_DENIED(HttpStatus.FORBIDDEN, "PLAN_003", "플래너에 접근 권한이 없습니다."),
     PLANNER_INVALID_DATA(HttpStatus.BAD_REQUEST, "PLAN_004", "플래너 데이터 정합성 오류입니다."),
     PLANNER_TERM_NOT_FOUND(HttpStatus.NOT_FOUND, "PLAN_005", "존재하지 않거나 접근할 수 없는 학기입니다."),
-    PLANNER_TERM_LOCKED(HttpStatus.BAD_REQUEST, "PLAN_006", "이수 완료된 학기는 수정할 수 없습니다.");
+    PLANNER_TERM_LOCKED(HttpStatus.BAD_REQUEST, "PLAN_006", "이수 완료된 학기는 수정할 수 없습니다."),
+    PLANNER_DUPLICATE_COURSE(HttpStatus.BAD_REQUEST, "PLAN_007", "같은 버전에 동일한 과목을 중복으로 추가할 수 없습니다.");
 
     private final HttpStatus status;
     private final String code;
