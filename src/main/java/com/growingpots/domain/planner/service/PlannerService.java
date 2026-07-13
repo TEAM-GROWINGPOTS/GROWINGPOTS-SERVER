@@ -5,6 +5,7 @@ import com.growingpots.domain.planner.dto.request.PrerequisiteCheckRequest;
 import com.growingpots.domain.planner.dto.request.SelectVersionRequest;
 import com.growingpots.domain.planner.dto.response.PlannerResponse;
 import com.growingpots.domain.planner.dto.response.PrerequisiteCheckResponse;
+import com.growingpots.domain.planner.dto.response.RetakeDisplay;
 import com.growingpots.domain.planner.dto.response.SelectVersionResponse;
 import com.growingpots.domain.planner.entity.PlannerSimulation;
 import com.growingpots.domain.planner.entity.PlannerTerm;
@@ -35,6 +36,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Function;
@@ -90,16 +92,80 @@ public class PlannerService {
         Map<Long, List<PlannerTermVersion>> versionsByTermId = versions.stream()
                 .collect(Collectors.groupingBy(v -> v.getPlannerTerm().getId()));
 
+        Map<Long, RetakeDisplay> retakeDisplayByItemId =
+                computeRetakeDisplay(profile, terms, items, versionsByTermId);
+
         return terms.stream()
-                .map(term -> toPlannedTerm(term, versionsByTermId.getOrDefault(term.getId(), List.of()), itemsByVersionId))
+                .map(term -> toPlannedTerm(term, versionsByTermId.getOrDefault(term.getId(), List.of()),
+                        itemsByVersionId, retakeDisplayByItemId))
                 .toList();
     }
 
+    // 플래너 항목별 재수강 표시 유형 계산.
+    // COMPLETED·IN_PROGRESS 과목이 플래너에 담겨 있으면 재수강이고,
+    // 동일 과목의 인스턴스 중 max(yearLevel, semester) 학기만 BADGE, 나머지는 DIMMED.
+    private Map<Long, RetakeDisplay> computeRetakeDisplay(
+            StudentProfile profile,
+            List<PlannerTerm> terms,
+            List<PlannerVersionItem> items,
+            Map<Long, List<PlannerTermVersion>> versionsByTermId
+    ) {
+        if (items.isEmpty()) {
+            return Map.of();
+        }
+
+        Set<Long> retakeCourseIds = new HashSet<>(
+                studentCourseRepository.findCourseIdsByStudentProfileAndStatusIn(
+                        profile, List.of(CourseStatus.COMPLETED, CourseStatus.IN_PROGRESS)));
+
+        if (retakeCourseIds.isEmpty()) {
+            return Map.of();
+        }
+
+        // versionId → PlannerTerm 역방향 맵. 이미 로드된 데이터만 사용해 lazy load 없이 구성.
+        Map<Long, PlannerTerm> termByVersionId = new HashMap<>();
+        for (PlannerTerm term : terms) {
+            for (PlannerTermVersion v : versionsByTermId.getOrDefault(term.getId(), List.of())) {
+                termByVersionId.put(v.getId(), term);
+            }
+        }
+
+        // courseId → 해당 과목의 모든 플래너 항목 (재수강 대상 과목만)
+        Map<Long, List<PlannerVersionItem>> retakeItemsByCourseId = items.stream()
+                .filter(i -> retakeCourseIds.contains(i.getCourse().getId()))
+                .collect(Collectors.groupingBy(i -> i.getCourse().getId()));
+
+        Map<Long, RetakeDisplay> result = new HashMap<>();
+        for (List<PlannerVersionItem> courseItems : retakeItemsByCourseId.values()) {
+            PlannerTerm latestTerm = courseItems.stream()
+                    .map(i -> termByVersionId.get(i.getPlannerTermVersion().getId()))
+                    .filter(Objects::nonNull)
+                    .max(Comparator.comparingInt(PlannerTerm::getYearLevel)
+                                   .thenComparingInt(PlannerTerm::getSemester))
+                    .orElse(null);
+            if (latestTerm == null) continue;
+
+            for (PlannerVersionItem item : courseItems) {
+                PlannerTerm term = termByVersionId.get(item.getPlannerTermVersion().getId());
+                if (term == null) continue;
+                boolean isLatest = term.getYearLevel() == latestTerm.getYearLevel()
+                                && term.getSemester() == latestTerm.getSemester();
+                result.put(item.getId(), isLatest ? RetakeDisplay.BADGE : RetakeDisplay.DIMMED);
+            }
+        }
+        return result;
+    }
+
     private PlannerResponse.PlannedTerm toPlannedTerm(
-            PlannerTerm term, List<PlannerTermVersion> versions, Map<Long, List<PlannerVersionItem>> itemsByVersionId) {
+            PlannerTerm term,
+            List<PlannerTermVersion> versions,
+            Map<Long, List<PlannerVersionItem>> itemsByVersionId,
+            Map<Long, RetakeDisplay> retakeDisplayByItemId
+    ) {
         List<PlannerResponse.Version> versionResponses = versions.stream()
                 .sorted(Comparator.comparingInt(PlannerTermVersion::getVersionOrder))
-                .map(version -> toVersion(version, itemsByVersionId.getOrDefault(version.getId(), List.of())))
+                .map(version -> toVersion(version, itemsByVersionId.getOrDefault(version.getId(), List.of()),
+                        retakeDisplayByItemId))
                 .toList();
 
         return PlannerResponse.PlannedTerm.builder()
@@ -110,7 +176,11 @@ public class PlannerService {
                 .build();
     }
 
-    private PlannerResponse.Version toVersion(PlannerTermVersion version, List<PlannerVersionItem> items) {
+    private PlannerResponse.Version toVersion(
+            PlannerTermVersion version,
+            List<PlannerVersionItem> items,
+            Map<Long, RetakeDisplay> retakeDisplayByItemId
+    ) {
         int totalCredit = items.stream().mapToInt(PlannerVersionItem::getCredit).sum();
         return PlannerResponse.Version.builder()
                 .plannerTermVersionId(version.getId())
@@ -119,11 +189,13 @@ public class PlannerService {
                 .isSelected(version.isSelected())
                 .versionOrder(version.getVersionOrder())
                 .totalCredit(totalCredit)
-                .courses(items.stream().map(this::toPlannedCourse).toList())
+                .courses(items.stream()
+                        .map(item -> toPlannedCourse(item, retakeDisplayByItemId.get(item.getId())))
+                        .toList())
                 .build();
     }
 
-    private PlannerResponse.PlannedCourse toPlannedCourse(PlannerVersionItem item) {
+    private PlannerResponse.PlannedCourse toPlannedCourse(PlannerVersionItem item, RetakeDisplay retakeDisplay) {
         Course course = item.getCourse();
         Division division = item.getPlannedDivision();
 
@@ -141,6 +213,7 @@ public class PlannerService {
                 .coursePositionOrder(item.getCoursePositionOrder())
                 .isEnglish(course.isEnglish())
                 .isSw(course.isSw())
+                .retakeDisplay(retakeDisplay)
                 .build();
     }
 
