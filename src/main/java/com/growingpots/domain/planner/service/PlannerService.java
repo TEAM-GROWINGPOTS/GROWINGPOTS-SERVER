@@ -310,9 +310,13 @@ public class PlannerService {
                 }
                 if (versionReq.items() != null) {
                     Set<Long> seenCourseIds = new HashSet<>();
+                    Set<Integer> seenPositionOrders = new HashSet<>();
                     for (PlannerSaveRequest.ItemRequest itemReq : versionReq.items()) {
                         if (!seenCourseIds.add(itemReq.courseId())) {
                             throw new BaseException(ErrorCode.PLANNER_DUPLICATE_COURSE);
+                        }
+                        if (!seenPositionOrders.add(itemReq.coursePositionOrder())) {
+                            throw new BaseException(ErrorCode.PLANNER_INVALID_DATA);
                         }
                     }
                 }
