@@ -33,6 +33,7 @@ springdoc:
     doc-expansion: none
     display-request-duration: true
     try-it-out-enabled: true
+    with-credentials: true
 
 oauth:
   kakao:
