@@ -371,15 +371,18 @@ public class PdfTranscriptParser {
                 continue;
             }
             updateCourseSectionState(line, state);
-            if (inCurrentSemesterArea) {
-                continue;
-            }
-            Optional<Map<String, String>> leftCourse =
-                    parseCourseFromSide(line, CourseSide.LEFT, state.leftSection(), state);
-            if (leftCourse.isPresent()) {
-                courses.add(leftCourse.get());
-            } else if (hasCourseCodeOnSide(line, CourseSide.LEFT)) {
-                parseCompletedCourseFromLine(line, state.leftSection()).ifPresent(courses::add);
+            // [금학기수강학점]은 왼쪽(교양) 칸의 표 형식이 바뀐다는 표시일 뿐이다. 왼쪽/오른쪽(전공) 표의
+            // 줄 수가 다르면(전공이 더 길면) 이 마커가 전공 표가 끝나기 전에 먼저 나타날 수 있는데,
+            // 그렇다고 오른쪽 전공 과목까지 파싱을 멈추면 뒤에 남은 전공 과목이 통째로 누락된다.
+            // 왼쪽만 멈추고 오른쪽은 계속 파싱한다(중복 시 mergeCourses가 정리).
+            if (!inCurrentSemesterArea) {
+                Optional<Map<String, String>> leftCourse =
+                        parseCourseFromSide(line, CourseSide.LEFT, state.leftSection(), state);
+                if (leftCourse.isPresent()) {
+                    courses.add(leftCourse.get());
+                } else if (hasCourseCodeOnSide(line, CourseSide.LEFT)) {
+                    parseCompletedCourseFromLine(line, state.leftSection()).ifPresent(courses::add);
+                }
             }
             parseCourseFromSide(line, CourseSide.RIGHT, state.rightSection(), state)
                     .ifPresent(courses::add);

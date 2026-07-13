@@ -281,7 +281,7 @@ public class TranscriptPersister {
             List<Department> departments,
             Map<Long, StudentMajor> existingMajorsByDepartmentId
     ) {
-        MajorType majorType = toMajorType(majorRequirement.get("majorType"));
+        MajorType majorType = toMajorType(majorRequirement.get("majorSequence"));
         String majorName = majorRequirement.get("majorName");
         Department matched = findMatchingDepartment(departments, majorName);
 
@@ -290,15 +290,7 @@ public class TranscriptPersister {
             matched = findMatchingDepartment(departments, studentInfo.get("department"));
         }
         if (matched == null) {
-            // TODO(#135): 원래 throw new BaseException(ErrorCode.MAJOR_NOT_FOUND, majorName) — 임시로 학과를
-            // 즉석 생성해서 student_major/graduation_analysis_summary까지 검증 가능하게 함. 되돌릴 것.
-            String name = (majorName == null || majorName.isBlank()) ? studentInfo.get("department") : majorName;
-            matched = departmentRepository.save(Department.builder()
-                    .school(studentProfile.getSchool())
-                    .college("검증용(#135)")
-                    .name(name)
-                    .build());
-            departments.add(matched);
+            throw new BaseException(ErrorCode.MAJOR_NOT_FOUND, majorName);
         }
 
         Department department = matched;
@@ -332,11 +324,12 @@ public class TranscriptPersister {
         return name.replaceAll("(부|과)$", "");
     }
 
-    private MajorType toMajorType(String rawMajorType) {
-        return switch (rawMajorType) {
-            case "복수전공", "다전공" -> MajorType.DOUBLE;
-            default -> MajorType.MAIN;
-        };
+    // majorType 텍스트("심화전공"/"단일전공"/"복수전공"/"다전공")는 학생의 전체 다전공 여부를 나타낼 뿐,
+    // 각 행이 본전공인지 아닌지는 말해주지 않는다 - 실제로 복수전공인 학생은 본전공 행까지 포함해서
+    // 모든 majorRequirement 행이 "다전공"으로 찍혀 나온다. 대신 표에 나열된 순서(majorSequence)로
+    // 판단한다 - 항상 1번째로 나열된 전공이 본전공이다.
+    private MajorType toMajorType(String majorSequence) {
+        return "1".equals(majorSequence) ? MajorType.MAIN : MajorType.DOUBLE;
     }
 
     private GraduationAnalysisSummary toGraduationAnalysisSummary(
