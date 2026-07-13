@@ -10,6 +10,7 @@ spring:
 
 server:
   port: 8080
+  forward-headers-strategy: framework
   tomcat:
     max-http-form-post-size: 10MB
 
@@ -17,10 +18,13 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health, prometheus
   endpoint:
     health:
       show-details: when-authorized
+  metrics:
+    tags:
+      application: ${spring.application.name}
 
 springdoc:
   swagger-ui:

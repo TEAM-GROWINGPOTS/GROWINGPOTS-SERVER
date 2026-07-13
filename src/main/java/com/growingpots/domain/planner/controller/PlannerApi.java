@@ -187,6 +187,8 @@ public @interface PlannerApi {
                     - 각 학기(term)에는 정확히 1개의 isSelected=true 버전이 있어야 한다.
                     - 학기 내 versionNo와 versionOrder는 각각 중복 불가.
                     - 과목의 개설 학기와 무관하게 모든 학기 term에 추가할 수 있다.
+                    - 저장 후 terms는 yearLevel → semester 오름차순으로 정렬되어 반환된다.
+                    - terms를 빈 배열([])로 보내면 기존에 저장된 학기를 전부 삭제한다(계획 전체 비우기).
 
                     **성공 응답 (200)**
                     - data: 방금 저장된 플래너가 반영된 졸업현황 (GET /students/me/graduation?majorType=ALL&source=PLANNED 와 동일한 스키마).

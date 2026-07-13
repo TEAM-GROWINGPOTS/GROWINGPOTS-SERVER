@@ -70,6 +70,9 @@ public class JwtTokenProvider {
         return encoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
     }
 
+    public long getExpirationSeconds() { return expiration / 1000; }
+    public long getRefreshExpirationSeconds() { return refreshExpiration / 1000; }
+
     public String getSubject(String token) {
         return decoder.decode(token).getSubject();
     }

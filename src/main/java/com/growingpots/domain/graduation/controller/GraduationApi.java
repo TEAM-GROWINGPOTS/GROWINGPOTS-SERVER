@@ -29,9 +29,9 @@ public @interface GraduationApi {
                     **전공 조회 방식**
                     - studentMajorId 있음: 그 전공 하나의 단건 응답. conditions·graduationRequired 채워짐. sections=null.
                     - majorType=ALL(기본): 보유 전공 전부 + 교양 + 기타. sections 채워짐. conditions=null.
-                    - majorType=GE: REQUIRED_GE·DISTRIBUTED_GE·FREE_GE + 영어·SW. conditions 채워짐.
+                    - majorType=GE: REQUIRED_GE·DISTRIBUTED_GE·FREE_GE + SW. conditions 채워짐. 영어는 미포함.
                     - majorType=OTHERS: GENERAL_ELECTIVE 단일 조건. 영어·SW 미포함.
-                    - 영어·SW 강의는 appliedDivision.category 기준으로 전공·교양 탭에만 배치된다.
+                    - 영어 강의는 appliedDivision.category 기준으로 전공 탭에만 배치된다. SW는 전공·교양 탭 모두.
 
                     **공통 응답 필드**
                     - summary.totalCredits: current(현재 이수 학점) / required(졸업 필요 학점).
@@ -53,7 +53,7 @@ public @interface GraduationApi {
                     - sections.majors[].majorName / majorType: 전공명 / MAIN(본전공) | DOUBLE(복수전공).
                     - sections.majors[].conditions: 해당 전공의 이수구분 조건 목록.
                     - sections.majors[].graduationRequired: 졸업필수 요건이 있는 전공만 non-null. 없는 전공은 null.
-                    - sections.ge.conditions: REQUIRED_GE·DISTRIBUTED_GE·FREE_GE·ENGLISH_COURSE·SW_CERT_COURSE.
+                    - sections.ge.conditions: REQUIRED_GE·DISTRIBUTED_GE·FREE_GE·SW_CERT_COURSE.
                     - sections.others.conditions: GENERAL_ELECTIVE 단일 조건.
 
                     **graduationRequired 필드 상세**
@@ -155,7 +155,6 @@ public @interface GraduationApi {
                                               { "code": "REQUIRED_GE",    "name": "필수 교과",      "current": 12, "required": 17, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
                                               { "code": "DISTRIBUTED_GE", "name": "배분 이수 교과", "current": 3,  "required": 9,  "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
                                               { "code": "FREE_GE",        "name": "자유 이수 교과", "current": 5,  "required": 3,  "unit": "CREDITS", "satisfied": true,  "chartTarget": true  },
-                                              { "code": "ENGLISH_COURSE",  "name": "영어 강의",    "current": 7, "required": 3, "unit": "COURSES", "satisfied": true,  "chartTarget": false },
                                               { "code": "SW_CERT_COURSE",  "name": "SW 인증 강의", "current": 6, "required": 6, "unit": "CREDITS", "satisfied": true,  "chartTarget": false }
                                             ],
                                             "graduationRequired": null

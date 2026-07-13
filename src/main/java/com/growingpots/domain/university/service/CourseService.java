@@ -1,5 +1,6 @@
 package com.growingpots.domain.university.service;
 
+import com.growingpots.domain.planner.repository.PlannerVersionItemRepository;
 import com.growingpots.domain.transcript.entity.enums.CourseStatus;
 import com.growingpots.domain.transcript.repository.StudentCourseRepository;
 import com.growingpots.domain.university.dto.request.CourseSearchRequest;
@@ -24,6 +25,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -40,6 +42,7 @@ public class CourseService {
     private final CourseRepository courseRepository;
     private final CrossMajorRecognizedCourseRepository crossMajorRecognizedCourseRepository;
     private final StudentCourseRepository studentCourseRepository;
+    private final PlannerVersionItemRepository plannerVersionItemRepository;
 
     @Transactional(readOnly = true)
     public CourseSearchResponse searchCourses(Long memberId, CourseSearchRequest request) {
@@ -84,8 +87,13 @@ public class CourseService {
         Set<Long> completedCourseIds = new HashSet<>(
                 studentCourseRepository.findCourseIdsByStudentProfileAndStatus(profile, CourseStatus.COMPLETED));
 
+        // 학생의 현재 선택된 플래너 버전에 담긴 과목 목록 - "이미 담음" 표시용
+        Set<Long> plannerCourseIds = plannerVersionItemRepository.findSelectedByStudentProfile(profile).stream()
+                .map(item -> item.getCourse().getId())
+                .collect(Collectors.toSet());
+
         List<CourseSearchResponse.CourseInfo> courseInfos = coursePage.getContent().stream()
-                .map(course -> toCourseInfo(course, completedCourseIds, recognizedDivisionByCourseId))
+                .map(course -> toCourseInfo(course, completedCourseIds, plannerCourseIds, recognizedDivisionByCourseId))
                 .toList();
 
         return CourseSearchResponse.builder()
@@ -107,7 +115,8 @@ public class CourseService {
     }
 
     private CourseSearchResponse.CourseInfo toCourseInfo(
-            Course course, Set<Long> completedCourseIds, Map<Long, Division> recognizedDivisionByCourseId) {
+            Course course, Set<Long> completedCourseIds, Set<Long> plannerCourseIds,
+            Map<Long, Division> recognizedDivisionByCourseId) {
         // recognizedDivisionByCourseId는 요청에 CROSS_MAJOR가 포함된 경우에만 채워진다(searchCourses 참고).
         // 즉 이 과목이 "타전공 인정 대상"으로 조회된 경우에만, 과목 자체의 기본 이수구분보다 인정받은
         // 이수구분(학과마다 다를 수 있음)을 우선해서 보여준다. CROSS_MAJOR 없이 검색하면 이 분기는 타지 않는다.
@@ -134,7 +143,7 @@ public class CourseService {
                 .isEnglish(course.isEnglish())
                 .isSw(course.isSw())
                 .alreadyCompleted(completedCourseIds.contains(course.getId()))
-                .inPlanner(false)
+                .inPlanner(plannerCourseIds.contains(course.getId()))
                 .build();
     }
 }
