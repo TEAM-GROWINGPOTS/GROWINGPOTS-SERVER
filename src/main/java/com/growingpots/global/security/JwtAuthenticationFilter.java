@@ -16,7 +16,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.Collections;
-import java.util.Optional;
 
 @Slf4j
 @Component
@@ -32,15 +31,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = resolveToken(request);
 
         if (token != null) {
-            Optional<ErrorCode> error = jwtTokenProvider.extractErrorCode(token);
-            if (error.isPresent()) {
-                request.setAttribute("exception", error.get());
+            JwtTokenProvider.ValidatedToken validated = jwtTokenProvider.validate(token);
+            if (!validated.isValid()) {
+                request.setAttribute("exception", validated.errorCode());
+            } else if (!"access".equals(validated.type())) {
+                request.setAttribute("exception", ErrorCode.INVALID_TOKEN);
             } else {
-                String subject = jwtTokenProvider.getSubject(token);
-
                 // TODO: User 엔티티 구현 후 UserDetailsService로 교체
                 UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(subject, null, Collections.emptyList());
+                        new UsernamePasswordAuthenticationToken(validated.subject(), null, Collections.emptyList());
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }
