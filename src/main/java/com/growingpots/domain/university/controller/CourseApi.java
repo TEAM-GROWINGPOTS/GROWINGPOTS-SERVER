@@ -27,9 +27,10 @@ public @interface CourseApi {
                     무한 스크롤을 전제로 하며, 필터를 아무것도 주지 않으면 전체 과목을 반환합니다.
 
                     - `keyword`: 과목명/학수번호 부분 일치 검색
-                    - `divisionCategory`/`year`/`semester`/`credits`는 모두 다중 선택 가능한 배열입니다.
+                    - `divisionCategory`/`year`/`semester`/`credits`/`otherRequired`는 모두 다중 선택 가능한 배열입니다.
                       같은 필드 안의 값끼리는 OR(합집합), 서로 다른 필드끼리는 AND(교집합)로 결합합니다.
                       예: 이수영역=[전공필수, 전공기초], 학년=[2] → (전공필수 이거나 전공기초) 이면서 2학년인 과목
+                    - `otherRequired=[SW, ENGLISH]` → SW인증 이거나 영어강의인 과목(OR). 다른 필터와는 AND로 결합됩니다.
                     - `divisionCategory=CROSS_MAJOR`(타전공인정과목)는 DIVISION 카테고리가 아니라 로그인한
                       학생의 소속 학과 기준으로 인정되는 과목을 별도로 조회합니다. 이 경우 `defaultDivisionName`도
                       과목의 원래 기본 이수구분이 아니라 학생 학과 기준으로 인정되는 이수구분명으로 표시됩니다.
