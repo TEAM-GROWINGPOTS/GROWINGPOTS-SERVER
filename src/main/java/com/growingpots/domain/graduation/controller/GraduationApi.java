@@ -344,6 +344,8 @@ public @interface GraduationApi {
                                               {
                                                 "studentCourseId": 101,
                                                 "name": "화공열역학1",
+                                                "divisionCode": "MAJOR_REQUIRED",
+                                                "divisionName": "전공 필수",
                                                 "departmentName": "화학공학과",
                                                 "credit": 3,
                                                 "semester": "1학기",
@@ -355,6 +357,8 @@ public @interface GraduationApi {
                                               {
                                                 "studentCourseId": null,
                                                 "name": "반응공학",
+                                                "divisionCode": "MAJOR_REQUIRED",
+                                                "divisionName": "전공 필수",
                                                 "departmentName": "화학공학과",
                                                 "credit": 3,
                                                 "semester": "1학기",
@@ -394,6 +398,8 @@ public @interface GraduationApi {
                                               {
                                                 "studentCourseId": 201,
                                                 "name": "인간과 우주",
+                                                "divisionCode": "DISTRIBUTED_GE",
+                                                "divisionName": "배분 이수 교과",
                                                 "departmentName": "교양학부",
                                                 "credit": 3,
                                                 "semester": "1학기",
@@ -405,6 +411,8 @@ public @interface GraduationApi {
                                               {
                                                 "studentCourseId": 202,
                                                 "name": "현대사회의 이해",
+                                                "divisionCode": "DISTRIBUTED_GE",
+                                                "divisionName": "배분 이수 교과",
                                                 "departmentName": "교양학부",
                                                 "credit": 3,
                                                 "semester": "2학기",
@@ -444,6 +452,8 @@ public @interface GraduationApi {
                                               {
                                                 "studentCourseId": 301,
                                                 "name": "전문실기1",
+                                                "divisionCode": "MAJOR_ELECTIVE",
+                                                "divisionName": "전공 선택",
                                                 "departmentName": "스포츠의학과",
                                                 "credit": 1,
                                                 "semester": "1학기",
@@ -455,6 +465,8 @@ public @interface GraduationApi {
                                               {
                                                 "studentCourseId": null,
                                                 "name": "전문실기2",
+                                                "divisionCode": "MAJOR_ELECTIVE",
+                                                "divisionName": "전공 선택",
                                                 "departmentName": "스포츠의학과",
                                                 "credit": 1,
                                                 "semester": "1학기",
