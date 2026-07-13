@@ -250,15 +250,37 @@ public @interface PlannerApi {
                     )),
             @ApiResponse(
                     responseCode = "400",
-                    description = "데이터 정합성 오류 — data에 저장 전 졸업현황 포함 (PLAN_004)",
+                    description = "데이터 정합성 오류 — data에 저장 전 졸업현황 포함 (PLAN_004). data가 null이면 졸업현황 계산 불가 상태이므로 GET /students/me/graduation 별도 호출",
                     content = @Content(
                             mediaType = "application/json",
+                            schema = @Schema(implementation = GraduationResponse.class),
                             examples = @ExampleObject(value = """
                                     {
                                       "success": false,
                                       "code": "PLAN_004",
                                       "message": "플래너 데이터 정합성 오류입니다.",
-                                      "data": { }
+                                      "data": {
+                                        "summary": {
+                                          "totalCredits": { "current": 92, "required": 130 },
+                                          "gpa": { "current": 3.85, "min": 2.0 },
+                                          "enrollmentStatus": "재학"
+                                        },
+                                        "graduatable": false,
+                                        "conditions": null,
+                                        "sections": {
+                                          "majors": [
+                                            {
+                                              "majorName": "컴퓨터공학과",
+                                              "majorType": "MAIN",
+                                              "conditions": [],
+                                              "graduationRequired": null
+                                            }
+                                          ],
+                                          "ge": { "majorName": null, "majorType": null, "conditions": [] },
+                                          "others": { "majorName": null, "majorType": null, "conditions": [] }
+                                        },
+                                        "certs": []
+                                      }
                                     }
                                     """)
                     )),
