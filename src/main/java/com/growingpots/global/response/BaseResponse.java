@@ -23,4 +23,9 @@ public record BaseResponse<T>(
     public static <T> BaseResponse<T> error(ErrorType errorType) {
         return new BaseResponse<>(false, errorType.getCode(), errorType.getMessage(), null);
     }
+
+    // 실패 + 이전 상태 데이터 (예: 플래너 저장 실패 시 저장 전 졸업현황)
+    public static <T> BaseResponse<T> error(ErrorType errorType, T data) {
+        return new BaseResponse<>(false, errorType.getCode(), errorType.getMessage(), data);
+    }
 }
