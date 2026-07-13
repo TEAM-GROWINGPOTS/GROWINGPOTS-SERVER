@@ -77,6 +77,7 @@ public class CourseService {
                 CourseSpecifications.withYears(request.year()),
                 CourseSpecifications.withSemesters(request.semester()),
                 CourseSpecifications.withCredits(request.credits()),
+                CourseSpecifications.withOtherRequired(request.otherRequired()),
                 CourseSpecifications.withDivisionFilters(categories, crossMajorRequested, crossMajorCourseIds),
                 CourseSpecifications.withFetchedAssociations()
         ));

@@ -454,6 +454,57 @@ class CourseSearchTest {
     }
 
     @Test
+    void otherRequired_다중선택은_SW인증이거나_영어강의인_과목을_OR로_반환한다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-9113").build());
+        Department cs = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과").build());
+        courseRepository.save(Course.builder()
+                .school(school).courseCode("SW1").name("SW인증과목").credit(3)
+                .offeringDepartment(cs).recommendedYearLow(1).recommendedYearHigh(1)
+                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(true).isActive(true).build());
+        courseRepository.save(Course.builder()
+                .school(school).courseCode("ENG1").name("영어강의과목").credit(3)
+                .offeringDepartment(cs).recommendedYearLow(1).recommendedYearHigh(1)
+                .openedSemester(OpenedSemester.FIRST).isEnglish(true).isSw(false).isActive(true).build());
+        courseRepository.save(Course.builder()
+                .school(school).courseCode("BOTH1").name("SW인증영어강의과목").credit(3)
+                .offeringDepartment(cs).recommendedYearLow(1).recommendedYearHigh(1)
+                .openedSemester(OpenedSemester.FIRST).isEnglish(true).isSw(true).isActive(true).build());
+        courseRepository.save(Course.builder()
+                .school(school).courseCode("NONE1").name("일반과목").credit(3)
+                .offeringDepartment(cs).recommendedYearLow(1).recommendedYearHigh(1)
+                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).isActive(true).build());
+        StudentProfile studentProfile = onboardedStudent("9113", cs);
+
+        mockMvc.perform(get("/api/v1/courses")
+                        .param("otherRequired", "SW")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.courses[*].courseCode")
+                        .value(org.hamcrest.Matchers.containsInAnyOrder("SW1", "BOTH1")));
+
+        mockMvc.perform(get("/api/v1/courses")
+                        .param("otherRequired", "ENGLISH")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.courses[*].courseCode")
+                        .value(org.hamcrest.Matchers.containsInAnyOrder("ENG1", "BOTH1")));
+
+        // 둘 다 선택하면 AND가 아니라 OR로 결합된다 (SW인증 이거나 영어강의인 과목)
+        mockMvc.perform(get("/api/v1/courses")
+                        .param("otherRequired", "SW", "ENGLISH")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.courses[*].courseCode")
+                        .value(org.hamcrest.Matchers.containsInAnyOrder("SW1", "ENG1", "BOTH1")));
+
+        mockMvc.perform(get("/api/v1/courses")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.courses.length()").value(4));
+    }
+
+    @Test
     void 인증_헤더가_없으면_401_CMN_005를_반환한다() throws Exception {
         mockMvc.perform(get("/api/v1/courses"))
                 .andExpect(status().isUnauthorized())

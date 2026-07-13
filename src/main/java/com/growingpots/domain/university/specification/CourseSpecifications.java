@@ -2,6 +2,7 @@ package com.growingpots.domain.university.specification;
 
 import com.growingpots.domain.university.entity.Course;
 import com.growingpots.domain.university.entity.School;
+import com.growingpots.domain.university.entity.enums.CourseOtherRequiredFilter;
 import com.growingpots.domain.university.entity.enums.DivisionCategory;
 import com.growingpots.domain.university.entity.enums.OpenedSemester;
 import jakarta.persistence.criteria.JoinType;
@@ -125,6 +126,23 @@ public class CourseSpecifications {
                 predicates.add(crossMajorCourseIds.isEmpty()
                         ? cb.disjunction()
                         : root.get("id").in(crossMajorCourseIds));
+            }
+            return cb.or(predicates.toArray(new Predicate[0]));
+        };
+    }
+
+    // SW/영어("기타 필수") 필터. 여러 값을 선택하면 OR로 묶는다(예: SW인증 이거나 영어강의인 과목).
+    public static Specification<Course> withOtherRequired(List<CourseOtherRequiredFilter> filters) {
+        if (filters == null || filters.isEmpty()) {
+            return null;
+        }
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (filters.contains(CourseOtherRequiredFilter.SW)) {
+                predicates.add(cb.isTrue(root.get("isSw")));
+            }
+            if (filters.contains(CourseOtherRequiredFilter.ENGLISH)) {
+                predicates.add(cb.isTrue(root.get("isEnglish")));
             }
             return cb.or(predicates.toArray(new Predicate[0]));
         };
