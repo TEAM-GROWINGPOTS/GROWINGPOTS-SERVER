@@ -306,8 +306,7 @@ class PlannerSaveTest {
                         .with(authentication(auth))
                         .contentType("application/json")
                         .content(saveEmpty))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.terms.length()").value(0));
+                .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/v1/planner")
                         .with(authentication(auth)))

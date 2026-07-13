@@ -1,7 +1,7 @@
 package com.growingpots.domain.planner.controller;
 
+import com.growingpots.domain.graduation.dto.response.GraduationResponse;
 import com.growingpots.domain.planner.dto.response.PlannerResponse;
-import com.growingpots.domain.planner.dto.response.PlannerSaveResponse;
 import com.growingpots.domain.planner.dto.response.PrerequisiteCheckResponse;
 import com.growingpots.domain.planner.dto.response.SelectVersionResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -180,7 +180,7 @@ public @interface PlannerApi {
     @Operation(
             summary = "학기 플래너 저장",
             description = """
-                    학기 플래너를 full-replace 방식으로 저장한다.
+                    학기 플래너를 full-replace 방식으로 저장하고, 저장이 반영된 졸업현황(source=PLANNED, majorType=ALL)을 반환한다.
 
                     **저장 방식**
                     - plannerSimulationId가 null이면 기존 플래너를 찾아 쓰거나 신규 생성한다. 값이 있으면 해당 플래너를 전체 교체한다.
@@ -190,69 +190,107 @@ public @interface PlannerApi {
                     - 저장 후 terms는 yearLevel → semester 오름차순으로 정렬되어 반환된다.
                     - terms를 빈 배열([])로 보내면 기존에 저장된 학기를 전부 삭제한다(계획 전체 비우기).
 
+                    **성공 응답 (200)**
+                    - data: 방금 저장된 플래너가 반영된 졸업현황 (GET /students/me/graduation?majorType=ALL&source=PLANNED 와 동일한 스키마).
+                    - 졸업현황 계산이 일시적으로 실패한 경우 data는 null이 될 수 있다. 이 경우 별도로 GET /students/me/graduation을 호출한다.
+
+                    **실패 응답 (4xx) — PLAN_004 · PLAN_001 · PLAN_002**
+                    - success: false, code: 에러 코드.
+                    - data: 저장 전 상태의 졸업현황 (롤백된 서버 상태 기준). 클라이언트가 별도 GET 없이 이전 상태로 UI를 복원할 수 있다.
+                    - data가 null인 경우 졸업현황 계산 자체가 불가한 상황이므로 별도 GET을 호출한다.
+
+                    **실패 응답 (4xx) — USER_003 · PLAN_003**
+                    - 인증·프로필 오류: data는 항상 null.
+
+                    **@Valid 검증 실패 (400, CMN_002)**
+                    - 요청 바디 자체가 잘못된 경우(예: terms 누락). data는 null. 이전 상태가 필요하면 별도 GET을 호출한다.
+
                     **요청 주요 필드**
                     - plannerSimulationId: 플래너 PK. null이면 신규 생성 또는 기존 플래너 재사용.
                     - terms[].versions[].versionNo: 버전 번호(1부터 시작, 학기 내 중복 불가).
                     - terms[].versions[].versionOrder: 폴더 표시 순서(0-based, 학기 내 중복 불가).
                     - terms[].versions[].isSelected: 선택된 폴더 여부. 학기당 정확히 1개 true.
                     - terms[].versions[].items[].coursePositionOrder: 카드뷰 내 과목 순서(0-based).
-
-                    **응답 주요 필드**
-                    - plannerSimulationId: 생성·교체된 플래너 PK.
-                    - terms[].plannerTermId: 생성된 학기 PK.
-                    - terms[].versions[].plannerTermVersionId: 생성된 버전(폴더) PK.
-                    - terms[].versions[].versionOrder: 저장된 폴더 표시 순서.
-                    - terms[].versions[].items[].plannerVersionItemId: 생성된 과목 항목 PK.
-                    - terms[].versions[].items[].coursePositionOrder: 저장된 과목 순서.
                     """
     )
     @ApiResponses({
             @ApiResponse(
                     responseCode = "200",
-                    description = "저장 성공 (PLAN_200_1)",
+                    description = "저장 성공 — 저장이 반영된 졸업현황 반환 (PLAN_200_1)",
                     content = @Content(
                             mediaType = "application/json",
-                            schema = @Schema(implementation = PlannerSaveResponse.class),
+                            schema = @Schema(implementation = GraduationResponse.class),
                             examples = @ExampleObject(value = """
                                     {
                                       "success": true,
                                       "code": "PLAN_200_1",
                                       "message": "플래너를 저장했습니다.",
                                       "data": {
-                                        "plannerSimulationId": 1001,
-                                        "terms": [
-                                          {
-                                            "plannerTermId": 3001,
-                                            "yearLevel": 2,
-                                            "semester": 1,
-                                            "versions": [
-                                              {
-                                                "plannerTermVersionId": 4001,
-                                                "versionNo": 1,
-                                                "isSelected": true,
-                                                "versionOrder": 0,
-                                                "items": [
-                                                  { "plannerVersionItemId": 5001, "courseId": 78, "coursePositionOrder": 0 }
-                                                ]
-                                              },
-                                              {
-                                                "plannerTermVersionId": 4002,
-                                                "versionNo": 2,
-                                                "isSelected": false,
-                                                "versionOrder": 1,
-                                                "items": []
-                                              }
-                                            ]
-                                          }
-                                        ]
+                                        "summary": {
+                                          "totalCredits": { "current": 98, "required": 130 },
+                                          "gpa": { "current": 3.85, "min": 2.0 },
+                                          "enrollmentStatus": "재학"
+                                        },
+                                        "graduatable": false,
+                                        "conditions": null,
+                                        "sections": {
+                                          "majors": [
+                                            {
+                                              "majorName": "컴퓨터공학과",
+                                              "majorType": "MAIN",
+                                              "conditions": [],
+                                              "graduationRequired": null
+                                            }
+                                          ],
+                                          "ge": { "majorName": null, "majorType": null, "conditions": [] },
+                                          "others": { "majorName": null, "majorType": null, "conditions": [] }
+                                        },
+                                        "certs": []
                                       }
                                     }
                                     """)
                     )),
-            @ApiResponse(responseCode = "400", description = "데이터 정합성 오류 (PLAN_004)"),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "데이터 정합성 오류 — data에 저장 전 졸업현황 포함 (PLAN_004). data가 null이면 졸업현황 계산 불가 상태이므로 GET /students/me/graduation 별도 호출",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = GraduationResponse.class),
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "success": false,
+                                      "code": "PLAN_004",
+                                      "message": "플래너 데이터 정합성 오류입니다.",
+                                      "data": {
+                                        "summary": {
+                                          "totalCredits": { "current": 92, "required": 130 },
+                                          "gpa": { "current": 3.85, "min": 2.0 },
+                                          "enrollmentStatus": "재학"
+                                        },
+                                        "graduatable": false,
+                                        "conditions": null,
+                                        "sections": {
+                                          "majors": [
+                                            {
+                                              "majorName": "컴퓨터공학과",
+                                              "majorType": "MAIN",
+                                              "conditions": [],
+                                              "graduationRequired": null
+                                            }
+                                          ],
+                                          "ge": { "majorName": null, "majorType": null, "conditions": [] },
+                                          "others": { "majorName": null, "majorType": null, "conditions": [] }
+                                        },
+                                        "certs": []
+                                      }
+                                    }
+                                    """)
+                    )),
             @ApiResponse(responseCode = "401", description = "인증 실패 (CMN_005)"),
-            @ApiResponse(responseCode = "403", description = "플래너 접근 권한 없음 (PLAN_003)"),
-            @ApiResponse(responseCode = "404", description = "학적 정보 없음 (USER_003) / 플래너 없음 (PLAN_002) / 과목 없음 (PLAN_001)")
+            @ApiResponse(responseCode = "403", description = "플래너 접근 권한 없음 — data: null (PLAN_003)"),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "학적 정보 없음 — data: null (USER_003) / 플래너 없음 — data에 저장 전 졸업현황 포함 (PLAN_002) / 과목 없음 — data에 저장 전 졸업현황 포함 (PLAN_001)")
     })
     @interface SavePlanner {
     }
