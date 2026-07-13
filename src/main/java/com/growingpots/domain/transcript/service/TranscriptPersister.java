@@ -286,8 +286,15 @@ public class TranscriptPersister {
             matched = findMatchingDepartment(departments, studentInfo.get("department"));
         }
         if (matched == null) {
-            // TODO(#135): 원래 throw new BaseException(ErrorCode.MAJOR_NOT_FOUND, majorName) — 임시 완화, 되돌릴 것.
-            return null;
+            // TODO(#135): 원래 throw new BaseException(ErrorCode.MAJOR_NOT_FOUND, majorName) — 임시로 학과를
+            // 즉석 생성해서 student_major/graduation_analysis_summary까지 검증 가능하게 함. 되돌릴 것.
+            String name = (majorName == null || majorName.isBlank()) ? studentInfo.get("department") : majorName;
+            matched = departmentRepository.save(Department.builder()
+                    .school(studentProfile.getSchool())
+                    .college("검증용(#135)")
+                    .name(name)
+                    .build());
+            departments.add(matched);
         }
 
         Department department = matched;
