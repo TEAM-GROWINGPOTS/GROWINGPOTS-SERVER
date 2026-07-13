@@ -29,6 +29,7 @@ import com.growingpots.global.response.error.ErrorCode;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -234,9 +235,17 @@ public class TranscriptPersister {
         List<StudentMajor> existingMajors = new ArrayList<>(existingMajorsByDepartmentId.values());
 
         List<StudentMajor> studentMajors = new ArrayList<>();
+        // 트랙(복수 세부전공)이 있는 학과는 majorRequirements에 같은 학과가 여러 행(본전공+트랙)으로
+        // 나올 수 있다. GRADUATION_ANALYSIS_SUMMARY는 STUDENT_MAJOR 1:1이라, 매 행마다 덮어쓰면
+        // 나중에 처리된 행(보통 더 작은 트랙 값)이 먼저 처리된 본전공 값을 지워버린다. 과목 dedup과
+        // 동일한 원칙으로, 같은 학과는 먼저 나온 행(본전공)만 요약에 반영하고 이후 행은 건너뛴다.
+        Set<Long> summarizedDepartmentIds = new HashSet<>();
         for (Map<String, String> majorRequirement : parsed.majorRequirements()) {
             StudentMajor studentMajor = findOrCreateStudentMajor(
                     studentProfile, majorRequirement, parsed.studentInfo(), departments, existingMajorsByDepartmentId);
+            if (!summarizedDepartmentIds.add(studentMajor.getDepartment().getId())) {
+                continue;
+            }
             studentMajors.add(studentMajor);
 
             GraduationAnalysisSummary newSummary = toGraduationAnalysisSummary(
@@ -272,7 +281,7 @@ public class TranscriptPersister {
             List<Department> departments,
             Map<Long, StudentMajor> existingMajorsByDepartmentId
     ) {
-        MajorType majorType = toMajorType(majorRequirement.get("majorType"));
+        MajorType majorType = toMajorType(majorRequirement.get("majorSequence"));
         String majorName = majorRequirement.get("majorName");
         Department matched = findMatchingDepartment(departments, majorName);
 
@@ -315,11 +324,12 @@ public class TranscriptPersister {
         return name.replaceAll("(부|과)$", "");
     }
 
-    private MajorType toMajorType(String rawMajorType) {
-        return switch (rawMajorType) {
-            case "복수전공", "다전공" -> MajorType.DOUBLE;
-            default -> MajorType.MAIN;
-        };
+    // majorType 텍스트("심화전공"/"단일전공"/"복수전공"/"다전공")는 학생의 전체 다전공 여부를 나타낼 뿐,
+    // 각 행이 본전공인지 아닌지는 말해주지 않는다 - 실제로 복수전공인 학생은 본전공 행까지 포함해서
+    // 모든 majorRequirement 행이 "다전공"으로 찍혀 나온다. 대신 표에 나열된 순서(majorSequence)로
+    // 판단한다 - 항상 1번째로 나열된 전공이 본전공이다.
+    private MajorType toMajorType(String majorSequence) {
+        return "1".equals(majorSequence) ? MajorType.MAIN : MajorType.DOUBLE;
     }
 
     private GraduationAnalysisSummary toGraduationAnalysisSummary(

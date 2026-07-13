@@ -149,6 +149,7 @@ class GraduationAnalysisUploadTest {
 
         Map<String, String> updatedMajorRequirement = Map.ofEntries(
                 Map.entry("majorType", "단일전공"),
+                Map.entry("majorSequence", "1"),
                 Map.entry("majorName", "스포츠의학"),
                 Map.entry("standardYear", "2024"),
                 Map.entry("basicEarned", "7"), Map.entry("basicRequired", "7"),
@@ -186,6 +187,7 @@ class GraduationAnalysisUploadTest {
 
         Map<String, String> newMajorRequirement = Map.ofEntries(
                 Map.entry("majorType", "단일전공"),
+                Map.entry("majorSequence", "1"),
                 Map.entry("majorName", "디지털콘텐츠학"),
                 Map.entry("standardYear", "2024"),
                 Map.entry("basicEarned", "8"), Map.entry("basicRequired", "8"),
@@ -219,14 +221,16 @@ class GraduationAnalysisUploadTest {
         Department sportsScience = department("스포츠의학과");
         StudentProfile studentProfile = onboardedStudent("9003", physicalEducation);
         Map<String, String> mainMajor = Map.ofEntries(
-                Map.entry("majorType", "단일전공"), Map.entry("majorName", "체육학"), Map.entry("standardYear", "2024"),
+                Map.entry("majorType", "단일전공"), Map.entry("majorSequence", "1"),
+                Map.entry("majorName", "체육학"), Map.entry("standardYear", "2024"),
                 Map.entry("basicEarned", "6"), Map.entry("basicRequired", "7"),
                 Map.entry("requiredEarned", "9"), Map.entry("requiredRequired", "9"),
                 Map.entry("electiveEarned", "15"), Map.entry("electiveRequired", "51"),
                 Map.entry("requiredPlusElectiveEarned", "24"), Map.entry("requiredPlusElectiveRequired", "60")
         );
         Map<String, String> doubleMajor = Map.ofEntries(
-                Map.entry("majorType", "복수전공"), Map.entry("majorName", "스포츠의학"), Map.entry("standardYear", "2024"),
+                Map.entry("majorType", "복수전공"), Map.entry("majorSequence", "2"),
+                Map.entry("majorName", "스포츠의학"), Map.entry("standardYear", "2024"),
                 Map.entry("basicEarned", "3"), Map.entry("basicRequired", "6"),
                 Map.entry("requiredEarned", "5"), Map.entry("requiredRequired", "9"),
                 Map.entry("electiveEarned", "10"), Map.entry("electiveRequired", "40"),
@@ -239,6 +243,7 @@ class GraduationAnalysisUploadTest {
 
         StudentMajor main = studentMajorRepository.findByStudentProfileAndDepartment(studentProfile, physicalEducation).orElseThrow();
         StudentMajor doubleM = studentMajorRepository.findByStudentProfileAndDepartment(studentProfile, sportsScience).orElseThrow();
+        assertThat(main.getMajorType()).isEqualTo(MajorType.MAIN);
         assertThat(doubleM.getMajorType()).isEqualTo(MajorType.DOUBLE);
 
         GraduationAnalysisSummary mainSummary = graduationAnalysisSummaryRepository.findByStudentMajor(main).orElseThrow();
@@ -270,6 +275,7 @@ class GraduationAnalysisUploadTest {
     private ParsedTranscript singleMajorTranscript() {
         Map<String, String> majorRequirement = Map.ofEntries(
                 Map.entry("majorType", "심화전공"),
+                Map.entry("majorSequence", "1"),
                 Map.entry("majorName", "스포츠의학"),
                 Map.entry("standardYear", "2024"),
                 Map.entry("basicEarned", "6"), Map.entry("basicRequired", "7"),
