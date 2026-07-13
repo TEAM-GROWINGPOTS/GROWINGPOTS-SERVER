@@ -33,6 +33,9 @@ public class AuthController {
     @Value("${cookie.secure:true}")
     private boolean cookieSecure;
 
+    @Value("${cookie.same-site:None}")
+    private String cookieSameSite;
+
     @AuthApi.Login
     @PostMapping("/oauth/login")
     public ResponseEntity<BaseResponse<OAuthLoginResponse>> login(
@@ -67,7 +70,7 @@ public class AuthController {
                 .secure(cookieSecure)
                 .path("/api")
                 .maxAge(jwtTokenProvider.getExpirationSeconds())
-                .sameSite("None")
+                .sameSite(cookieSameSite)
                 .build();
     }
 
@@ -77,7 +80,7 @@ public class AuthController {
                 .secure(cookieSecure)
                 .path("/api/v1/auth/reissue")
                 .maxAge(jwtTokenProvider.getRefreshExpirationSeconds())
-                .sameSite("None")
+                .sameSite(cookieSameSite)
                 .build();
     }
 }

@@ -22,6 +22,7 @@ app:
 
 cookie:
   secure: false
+  same-site: Lax
 
 discord:
   webhook-url: ${DISCORD_WEBHOOK_URL:}

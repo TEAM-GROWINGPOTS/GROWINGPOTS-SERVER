@@ -35,6 +35,9 @@ public class DevTokenController {
     @Value("${cookie.secure:true}")
     private boolean cookieSecure;
 
+    @Value("${cookie.same-site:None}")
+    private String cookieSameSite;
+
     @Operation(
             summary = "[개발용] 임시 토큰 발급",
             description = "실제 로그인 없이 지정한 memberId로 accessToken/refreshToken을 발급한다. "
@@ -51,12 +54,22 @@ public class DevTokenController {
         String refreshToken = jwtTokenProvider.generateRefreshToken(memberId.toString());
         member.updateRefreshToken(refreshToken);
 
+        // AuthController와 동일하게 accessToken도 쿠키로 내려줘야 실제 인증에 쓸 수 있다
+        // (JwtAuthenticationFilter가 이제 accessToken 쿠키만 보고, Authorization 헤더는 안 봄).
+        response.addHeader(HttpHeaders.SET_COOKIE, ResponseCookie.from("accessToken", accessToken)
+                .httpOnly(true)
+                .secure(cookieSecure)
+                .path("/api")
+                .maxAge(jwtTokenProvider.getExpirationSeconds())
+                .sameSite(cookieSameSite)
+                .build()
+                .toString());
         response.addHeader(HttpHeaders.SET_COOKIE, ResponseCookie.from("refreshToken", refreshToken)
                 .httpOnly(true)
                 .secure(cookieSecure)
                 .path("/api/v1/auth/reissue")
                 .maxAge(jwtTokenProvider.getRefreshExpirationSeconds())
-                .sameSite("None")
+                .sameSite(cookieSameSite)
                 .build()
                 .toString());
 
