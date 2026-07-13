@@ -88,7 +88,7 @@ public @interface PlannerApi {
                                               {
                                                 "studentCourseId": 7001,
                                                 "courseId": 12,
-                                                "courseName": "미디어와사회",
+                                                "name": "미디어와사회",
                                                 "departmentName": "미디어학과",
                                                 "divisionCategory": "MAJOR_REQUIRED",
                                                 "divisionName": "전공필수",
@@ -119,7 +119,7 @@ public @interface PlannerApi {
                                                   {
                                                     "plannerVersionItemId": 5002,
                                                     "courseId": 78,
-                                                    "courseName": "경영정보시스템",
+                                                    "name": "경영정보시스템",
                                                     "departmentName": "산업경영공학과",
                                                     "divisionCategory": "MAJOR_REQUIRED",
                                                     "divisionName": "전공필수",
@@ -329,9 +329,9 @@ public @interface PlannerApi {
                                                 "results": [
                                                   {
                                                     "courseId": 78,
-                                                    "courseName": "데이터베이스",
+                                                    "name": "데이터베이스",
                                                     "missingPrerequisites": [
-                                                      { "courseId": 45, "courseName": "자료구조", "type": "REQUIRED" }
+                                                      { "courseId": 45, "name": "자료구조", "type": "REQUIRED" }
                                                     ]
                                                   }
                                                 ]

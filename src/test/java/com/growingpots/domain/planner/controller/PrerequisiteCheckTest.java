@@ -115,9 +115,9 @@ class PrerequisiteCheckTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("PLAN_200_2"))
                 .andExpect(jsonPath("$.data.results[0].courseId").value(course.getId()))
-                .andExpect(jsonPath("$.data.results[0].courseName").value("자료구조"))
+                .andExpect(jsonPath("$.data.results[0].name").value("자료구조"))
                 .andExpect(jsonPath("$.data.results[0].missingPrerequisites[0].courseId").value(prereq.getId()))
-                .andExpect(jsonPath("$.data.results[0].missingPrerequisites[0].courseName").value("프로그래밍기초"))
+                .andExpect(jsonPath("$.data.results[0].missingPrerequisites[0].name").value("프로그래밍기초"))
                 .andExpect(jsonPath("$.data.results[0].missingPrerequisites[0].type").value("REQUIRED"));
     }
 

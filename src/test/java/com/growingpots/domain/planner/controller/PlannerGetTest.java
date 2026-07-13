@@ -142,7 +142,7 @@ class PlannerGetTest {
                 .andExpect(jsonPath("$.data.completedTerms[1].semester").value(2))
                 .andExpect(jsonPath("$.data.completedTerms[1].status").value("IN_PROGRESS"))
                 .andExpect(jsonPath("$.data.completedTerms[1].courses[0].courseId").doesNotExist())
-                .andExpect(jsonPath("$.data.completedTerms[1].courses[0].courseName").value("연극문헌과연기"));
+                .andExpect(jsonPath("$.data.completedTerms[1].courses[0].name").value("연극문헌과연기"));
     }
 
     // course가 매칭돼도 course.getName()이 아니라 rawCourseName을 그대로 보여줘야 한다.
@@ -170,7 +170,7 @@ class PlannerGetTest {
         mockMvc.perform(get("/api/v1/planner")
                         .with(authentication(authenticationOf(profile.getMember().getId()))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.completedTerms[0].courses[0].courseName").value("미디어와사회(편집됨)"));
+                .andExpect(jsonPath("$.data.completedTerms[0].courses[0].name").value("미디어와사회(편집됨)"));
     }
 
     @Test
@@ -227,7 +227,7 @@ class PlannerGetTest {
                 .andExpect(jsonPath("$.data.completedTerms[2].semester").value(1))
                 .andExpect(jsonPath("$.data.completedTerms[2].name").value("2학년 1학기"))
                 .andExpect(jsonPath("$.data.completedTerms[2].status").value("IN_PROGRESS"))
-                .andExpect(jsonPath("$.data.completedTerms[2].courses[0].courseName").value("운영체제"));
+                .andExpect(jsonPath("$.data.completedTerms[2].courses[0].name").value("운영체제"));
     }
 
     @Test
@@ -270,7 +270,7 @@ class PlannerGetTest {
                 .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].isSelected").value(true))
                 .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].totalCredit").value(5))
                 .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].courses.length()").value(2))
-                .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].courses[0].courseName").value("경영정보시스템"))
+                .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].courses[0].name").value("경영정보시스템"))
                 .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].courses[0].divisionName").value("전공필수"))
                 .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].courses[1].courseId").value(course2.getId()))
                 .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].courses[1].divisionCategory").doesNotExist());
