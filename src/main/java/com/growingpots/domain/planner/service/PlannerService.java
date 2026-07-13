@@ -4,7 +4,6 @@ import com.growingpots.domain.planner.dto.request.PlannerSaveRequest;
 import com.growingpots.domain.planner.dto.request.PrerequisiteCheckRequest;
 import com.growingpots.domain.planner.dto.request.SelectVersionRequest;
 import com.growingpots.domain.planner.dto.response.PlannerResponse;
-import com.growingpots.domain.planner.dto.response.PlannerSaveResponse;
 import com.growingpots.domain.planner.dto.response.PrerequisiteCheckResponse;
 import com.growingpots.domain.planner.dto.response.SelectVersionResponse;
 import com.growingpots.domain.planner.entity.PlannerSimulation;
@@ -241,7 +240,7 @@ public class PlannerService {
     }
 
     @Transactional
-    public PlannerSaveResponse savePlanner(Long memberId, PlannerSaveRequest request) {
+    public void savePlanner(Long memberId, PlannerSaveRequest request) {
         StudentProfile profile = studentProfileRepository.findWithDetailsByMemberId(memberId)
                 .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
 
@@ -253,7 +252,7 @@ public class PlannerService {
 
         deleteExistingData(simulation.getId());
 
-        return buildAndSave(simulation, request, courseMap, profile);
+        buildAndSave(simulation, request, courseMap, profile);
     }
 
     // 학생당 시뮬레이션은 1개뿐이라, id 없이 저장 요청이 오면 새로 만들기 전에 기존 걸 먼저 찾는다
@@ -345,14 +344,13 @@ public class PlannerService {
         plannerTermRepository.deleteAllByPlannerSimulationId(simulationId);
     }
 
-    private PlannerSaveResponse buildAndSave(
+    private void buildAndSave(
             PlannerSimulation simulation,
             PlannerSaveRequest request,
             Map<Long, Course> courseMap,
             StudentProfile profile
     ) {
         Map<Long, Division> recognizedDivisionByCourseId = loadRecognizedDivisionByCourseId(profile);
-        List<PlannerSaveResponse.TermResponse> termResponses = new ArrayList<>();
 
         List<PlannerSaveRequest.TermRequest> sortedTerms = request.terms().stream()
                 .sorted(Comparator.comparingInt(PlannerSaveRequest.TermRequest::yearLevel)
@@ -368,7 +366,6 @@ public class PlannerService {
                             .build()
             );
 
-            List<PlannerSaveResponse.VersionResponse> versionResponses = new ArrayList<>();
             for (PlannerSaveRequest.VersionRequest versionReq : termReq.versions()) {
                 PlannerTermVersion version = plannerTermVersionRepository.save(
                         PlannerTermVersion.builder()
@@ -380,7 +377,6 @@ public class PlannerService {
                                 .build()
                 );
 
-                List<PlannerSaveResponse.ItemResponse> itemResponses = new ArrayList<>();
                 List<PlannerSaveRequest.ItemRequest> items =
                         versionReq.items() != null ? versionReq.items() : List.of();
 
@@ -388,7 +384,7 @@ public class PlannerService {
                     Course course = courseMap.get(itemReq.courseId());
                     Division plannedDivision = recognizedDivisionByCourseId
                             .getOrDefault(course.getId(), course.getDefaultDivision());
-                    PlannerVersionItem item = plannerVersionItemRepository.save(
+                    plannerVersionItemRepository.save(
                             PlannerVersionItem.builder()
                                     .plannerTermVersion(version)
                                     .course(course)
@@ -397,18 +393,9 @@ public class PlannerService {
                                     .coursePositionOrder(itemReq.coursePositionOrder())
                                     .build()
                     );
-                    itemResponses.add(new PlannerSaveResponse.ItemResponse(item.getId(), course.getId(), item.getCoursePositionOrder()));
                 }
-
-                versionResponses.add(new PlannerSaveResponse.VersionResponse(
-                        version.getId(), version.getVersionNo(), version.isSelected(), version.getVersionOrder(), itemResponses));
             }
-
-            termResponses.add(new PlannerSaveResponse.TermResponse(
-                    term.getId(), term.getYearLevel(), term.getSemester(), versionResponses));
         }
-
-        return new PlannerSaveResponse(simulation.getId(), termResponses);
     }
 
     @Transactional
