@@ -14,11 +14,14 @@ import com.growingpots.domain.user.repository.MemberRepository;
 import com.growingpots.domain.user.repository.StudentProfileRepository;
 import com.growingpots.global.exception.BaseException;
 import com.growingpots.global.response.error.ErrorCode;
+import com.growingpots.global.security.JwtTokenProvider;
+import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -26,6 +29,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -41,6 +45,9 @@ class AuthControllerTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private JwtTokenProvider jwtTokenProvider;
 
     @Autowired
     private MemberRepository memberRepository;
@@ -165,6 +172,26 @@ class AuthControllerTest {
                                 new LoginRequestFixture("KAKAO", ""))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("CMN_002"));
+    }
+
+    @Test
+    void 리프레시_토큰으로_일반_API_호출_시_401_AUTH_001을_반환한다() throws Exception {
+        String refreshToken = jwtTokenProvider.generateRefreshToken("1");
+
+        mockMvc.perform(get("/api/v1/students/me")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + refreshToken))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTH_001"));
+    }
+
+    @Test
+    void 액세스_토큰으로_재발급_요청_시_401_AUTH_001을_반환한다() throws Exception {
+        String accessToken = jwtTokenProvider.generateToken("1");
+
+        mockMvc.perform(post("/api/v1/auth/reissue")
+                        .cookie(new Cookie("refreshToken", accessToken)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTH_001"));
     }
 
     private record LoginRequestFixture(String provider, String oauthAccessToken) {
