@@ -258,8 +258,8 @@ public @interface PlannerApi {
 
                     **실패 응답 (4xx) — PLAN_004 · PLAN_001 · PLAN_002**
                     - success: false, code: 에러 코드.
-                    - data: 저장 전 상태의 졸업현황 (롤백된 서버 상태 기준). 클라이언트가 별도 GET 없이 이전 상태로 UI를 복원할 수 있다.
-                    - data가 null인 경우 졸업현황 계산 자체가 불가한 상황이므로 별도 GET을 호출한다.
+                    - data: 저장 전 상태의 플래너 (롤백된 서버 상태 기준, GET /api/v1/planner 와 동일한 스키마). 클라이언트가 별도 GET 없이 이전 상태로 UI를 복원할 수 있다.
+                    - data가 null인 경우 플래너 조회 자체가 불가한 상황이므로 별도 GET을 호출한다.
 
                     **실패 응답 (4xx) — USER_003 · PLAN_003**
                     - 인증·프로필 오류: data는 항상 null.
@@ -295,6 +295,7 @@ public @interface PlannerApi {
                                         },
                                         "graduatable": false,
                                         "conditions": null,
+                                        "graduationRequired": null,
                                         "sections": {
                                           "majors": [
                                             {
@@ -304,8 +305,8 @@ public @interface PlannerApi {
                                               "graduationRequired": null
                                             }
                                           ],
-                                          "ge": { "majorName": null, "majorType": null, "conditions": [] },
-                                          "others": { "majorName": null, "majorType": null, "conditions": [] }
+                                          "ge": { "majorName": null, "majorType": null, "conditions": [], "graduationRequired": null },
+                                          "others": { "majorName": null, "majorType": null, "conditions": [], "graduationRequired": null }
                                         },
                                         "certs": []
                                       }
@@ -314,36 +315,45 @@ public @interface PlannerApi {
                     )),
             @ApiResponse(
                     responseCode = "400",
-                    description = "데이터 정합성 오류 — data에 저장 전 졸업현황 포함 (PLAN_004). data가 null이면 졸업현황 계산 불가 상태이므로 GET /students/me/graduation 별도 호출",
+                    description = "데이터 정합성 오류 — data에 저장 전 플래너 포함 (PLAN_004). data가 null이면 플래너 조회 불가 상태이므로 GET /api/v1/planner 별도 호출",
                     content = @Content(
                             mediaType = "application/json",
-                            schema = @Schema(implementation = GraduationResponse.class),
+                            schema = @Schema(implementation = PlannerResponse.class),
                             examples = @ExampleObject(value = """
                                     {
                                       "success": false,
                                       "code": "PLAN_004",
                                       "message": "플래너 데이터 정합성 오류입니다.",
                                       "data": {
-                                        "summary": {
-                                          "totalCredits": { "current": 92, "required": 130 },
-                                          "gpa": { "current": 3.85, "min": 2.0 },
-                                          "enrollmentStatus": "재학"
-                                        },
-                                        "graduatable": false,
-                                        "conditions": null,
-                                        "sections": {
-                                          "majors": [
-                                            {
-                                              "majorName": "컴퓨터공학과",
-                                              "majorType": "MAIN",
-                                              "conditions": [],
-                                              "graduationRequired": null
-                                            }
-                                          ],
-                                          "ge": { "majorName": null, "majorType": null, "conditions": [] },
-                                          "others": { "majorName": null, "majorType": null, "conditions": [] }
-                                        },
-                                        "certs": []
+                                        "completedTerms": [],
+                                        "plannedTerms": [
+                                          {
+                                            "plannerTermId": 3001,
+                                            "yearLevel": 1,
+                                            "semester": 1,
+                                            "versions": [
+                                              {
+                                                "plannerTermVersionId": 4001,
+                                                "versionNo": 1,
+                                                "name": "폴더 1",
+                                                "isSelected": true,
+                                                "versionOrder": 0,
+                                                "totalCredit": 3,
+                                                "courses": [
+                                                  {
+                                                    "plannerVersionItemId": 5001,
+                                                    "courseId": 12,
+                                                    "name": "미디어와사회",
+                                                    "credit": 3,
+                                                    "coursePositionOrder": 0,
+                                                    "isEnglish": false,
+                                                    "isSw": false
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
                                       }
                                     }
                                     """)
@@ -352,7 +362,7 @@ public @interface PlannerApi {
             @ApiResponse(responseCode = "403", description = "플래너 접근 권한 없음 — data: null (PLAN_003)"),
             @ApiResponse(
                     responseCode = "404",
-                    description = "학적 정보 없음 — data: null (USER_003) / 플래너 없음 — data에 저장 전 졸업현황 포함 (PLAN_002) / 과목 없음 — data에 저장 전 졸업현황 포함 (PLAN_001)")
+                    description = "학적 정보 없음 — data: null (USER_003) / 플래너 없음 — data에 저장 전 플래너 포함 (PLAN_002) / 과목 없음 — data에 저장 전 플래너 포함 (PLAN_001)")
     })
     @interface SavePlanner {
     }
