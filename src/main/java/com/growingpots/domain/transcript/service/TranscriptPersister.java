@@ -82,6 +82,11 @@ public class TranscriptPersister {
         // 학교별로 학수번호가 겹칠 수 있어 학생 소속 학교로 한정한다.
         Map<String, Course> coursesByCode = courseRepository.findBySchool(studentProfile.getSchool()).stream()
                 .collect(Collectors.toMap(Course::getCourseCode, c -> c, (a, b) -> a));
+        // TEMP DIAGNOSTIC(#198 후속): dev에서 실제 업로드 시 course 매칭이 왜 비는지 확인용. 원인 파악 후 제거.
+        log.info("[DIAG-198] studentProfileId={}, schoolId={}, coursesByCode.size={}",
+                studentProfile.getId(),
+                studentProfile.getSchool() != null ? studentProfile.getSchool().getId() : null,
+                coursesByCode.size());
 
         List<Division> divisions = divisionRepository.findBySchool(studentProfile.getSchool());
         Map<DivisionCategory, Division> divisionsByCategory = divisions.stream()
