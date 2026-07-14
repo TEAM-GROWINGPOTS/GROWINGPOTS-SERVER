@@ -9,7 +9,6 @@ import com.growingpots.domain.university.entity.Course;
 import com.growingpots.domain.university.entity.Department;
 import com.growingpots.domain.university.entity.Division;
 import com.growingpots.domain.university.entity.School;
-import com.growingpots.domain.university.entity.enums.DivisionCategory;
 import com.growingpots.domain.university.repository.CourseRepository;
 import com.growingpots.domain.university.repository.DepartmentRepository;
 import com.growingpots.domain.university.repository.DivisionRepository;
@@ -157,7 +156,7 @@ public class StudentProfileService {
                 .sorted(Comparator.comparingInt(d -> d.getCategory().ordinal()))
                 .map(d -> StudentCourseListResponse.DivisionInfo.builder()
                         .id(d.getId())
-                        .name(divisionCategoryName(d.getCategory()))
+                        .name(d.getCategory().getDisplayName())
                         .build())
                 .toList();
 
@@ -320,18 +319,7 @@ public class StudentProfileService {
     }
 
     private String appliedDivisionName(StudentCourse course) {
-        return course.getAppliedDivision() == null ? null : divisionCategoryName(course.getAppliedDivision().getCategory());
+        return course.getAppliedDivision() == null ? null : course.getAppliedDivision().getCategory().getDisplayName();
     }
 
-    private String divisionCategoryName(DivisionCategory category) {
-        return switch (category) {
-            case MAJOR_BASIC -> "전공기초";
-            case MAJOR_REQUIRED -> "전공필수";
-            case MAJOR_ELECTIVE -> "전공선택";
-            case REQUIRED_GE -> "필수교과";
-            case DISTRIBUTED_GE -> "배분이수";
-            case FREE_GE -> "자유이수";
-            case GENERAL_ELECTIVE -> "일반선택";
-        };
-    }
 }
