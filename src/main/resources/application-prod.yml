@@ -20,6 +20,9 @@ jwt:
 app:
   base-url: https://growing-pots.p-e.kr
 
+cors:
+  allowed-origins: https://growingpots.kr
+
 discord:
   webhook-url: ${DISCORD_WEBHOOK_URL}
 
