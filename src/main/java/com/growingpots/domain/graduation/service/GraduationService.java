@@ -52,6 +52,7 @@ import com.growingpots.global.response.error.ErrorCode;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -545,25 +546,15 @@ public class GraduationService {
             }
         }
 
-        List<StudentMajor> targetMajors;
-        ConditionsTab tab;
-        if (studentMajorId != null) {
-            targetMajors = List.of(findMajorByStudentMajorId(majors, studentMajorId));
-            tab = ConditionsTab.MAJOR;
-        } else {
-            targetMajors = switch (majorTypeFilter) {
-                case ALL -> majors;
-                case GE, OTHERS -> majors.stream().filter(m -> m.getMajorType() == MajorType.MAIN).toList();
-            };
-            tab = switch (majorTypeFilter) {
-                case ALL -> ConditionsTab.MAJOR;
-                case GE -> ConditionsTab.GE;
-                case OTHERS -> ConditionsTab.OTHERS;
-            };
-        }
+        List<StudentMajor> targetMajors = studentMajorId != null
+                ? List.of(findMajorByStudentMajorId(majors, studentMajorId))
+                : switch (majorTypeFilter) {
+                    case ALL -> majors;
+                    case GE, OTHERS -> majors.stream().filter(m -> m.getMajorType() == MajorType.MAIN).toList();
+                };
 
         List<MajorCourses> majorCoursesList = targetMajors.stream()
-                .map(major -> buildMajorCourses(profile, major, conditionType, tab))
+                .map(major -> buildMajorCourses(profile, major, conditionType))
                 .toList();
 
         return GraduationCourseResponse.builder()
@@ -578,6 +569,25 @@ public class GraduationService {
                 .filter(m -> m.getId().equals(studentMajorId))
                 .findFirst()
                 .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_MAJOR_NOT_FOUND));
+    }
+
+    // 같은 과목을 재수강하면 완료(COMPLETED) 행과 진행중(IN_PROGRESS) 행이 같이 나올 수 있는데, 영어/SW
+    // 목록에서는 같은 과목을 두 번 보여주면 안 되므로 course 하나당 한 행만 남긴다. 완료 이력이 있으면
+    // 그 행을 우선하고(이미 이수했다는 사실은 확정적), 없으면 진행중 행을 보여준다.
+    private List<StudentCourse> dedupeByCourse(List<StudentCourse> courses) {
+        Map<Long, StudentCourse> byCourseId = new LinkedHashMap<>();
+        for (StudentCourse sc : courses) {
+            if (sc.getCourse() == null) {
+                continue;
+            }
+            Long courseId = sc.getCourse().getId();
+            StudentCourse existing = byCourseId.get(courseId);
+            if (existing == null
+                    || (existing.getStatus() != CourseStatus.COMPLETED && sc.getStatus() == CourseStatus.COMPLETED)) {
+                byCourseId.put(courseId, sc);
+            }
+        }
+        return new ArrayList<>(byCourseId.values());
     }
 
     // ENGLISH_COURSE/SW_CERT_COURSE + majorType=ALL 전용.
@@ -595,16 +605,19 @@ public class GraduationService {
                 .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
         GraduationAnalysisSummary summary = requireSummary(mainMajor);
 
+        // current는 PDF 스냅샷(summary.englishCurrent/swCertCurrent, 학생 전체 기준값)을 그대로 쓴다 -
+        // 예전엔 takenCourses.size()/sum()으로 실시간 재계산했는데, 그 쿼리에 status 필터가 없어서
+        // 진행중(재수강 중)인 과목까지 세는 바람에 스냅샷 값과 어긋났다(#188 연장선에서 발견).
         List<StudentCourse> takenCourses;
         int current;
         Integer required;
         if (conditionType == GraduationConditionType.ENGLISH_COURSE) {
-            takenCourses = studentCourseRepository.findByStudentProfileAndCourseIsEnglish(profile);
-            current = takenCourses.size();
+            takenCourses = dedupeByCourse(studentCourseRepository.findByStudentProfileAndCourseIsEnglish(profile));
+            current = summary.getEnglishCurrent();
             required = summary.getEnglishRequired();
         } else {
-            takenCourses = studentCourseRepository.findByStudentProfileAndCourseIsSw(profile);
-            current = takenCourses.stream().mapToInt(StudentCourse::getCredit).sum();
+            takenCourses = dedupeByCourse(studentCourseRepository.findByStudentProfileAndCourseIsSw(profile));
+            current = summary.getSwCertCurrent() != null ? summary.getSwCertCurrent() : 0;
             required = summary.getSwCertRequired();
         }
         boolean satisfied = required == null || current >= required;
@@ -630,24 +643,43 @@ public class GraduationService {
     }
 
     private MajorCourses buildMajorCourses(StudentProfile profile, StudentMajor major,
-            GraduationConditionType conditionType, ConditionsTab filter) {
+            GraduationConditionType conditionType) {
         if (conditionType == GraduationConditionType.GRADUATION_REQUIRED) {
             return buildGraduationRequiredMajorCourses(profile, major);
         }
 
         GraduationAnalysisSummary summary = requireSummary(major);
+        // 영어/SW는 '전체'(본전공) 탭에서만 실제 값을 노출하기로 확정했다(GraduationService의 조건 요약과
+        // 동일한 정책) - 복수전공은 목록/current 둘 다 비워서 요약 카드(0)와 모순되지 않게 한다.
+        boolean isMainMajor = major.getMajorType() == MajorType.MAIN;
+        boolean isEnglishOrSw = conditionType == GraduationConditionType.ENGLISH_COURSE
+                || conditionType == GraduationConditionType.SW_CERT_COURSE;
 
-        // 영어/SW: major.getDepartment() 전달 → fetchTakenCourses에서 전공 탭이면 학과 필터 적용
-        List<StudentCourse> takenCourses = fetchTakenCourses(profile, conditionType, filter, major.getDepartment());
+        // 영어/SW는 이수구분·학과와 무관하게 학생 전체 기준 개념(summary.englishCurrent 등도 마찬가지)이라,
+        // 본전공 탭이어도 전공 이수구분(MAJOR_CATEGORIES)으로 목록을 제한하면 안 된다 - 실제로 SW인증
+        // 과목이 자유이수(교양)에 있는 경우가 흔해서, 제한하면 목록이 스냅샷과 어긋나거나 아예 비어버린다.
+        // 그 외 이수구분(MAJOR_BASIC 등)은 기존대로 fetchTakenCourses의 카테고리/학과 필터를 그대로 쓴다.
+        List<StudentCourse> takenCourses;
+        if (isEnglishOrSw) {
+            takenCourses = isMainMajor
+                    ? dedupeByCourse(conditionType == GraduationConditionType.ENGLISH_COURSE
+                            ? studentCourseRepository.findByStudentProfileAndCourseIsEnglish(profile)
+                            : studentCourseRepository.findByStudentProfileAndCourseIsSw(profile))
+                    : List.of();
+        } else {
+            takenCourses = fetchTakenCourses(profile, conditionType);
+        }
 
-        // 영어/SW는 실시간 목록 집계, 나머지는 스냅샷 값 사용
+        // 영어/SW의 current는 PDF 스냅샷(summary.englishCurrent/swCertCurrent, 학생 전체 기준값)을 그대로
+        // 쓴다 - 예전엔 takenCourses.size()/sum()으로 실시간 재계산했는데, status 필터가 없어 진행중 과목까지
+        // 세는 바람에 스냅샷 값과 어긋났다(#188 연장선에서 발견). 나머지 이수구분은 그대로 스냅샷 값 사용.
         int current;
         Integer required;
         if (conditionType == GraduationConditionType.ENGLISH_COURSE) {
-            current = takenCourses.size();
+            current = isMainMajor ? summary.getEnglishCurrent() : 0;
             required = summary.getEnglishRequired();
         } else if (conditionType == GraduationConditionType.SW_CERT_COURSE) {
-            current = takenCourses.stream().mapToInt(StudentCourse::getCredit).sum();
+            current = isMainMajor ? (summary.getSwCertCurrent() != null ? summary.getSwCertCurrent() : 0) : 0;
             required = summary.getSwCertRequired();
         } else {
             current = conditionType.getCurrentExtractor().applyAsInt(summary);
@@ -891,32 +923,11 @@ public class GraduationService {
     ) {
     }
 
-    // 영어/SW: 전공 탭(MAJOR)은 이수구분 + 개설학과 기준 필터링으로 그 전공 하나만 구분
-    //          교양/기타 탭은 이수구분 기준만 적용
+    // 영어/SW는 buildMajorCourses에서 이 메서드를 안 거치고 학생 전체 기준으로 직접 조회한다(이수구분·
+    // 학과로 제한하면 안 되는 개념이라서 - dedupeByCourse 호출부 참고). 그 외 이수구분만 여기서 처리한다.
     // majorType=ALL(탭·학과 구분 없는 전체 합산)은 이 메서드에 도달하지 않는다
     // (getCoursesByDivision에서 buildMergedFlagCourseResponse로 먼저 처리됨).
-    private List<StudentCourse> fetchTakenCourses(StudentProfile profile,
-            GraduationConditionType conditionType, ConditionsTab filter, Department department) {
-        if (conditionType == GraduationConditionType.ENGLISH_COURSE) {
-            List<DivisionCategory> cats = getDivisionCategoriesForTab(filter);
-            if (filter == ConditionsTab.MAJOR) {
-                return studentCourseRepository
-                        .findByStudentProfileAndCourseIsEnglishAndDivisionCategoryInAndDepartment(
-                                profile, cats, department);
-            }
-            return studentCourseRepository
-                    .findByStudentProfileAndCourseIsEnglishAndDivisionCategoryIn(profile, cats);
-        }
-        if (conditionType == GraduationConditionType.SW_CERT_COURSE) {
-            List<DivisionCategory> cats = getDivisionCategoriesForTab(filter);
-            if (filter == ConditionsTab.MAJOR) {
-                return studentCourseRepository
-                        .findByStudentProfileAndCourseIsSwAndDivisionCategoryInAndDepartment(
-                                profile, cats, department);
-            }
-            return studentCourseRepository
-                    .findByStudentProfileAndCourseIsSwAndDivisionCategoryIn(profile, cats);
-        }
+    private List<StudentCourse> fetchTakenCourses(StudentProfile profile, GraduationConditionType conditionType) {
         if (conditionType == GraduationConditionType.DISTRIBUTED_GE) {
             return fetchDistributedGeCourses(profile);
         }
