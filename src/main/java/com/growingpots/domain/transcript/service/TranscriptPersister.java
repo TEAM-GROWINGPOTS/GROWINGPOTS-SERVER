@@ -174,6 +174,12 @@ public class TranscriptPersister {
         String rawCourseCode = course.get("courseCode");
         boolean inProgress = CURRENT_SEMESTER_SECTION.equals(section);
         Course matchedCourse = rawCourseCode == null ? null : coursesByCode.get(rawCourseCode);
+        // TEMP DIAGNOSTIC(#198 후속): 원인 파악 후 제거.
+        if (rawCourseCode != null) {
+            log.info("[DIAG-198] rawCourseCode='{}' (len={}) -> matched={}, containsKey={}, mapSize={}",
+                    rawCourseCode, rawCourseCode.length(), matchedCourse != null,
+                    coursesByCode.containsKey(rawCourseCode), coursesByCode.size());
+        }
 
         // 금학기수강학점(진행 중) 과목은 PDF에 수강년도/학기가 안 찍혀 있어 오늘 날짜 기준으로 채운다.
         Integer takenYear = semester != null ? takenYear(semester) : (inProgress ? computeCurrentAcademicYear(now) : null);
