@@ -301,14 +301,42 @@ public @interface PlannerApi {
                                             {
                                               "majorName": "컴퓨터공학과",
                                               "majorType": "MAIN",
-                                              "conditions": [],
+                                              "conditions": [
+                                                { "code": "MAJOR_BASIC",    "name": "전공 기초", "current": 6,  "required": 9,  "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
+                                                { "code": "MAJOR_REQUIRED", "name": "전공 필수", "current": 30, "required": 30, "unit": "CREDITS", "satisfied": true,  "chartTarget": true  },
+                                                { "code": "MAJOR_ELECTIVE", "name": "전공 선택", "current": 18, "required": 39, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
+                                                { "code": "ENGLISH_COURSE", "name": "영어 강의",    "current": 2, "required": 3, "unit": "COURSES", "satisfied": false, "chartTarget": false },
+                                                { "code": "SW_CERT_COURSE", "name": "SW 인증 강의", "current": 6, "required": 6, "unit": "CREDITS", "satisfied": true,  "chartTarget": false }
+                                              ],
                                               "graduationRequired": null
                                             }
                                           ],
-                                          "ge": { "majorName": null, "majorType": null, "conditions": [], "graduationRequired": null },
-                                          "others": { "majorName": null, "majorType": null, "conditions": [], "graduationRequired": null }
+                                          "ge": {
+                                            "majorName": null,
+                                            "majorType": null,
+                                            "conditions": [
+                                              { "code": "REQUIRED_GE",    "name": "필수 교과",      "current": 14, "required": 17, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
+                                              { "code": "DISTRIBUTED_GE", "name": "배분 이수 교과", "current": 6,  "required": 9,  "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
+                                              { "code": "FREE_GE",        "name": "자유 이수 교과", "current": 5,  "required": 3,  "unit": "CREDITS", "satisfied": true,  "chartTarget": true  },
+                                              { "code": "SW_CERT_COURSE", "name": "SW 인증 강의",   "current": 6,  "required": 6,  "unit": "CREDITS", "satisfied": true,  "chartTarget": false }
+                                            ],
+                                            "graduationRequired": null
+                                          },
+                                          "others": {
+                                            "majorName": null,
+                                            "majorType": null,
+                                            "conditions": [
+                                              { "code": "GENERAL_ELECTIVE", "name": "기타", "current": 24, "required": null, "unit": "CREDITS", "satisfied": false, "chartTarget": false }
+                                            ],
+                                            "graduationRequired": null
+                                          }
                                         },
-                                        "certs": []
+                                        "certs": [
+                                          { "certType": "ENGLISH", "result": "PASS" },
+                                          { "certType": "SW",      "result": "FAIL" },
+                                          { "certType": "TOPIK",   "result": "NONE" },
+                                          { "certType": "THESIS",  "result": "NONE" }
+                                        ]
                                       }
                                     }
                                     """)
