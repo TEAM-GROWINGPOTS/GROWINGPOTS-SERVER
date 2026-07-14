@@ -205,7 +205,7 @@ public @interface StudentApi {
                     + "반대로 실제 학과가 있는데 id를 비워서 보내면 null로 덮어써지므로 주의하세요.\n\n"
                     + "**availableDivisions 필드 안내**\n"
                     + "- 현재 학생 학교에 존재하는 이수구분 목록입니다. 학교마다 보유한 이수구분이 다를 수 있어 서버에서 동적으로 제공합니다.\n"
-                    + "- 전공기초 → 전공필수 → 전공선택 → 필수교과 → 배분이수 → 자유이수 → 일반선택 순서로 정렬됩니다.\n"
+                    + "- 전공기초 → 전공필수 → 전공선택 → 필수교과 → 배분이수교과 → 자유이수교과 → 일반선택 순서로 정렬됩니다.\n"
                     + "- 검수 화면에서 이수구분을 변경하거나 새 과목을 추가할 때 이 목록으로 드롭다운을 구성하고, "
                     + "선택된 항목의 id를 PUT 요청의 appliedDivisionId에 사용하면 됩니다."
     )
@@ -242,7 +242,7 @@ public @interface StudentApi {
                                             "departmentName": "후마니타스칼리지",
                                             "departmentId": 55,
                                             "credit": 2,
-                                            "appliedDivisionName": "배분이수",
+                                            "appliedDivisionName": "배분이수교과",
                                             "appliedDivisionId": 5,
                                             "takenYear": 2023,
                                             "takenSemester": "1학기"
@@ -265,8 +265,8 @@ public @interface StudentApi {
                                           { "id": 2, "name": "전공필수" },
                                           { "id": 3, "name": "전공선택" },
                                           { "id": 4, "name": "필수교과" },
-                                          { "id": 5, "name": "배분이수" },
-                                          { "id": 6, "name": "자유이수" },
+                                          { "id": 5, "name": "배분이수교과" },
+                                          { "id": 6, "name": "자유이수교과" },
                                           { "id": 7, "name": "일반선택" }
                                         ]
                                       }
