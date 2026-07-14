@@ -627,7 +627,10 @@ public class GraduationService {
                             : studentCourseRepository.findByStudentProfileAndCourseIsSw(profile))
                     : List.of();
         } else {
-            takenCourses = fetchTakenCourses(profile, conditionType);
+            // 재수강 중인 과목은 과거 완료 이력(COMPLETED)과 현재 진행중 이력(IN_PROGRESS)이 별도
+            // StudentCourse 행으로 둘 다 남아있어(재수강 이력 보존은 의도된 동작), dedup 안 하면 "이수 과목"
+            // 카드에 같은 과목이 두 번 뜬다(#198, 영어/SW에서 먼저 발견해 고친 것과 동일한 근본 원인).
+            takenCourses = dedupeByCourse(fetchTakenCourses(profile, conditionType));
         }
 
         // 영어/SW의 current는 PDF 스냅샷(summary.englishCurrent/swCertCurrent, 학생 전체 기준값)을 그대로
