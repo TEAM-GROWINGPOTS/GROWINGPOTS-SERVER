@@ -8,6 +8,7 @@ import com.growingpots.global.response.error.ErrorCode;
 import com.growingpots.global.response.error.ErrorType;
 import io.sentry.Sentry;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -135,6 +136,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<BaseResponse<?>> handleIllegalArgument(IllegalArgumentException e, HttpServletRequest request) {
         log.warn("[IllegalArgument] {}", e.getMessage());
         return toResponse(ErrorCode.INVALID_INPUT_VALUE);
+    }
+
+    // 클라이언트가 응답 수신 전 연결을 끊음 — 서버 버그 아니므로 알림/Sentry 제외, 응답 반환 불가
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public void handleBrokenPipe(AsyncRequestNotUsableException e, HttpServletRequest request) {
+        log.warn("[BrokenPipe] {} {}", request.getMethod(), request.getRequestURI());
     }
 
     // 그 외 모든 예외 — 예상치 못한 서버 오류이므로 항상 Discord 알림 + Sentry 전송
