@@ -102,14 +102,29 @@ public class GraduationService {
 
         // PLANNED: 플래너 선택 버전의 계획 과목 중 이미 이수/수강 중인 과목을 제외한 신규 항목만 사용
         // 플래너가 없거나 신규 항목이 없으면 COMPLETED와 동일한 응답
-        List<PlannerVersionItem> allPlannedItems = List.of();
+        // PDF earnedCredits는 이수완료(COMPLETED) 학점만 포함한다. IN_PROGRESS 과목은 alreadyCounted로
+        // delta에서도 제외되어 총학점/카테고리별 학점이 모두 누락된다. 플래너에 담긴 IN_PROGRESS 과목을
+        // 별도로 추적해 buildAdjustedSummary에서 함께 보정한다.
+        List<PlannerVersionItem> allPlannedItems;
+        List<PlannerVersionItem> inProgressPlannerItems;
         if (source == GraduationSource.PLANNED) {
-            List<Long> alreadyCountedIds = studentCourseRepository.findCourseIdsByStudentProfileAndStatusIn(
-                    profile, List.of(CourseStatus.COMPLETED, CourseStatus.IN_PROGRESS));
-            Set<Long> alreadyCounted = new HashSet<>(alreadyCountedIds);
-            allPlannedItems = plannerVersionItemRepository.findSelectedByStudentProfile(profile).stream()
+            List<Long> completedIds = studentCourseRepository.findCourseIdsByStudentProfileAndStatusIn(
+                    profile, List.of(CourseStatus.COMPLETED));
+            List<Long> inProgressIds = studentCourseRepository.findCourseIdsByStudentProfileAndStatusIn(
+                    profile, List.of(CourseStatus.IN_PROGRESS));
+            Set<Long> inProgressSet = new HashSet<>(inProgressIds);
+            Set<Long> alreadyCounted = new HashSet<>(completedIds);
+            alreadyCounted.addAll(inProgressIds);
+            List<PlannerVersionItem> allSelected = plannerVersionItemRepository.findSelectedByStudentProfile(profile);
+            inProgressPlannerItems = allSelected.stream()
+                    .filter(i -> inProgressSet.contains(i.getCourse().getId()))
+                    .toList();
+            allPlannedItems = allSelected.stream()
                     .filter(i -> !alreadyCounted.contains(i.getCourse().getId()))
                     .toList();
+        } else {
+            allPlannedItems = List.of();
+            inProgressPlannerItems = List.of();
         }
 
         // 전공별(본전공 + 복수전공 몇 개든 전부) 스냅샷/졸업필수 판정/PLANNED 반영을 한 번씩만 계산해
@@ -121,8 +136,10 @@ public class GraduationService {
                     GraduationAnalysisSummary summary = requireSummary(major);
                     GraduationRequiredJudgement judgement =
                             judgeGraduationRequired(profile, major.getDepartment(), plannedItemsForJudgement);
-                    GraduationAnalysisSummary effectiveSummary = plannedItemsForJudgement.isEmpty() ? summary
-                            : buildAdjustedSummary(summary, plannedItemsForJudgement, major.getDepartment());
+                    GraduationAnalysisSummary effectiveSummary =
+                            (plannedItemsForJudgement.isEmpty() && inProgressPlannerItems.isEmpty()) ? summary
+                            : buildAdjustedSummary(summary, plannedItemsForJudgement,
+                                    inProgressPlannerItems, major.getDepartment());
                     List<CertResult> certs = certResultRepository.findByStudentMajor(major);
                     return new StudentMajorContext(major, effectiveSummary, judgement, certs);
                 })
@@ -415,27 +432,33 @@ public class GraduationService {
     // PLANNED 모드용: 스냅샷 기반 summary에 계획 과목의 학점 delta를 더해 새 in-memory summary를 반환한다.
     // majorDept: 전공 학점 귀속 판단 기준 (본전공 또는 복수전공). null이면 전공 delta는 0.
     // GPA는 미래 예측 불가이므로 원본 값 유지.
+    // inProgressPlannerItems: 플래너에 담긴 IN_PROGRESS 과목. PDF earnedCredits(COMPLETED 학점만)와
+    // alreadyCounted 필터 사이에서 누락되므로 newPlannedItems와 합쳐서 delta를 계산한다.
     private GraduationAnalysisSummary buildAdjustedSummary(
             GraduationAnalysisSummary original,
             List<PlannerVersionItem> newPlannedItems,
+            List<PlannerVersionItem> inProgressPlannerItems,
             Department majorDept
     ) {
-        int majorBasicDelta = creditSum(newPlannedItems, DivisionCategory.MAJOR_BASIC, majorDept);
-        int majorRequiredDelta = creditSum(newPlannedItems, DivisionCategory.MAJOR_REQUIRED, majorDept);
-        int majorElectiveDelta = creditSum(newPlannedItems, DivisionCategory.MAJOR_ELECTIVE, majorDept);
-        int requiredGeDelta = creditSum(newPlannedItems, DivisionCategory.REQUIRED_GE, null);
-        int distributedGeDelta = creditSum(newPlannedItems, DivisionCategory.DISTRIBUTED_GE, null);
-        int freeGeDelta = creditSum(newPlannedItems, DivisionCategory.FREE_GE, null);
-        int generalElectiveDelta = newPlannedItems.stream()
+        List<PlannerVersionItem> allDeltaItems = new ArrayList<>(newPlannedItems);
+        allDeltaItems.addAll(inProgressPlannerItems);
+
+        int majorBasicDelta = creditSum(allDeltaItems, DivisionCategory.MAJOR_BASIC, majorDept);
+        int majorRequiredDelta = creditSum(allDeltaItems, DivisionCategory.MAJOR_REQUIRED, majorDept);
+        int majorElectiveDelta = creditSum(allDeltaItems, DivisionCategory.MAJOR_ELECTIVE, majorDept);
+        int requiredGeDelta = creditSum(allDeltaItems, DivisionCategory.REQUIRED_GE, null);
+        int distributedGeDelta = creditSum(allDeltaItems, DivisionCategory.DISTRIBUTED_GE, null);
+        int freeGeDelta = creditSum(allDeltaItems, DivisionCategory.FREE_GE, null);
+        int generalElectiveDelta = allDeltaItems.stream()
                 .filter(i -> i.getPlannedDivision() == null
                         || i.getPlannedDivision().getCategory() == DivisionCategory.GENERAL_ELECTIVE)
                 .mapToInt(PlannerVersionItem::getCredit).sum();
-        int englishDelta = (int) newPlannedItems.stream()
+        int englishDelta = (int) allDeltaItems.stream()
                 .filter(i -> i.getCourse().isEnglish()).count();
-        int swDelta = newPlannedItems.stream()
+        int swDelta = allDeltaItems.stream()
                 .filter(i -> i.getCourse().isSw())
                 .mapToInt(PlannerVersionItem::getCredit).sum();
-        int totalCreditDelta = newPlannedItems.stream().mapToInt(PlannerVersionItem::getCredit).sum();
+        int totalCreditDelta = allDeltaItems.stream().mapToInt(PlannerVersionItem::getCredit).sum();
 
         Integer swCertCurrent = original.getSwCertCurrent();
 
