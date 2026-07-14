@@ -385,6 +385,12 @@ public @interface PlannerApi {
                                                     "plannerVersionItemId": 5001,
                                                     "courseId": 12,
                                                     "name": "미디어와사회",
+                                                    "departmentName": "미디어학과",
+                                                    "divisionCategory": "MAJOR_REQUIRED",
+                                                    "divisionName": "전공필수",
+                                                    "recommendedYearLow": 1,
+                                                    "recommendedYearHigh": 1,
+                                                    "openedSemester": "FIRST",
                                                     "credit": 3,
                                                     "coursePositionOrder": 0,
                                                     "isEnglish": false,
@@ -403,7 +409,118 @@ public @interface PlannerApi {
             @ApiResponse(responseCode = "403", description = "플래너 접근 권한 없음 — data: null (PLAN_003)"),
             @ApiResponse(
                     responseCode = "404",
-                    description = "학적 정보 없음 — data: null (USER_003) / 플래너 없음 — data에 저장 전 플래너 포함 (PLAN_002) / 과목 없음 — data에 저장 전 플래너 포함 (PLAN_001)")
+                    description = "학적 정보 없음 — data: null (USER_003) / 플래너 없음 — data에 저장 전 플래너 포함 (PLAN_002) / 과목 없음 — data에 저장 전 플래너 포함 (PLAN_001)",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = PlannerResponse.class),
+                            examples = {
+                                    @ExampleObject(
+                                            name = "USER_003",
+                                            summary = "학적 정보 없음(온보딩 미완료) — data: null",
+                                            value = """
+                                    {
+                                      "success": false,
+                                      "code": "USER_003",
+                                      "message": "온보딩이 완료되지 않은 사용자입니다.",
+                                      "data": null
+                                    }
+                                    """),
+                                    @ExampleObject(
+                                            name = "PLAN_002",
+                                            summary = "플래너 없음 — data에 저장 전 플래너 포함",
+                                            value = """
+                                    {
+                                      "success": false,
+                                      "code": "PLAN_002",
+                                      "message": "존재하지 않는 플래너입니다.",
+                                      "data": {
+                                        "completedTerms": [],
+                                        "plannedTerms": [
+                                          {
+                                            "plannerTermId": 3001,
+                                            "yearLevel": 1,
+                                            "semester": 1,
+                                            "versions": [
+                                              {
+                                                "plannerTermVersionId": 4001,
+                                                "versionNo": 1,
+                                                "name": "폴더 1",
+                                                "isSelected": true,
+                                                "versionOrder": 0,
+                                                "totalCredit": 3,
+                                                "courses": [
+                                                  {
+                                                    "plannerVersionItemId": 5001,
+                                                    "courseId": 12,
+                                                    "name": "미디어와사회",
+                                                    "departmentName": "미디어학과",
+                                                    "divisionCategory": "MAJOR_REQUIRED",
+                                                    "divisionName": "전공필수",
+                                                    "recommendedYearLow": 1,
+                                                    "recommendedYearHigh": 1,
+                                                    "openedSemester": "FIRST",
+                                                    "credit": 3,
+                                                    "coursePositionOrder": 0,
+                                                    "isEnglish": false,
+                                                    "isSw": false
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    }
+                                    """),
+                                    @ExampleObject(
+                                            name = "PLAN_001",
+                                            summary = "과목 없음 — data에 저장 전 플래너 포함",
+                                            value = """
+                                    {
+                                      "success": false,
+                                      "code": "PLAN_001",
+                                      "message": "존재하지 않는 과목입니다.",
+                                      "data": {
+                                        "completedTerms": [],
+                                        "plannedTerms": [
+                                          {
+                                            "plannerTermId": 3001,
+                                            "yearLevel": 1,
+                                            "semester": 1,
+                                            "versions": [
+                                              {
+                                                "plannerTermVersionId": 4001,
+                                                "versionNo": 1,
+                                                "name": "폴더 1",
+                                                "isSelected": true,
+                                                "versionOrder": 0,
+                                                "totalCredit": 3,
+                                                "courses": [
+                                                  {
+                                                    "plannerVersionItemId": 5001,
+                                                    "courseId": 12,
+                                                    "name": "미디어와사회",
+                                                    "departmentName": "미디어학과",
+                                                    "divisionCategory": "MAJOR_REQUIRED",
+                                                    "divisionName": "전공필수",
+                                                    "recommendedYearLow": 1,
+                                                    "recommendedYearHigh": 1,
+                                                    "openedSemester": "FIRST",
+                                                    "credit": 3,
+                                                    "coursePositionOrder": 0,
+                                                    "isEnglish": false,
+                                                    "isSw": false
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    }
+                                    """)
+                            }
+                    ))
     })
     @interface SavePlanner {
     }
