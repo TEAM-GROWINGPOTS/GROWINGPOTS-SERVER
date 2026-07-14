@@ -70,11 +70,14 @@ public class PdfTranscriptParser {
     // 성적표 범례 마커(e:영어강의, s:SW인증과목, #:졸업필수과목, @:교육과정 확인필요, *:학점교류과목,
     // $:이수구분변경, G:대학원취득과목)가 과목명 칸과 좌표가 겹쳐 텍스트 추출 시 과목명 앞에 그대로
     // 붙어 나오는 경우가 있다(예: "e혼합매체연구", "* 전공연수(도예학)"). 기호(*, #, @, $, %)는 무조건,
-    // 알파벳(e, s, G)은 실제 과목명일 가능성을 배제하기 위해 바로 뒤에 한글/숫자/대문자가 올 때만 제거한다
-    // ("SeniorProject"처럼 진짜 대문자로 시작하는 과목명은 소문자 마커가 아니므로 안 걸림).
+    // 알파벳(e, s, G)은 실제 과목명일 가능성을 배제하기 위해 바로 뒤에 (다른 마커 또는) 한글/숫자/대문자가
+    // 올 때만 제거한다("SeniorProject"처럼 진짜 대문자로 시작하는 과목명은 소문자 마커가 아니므로 안 걸림).
+    // +로 반복 매칭해서 "se웹/파이선프로그래밍"(SW인증+영어강의 마커가 연달아 붙은 경우)처럼 마커가
+    // 여러 개 이어져도 전부 제거한다.
     // 숫자 마커(교직기본이수분야)는 "3D디지털모델링"처럼 진짜 과목명이 숫자로 시작하는 경우와
     // 구별할 방법이 없어 의도적으로 제외했다 — 실제로 나타나면 좌표 기반으로 별도 처리해야 한다.
-    private static final Pattern LEADING_MARKER_PATTERN = Pattern.compile("^(?:[*#@$%]|[esG](?=[가-힣0-9A-Z]))\\s*");
+    private static final Pattern LEADING_MARKER_PATTERN =
+            Pattern.compile("^(?:[*#@$%]|[esG](?=[*#@$%esG가-힣0-9A-Z]))+\\s*");
 
     public ParsedTranscript parse(byte[] pdfBytes) {
         try (PDDocument document = Loader.loadPDF(pdfBytes)) {

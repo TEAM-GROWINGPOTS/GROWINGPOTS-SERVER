@@ -157,6 +157,17 @@ class PdfTranscriptParserTest {
         assertThat(courseName(result.courses(), "CA4001")).isEqualTo("SeniorProject I-A");
     }
 
+    // 마커가 2개 이상 연달아 붙는 경우(예: s:SW인증 + e:영어강의)도 전부 제거돼야 한다.
+    @Test
+    void 연속으로_붙은_범례_마커도_전부_제거된다() throws Exception {
+        Path pdfPath = Path.of("/Users/test/Desktop/광운대/3학년/동아리/sopt/growingpots/졸업관리표/추가 pdf/컴퓨터공학과_21_신진수_졸업진단표.pdf");
+        assumeTrue(Files.exists(pdfPath));
+
+        ParsedTranscript result = parser.parse(Files.readAllBytes(pdfPath));
+
+        assertThat(courseName(result.courses(), "SWCON104")).isEqualTo("웹/파이선프로그래밍");
+    }
+
     private String courseName(List<Map<String, String>> courses, String courseCode) {
         return courses.stream()
                 .filter(course -> courseCode.equals(course.get("courseCode")))
