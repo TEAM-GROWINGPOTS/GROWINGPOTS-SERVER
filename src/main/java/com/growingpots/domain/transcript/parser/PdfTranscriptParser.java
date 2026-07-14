@@ -67,6 +67,17 @@ public class PdfTranscriptParser {
     private static final Pattern MAJOR_HEADER_PATTERN = Pattern.compile("\\bA\\s*\\d{5}\\s*(.+?)\\s+(?:미취득|취득|중복과목|\\d전공)");
     private static final Pattern MAJOR_HEADER_SEGMENT_PATTERN = Pattern.compile("A\\s*\\d{5}\\s*(.+?)(?:\\s+(?:미취득|취득|중복과목|\\d전공).*)?");
     private static final Pattern EMBEDDED_KOREAN_CREDIT_PATTERN = Pattern.compile("(?<=[가-힣])([1-9])(?=[가-힣])");
+    // 성적표 범례 마커(e:영어강의, s:SW인증과목, #:졸업필수과목, @:교육과정 확인필요, *:학점교류과목,
+    // $:이수구분변경, G:대학원취득과목)가 과목명 칸과 좌표가 겹쳐 텍스트 추출 시 과목명 앞에 그대로
+    // 붙어 나오는 경우가 있다(예: "e혼합매체연구", "* 전공연수(도예학)"). 기호(*, #, @, $, %)는 무조건,
+    // 알파벳(e, s, G)은 실제 과목명일 가능성을 배제하기 위해 바로 뒤에 (다른 마커 또는) 한글/숫자/대문자가
+    // 올 때만 제거한다("SeniorProject"처럼 진짜 대문자로 시작하는 과목명은 소문자 마커가 아니므로 안 걸림).
+    // +로 반복 매칭해서 "se웹/파이선프로그래밍"(SW인증+영어강의 마커가 연달아 붙은 경우)처럼 마커가
+    // 여러 개 이어져도 전부 제거한다.
+    // 숫자 마커(교직기본이수분야)는 "3D디지털모델링"처럼 진짜 과목명이 숫자로 시작하는 경우와
+    // 구별할 방법이 없어 의도적으로 제외했다 — 실제로 나타나면 좌표 기반으로 별도 처리해야 한다.
+    private static final Pattern LEADING_MARKER_PATTERN =
+            Pattern.compile("^(?:[*#@$%]|[esG](?=[*#@$%esG가-힣0-9A-Z]))+\\s*");
 
     public ParsedTranscript parse(byte[] pdfBytes) {
         try (PDDocument document = Loader.loadPDF(pdfBytes)) {
@@ -513,7 +524,7 @@ public class PdfTranscriptParser {
         Map<String, String> course = new LinkedHashMap<>();
         course.put("section", courseSection(section, rawClassificationText, side));
         course.put("courseCode", firstMatch(codeSegment.text(), COURSE_CODE_PATTERN));
-        course.put("courseName", courseName);
+        course.put("courseName", stripLeadingMarker(courseName));
         course.put("credits", credits);
         course.put("semester", semesterSegment.text().replaceAll("\\s+", ""));
 
@@ -566,7 +577,7 @@ public class PdfTranscriptParser {
         Map<String, String> course = new LinkedHashMap<>();
         course.put("section", courseSection(section, rawClassificationText, side));
         course.put("courseCode", firstMatch(codeSegment.text(), COURSE_CODE_PATTERN));
-        course.put("courseName", courseName);
+        course.put("courseName", stripLeadingMarker(courseName));
         course.put("credits", credits);
         course.put("semester", year + "/" + semesterNumberSegment.text());
         if (rawClassificationText != null) {
@@ -625,7 +636,7 @@ public class PdfTranscriptParser {
         Map<String, String> course = new LinkedHashMap<>();
         course.put("section", courseSection(section, rawClassificationText, side));
         course.put("courseCode", courseCode);
-        course.put("courseName", courseName);
+        course.put("courseName", stripLeadingMarker(courseName));
         course.put("credits", credits);
         course.put("semester", year + "/" + semesterNumberMatcher.group(1));
         if (rawClassificationText != null) {
@@ -673,7 +684,7 @@ public class PdfTranscriptParser {
         Map<String, String> course = new LinkedHashMap<>();
         course.put("section", "04".equals(rawClassification) ? "재수강" : section);
         course.put("courseCode", matcher.group(2));
-        course.put("courseName", courseName);
+        course.put("courseName", stripLeadingMarker(courseName));
         course.put("credits", credits);
         course.put("semester", matcher.group(4).replaceAll("\\s+", ""));
         course.put("rawClassification", rawClassification);
@@ -689,7 +700,7 @@ public class PdfTranscriptParser {
         Map<String, String> course = new LinkedHashMap<>();
         course.put("section", "금학기수강학점");
         course.put("courseCode", matcher.group(2));
-        course.put("courseName", matcher.group(3).trim());
+        course.put("courseName", stripLeadingMarker(matcher.group(3).trim()));
         course.put("credits", matcher.group(4));
         String rawClassification = findRawClassificationText(line.segments(), CourseSide.LEFT);
         if (rawClassification != null) {
@@ -795,6 +806,7 @@ public class PdfTranscriptParser {
         double endX = creditSegment == null ? semesterSegment.x1() : creditSegment.x1();
         return segments.stream()
                 .filter(segment -> segment.x1() > codeSegment.x2() && segment.x2() <= endX + 1)
+                .filter(segment -> !isStandaloneMarkerDigit(segment))
                 .map(TextSegment::text)
                 .reduce((left, right) -> left + " " + right)
                 .orElse("")
@@ -808,10 +820,18 @@ public class PdfTranscriptParser {
     ) {
         return segments.stream()
                 .filter(segment -> segment.x1() > codeSegment.x2() && segment.x1() < slashSegment.x1())
+                .filter(segment -> !isStandaloneMarkerDigit(segment))
                 .map(TextSegment::text)
                 .reduce((left, right) -> left + " " + right)
                 .orElse("")
                 .trim();
+    }
+
+    // 범례상 "숫자: 교직기본이수분야" 마커. 과목명이랑 별개 세그먼트로(공백을 두고) 붙어 나온다
+    // ("LA211"의 "3 e환경생태계획론"처럼). 반면 "조경설계1"처럼 진짜 과목명 끝에 붙는 일련번호는
+    // 이름과 한 세그먼트로 붙어있어 텍스트가 숫자 하나만은 아니므로 안 걸린다.
+    private boolean isStandaloneMarkerDigit(TextSegment segment) {
+        return segment.text().trim().matches("\\d");
     }
 
     private String lastDigits(String text, int count) {
@@ -848,6 +868,13 @@ public class PdfTranscriptParser {
                 .replace("∬", "")
                 .replaceFirst("^취\\s*", "")
                 .trim();
+    }
+
+    private String stripLeadingMarker(String courseName) {
+        if (courseName == null || courseName.isBlank()) {
+            return courseName;
+        }
+        return LEADING_MARKER_PATTERN.matcher(courseName).replaceFirst("");
     }
 
     private String trailingCredit(String courseName) {

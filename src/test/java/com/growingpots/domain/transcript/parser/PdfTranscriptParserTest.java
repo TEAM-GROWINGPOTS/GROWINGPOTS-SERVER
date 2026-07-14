@@ -140,6 +140,60 @@ class PdfTranscriptParserTest {
                 .anySatisfy(course -> assertThat(course.get("semester")).isEqualTo("2024/1"));
     }
 
+    // 범례 마커(e:영어강의, *:학점교류과목 등)가 좌표 겹침으로 과목명 앞에 붙어 나오는 문제(#172) 검증.
+    @Test
+    void 과목명_앞에_붙은_범례_마커가_제거된다() throws Exception {
+        Path pdfPath = Path.of("/Users/test/Desktop/광운대/3학년/동아리/sopt/growingpots/졸업관리표/추가 pdf/도예학과_23_고찬란_졸업진단표.pdf");
+        assumeTrue(Files.exists(pdfPath));
+
+        ParsedTranscript result = parser.parse(Files.readAllBytes(pdfPath));
+
+        assertThat(courseName(result.courses(), "CA2004")).isEqualTo("혼합매체연구");
+        assertThat(courseName(result.courses(), "CA2013")).isEqualTo("3D디지털모델링");
+        assertThat(courseName(result.courses(), "CA3017")).isEqualTo("도자제품브랜드");
+        assertThat(courseName(result.courses(), "CA4002")).isEqualTo("SeniorProject I-B");
+        assertThat(courseName(result.courses(), "CA3025")).isEqualTo("전공연수(도예학)");
+        // 진짜 대문자로 시작하는 과목명은 마커로 오인해 잘리면 안 된다.
+        assertThat(courseName(result.courses(), "CA4001")).isEqualTo("SeniorProject I-A");
+    }
+
+    // 마커가 2개 이상 연달아 붙는 경우(예: s:SW인증 + e:영어강의)도 전부 제거돼야 한다.
+    @Test
+    void 연속으로_붙은_범례_마커도_전부_제거된다() throws Exception {
+        Path pdfPath = Path.of("/Users/test/Desktop/광운대/3학년/동아리/sopt/growingpots/졸업관리표/추가 pdf/컴퓨터공학과_21_신진수_졸업진단표.pdf");
+        assumeTrue(Files.exists(pdfPath));
+
+        ParsedTranscript result = parser.parse(Files.readAllBytes(pdfPath));
+
+        assertThat(courseName(result.courses(), "SWCON104")).isEqualTo("웹/파이선프로그래밍");
+    }
+
+    // 숫자(교직기본이수분야) 마커는 과목명과 별도 세그먼트(공백으로 분리)로 붙어 나오므로 걸러내야 하고,
+    // "조경설계1"처럼 진짜 과목명 끝에 붙는 일련번호(이름과 한 세그먼트)는 그대로 보존돼야 한다.
+    @Test
+    void 숫자_마커는_제거되고_진짜_과목명_끝의_일련번호는_보존된다() throws Exception {
+        Path pdfPath = Path.of("/Users/test/Desktop/광운대/3학년/동아리/sopt/growingpots/졸업관리표/추가 pdf/환경조경디자인학과_23_최서진_졸업진단표.pdf");
+        assumeTrue(Files.exists(pdfPath));
+
+        ParsedTranscript result = parser.parse(Files.readAllBytes(pdfPath));
+
+        assertThat(courseName(result.courses(), "LA211")).isEqualTo("환경생태계획론");
+        assertThat(courseName(result.courses(), "LA102")).isEqualTo("조경계획학");
+        assertThat(courseName(result.courses(), "LA216")).isEqualTo("조경수목학");
+        assertThat(courseName(result.courses(), "LA336")).isEqualTo("환경심리행태론");
+        assertThat(courseName(result.courses(), "LA338")).isEqualTo("식재계획및설계");
+        assertThat(courseName(result.courses(), "LA213")).isEqualTo("조경설계1");
+        assertThat(courseName(result.courses(), "LA332")).isEqualTo("조경설계3");
+    }
+
+    private String courseName(List<Map<String, String>> courses, String courseCode) {
+        return courses.stream()
+                .filter(course -> courseCode.equals(course.get("courseCode")))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("과목을 찾을 수 없음: " + courseCode))
+                .get("courseName");
+    }
+
     private long countInSection(List<Map<String, String>> courses, String section) {
         return inSection(courses, section).size();
     }
