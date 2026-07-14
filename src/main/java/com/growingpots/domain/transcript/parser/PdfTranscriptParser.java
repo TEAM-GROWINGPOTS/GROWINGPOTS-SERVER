@@ -119,6 +119,18 @@ public class PdfTranscriptParser {
             List<Map<String, String>> regularCourses,
             List<Map<String, String>> currentSemesterCourses
     ) {
+        // 금학기수강학점 줄은 "04 FT3011 3"처럼 이수구분 소속 정보(예: "08 기타") 없이 축약돼 있어서,
+        // 그 줄에 남은 숫자만으로 이수구분을 해석하면 틀린다(#188). 일반 목록에 같은 과목코드가 있으면
+        // 거기서 실제 소속 section을 이어받아 divisionSection으로 별도 보관한다 — status/재수강 판정에 쓰는
+        // section 자체는 "금학기수강학점"으로 그대로 둬야 하므로 새 키에 담아 TranscriptPersister가 이수구분
+        // 판정에만 쓰게 한다.
+        Map<String, String> regularSectionByCode = regularCourses.stream()
+                .filter(course -> !"재수강".equals(course.get("section")))
+                .collect(Collectors.toMap(
+                        course -> course.get("courseCode"),
+                        course -> course.get("section"),
+                        (first, second) -> first));
+
         Set<String> currentSemesterCourseCodes = currentSemesterCourses.stream()
                 .map(course -> course.get("courseCode"))
                 .collect(Collectors.toSet());
@@ -127,8 +139,21 @@ public class PdfTranscriptParser {
                 .filter(course -> !currentSemesterCourseCodes.contains(course.get("courseCode"))
                         || "재수강".equals(course.get("section")))
                 .toList());
-        merged.addAll(currentSemesterCourses);
+        merged.addAll(currentSemesterCourses.stream()
+                .map(course -> withInheritedDivisionSection(course, regularSectionByCode))
+                .toList());
         return merged;
+    }
+
+    private Map<String, String> withInheritedDivisionSection(
+            Map<String, String> course, Map<String, String> regularSectionByCode) {
+        String inheritedSection = regularSectionByCode.get(course.get("courseCode"));
+        if (inheritedSection == null) {
+            return course;
+        }
+        Map<String, String> withDivisionSection = new LinkedHashMap<>(course);
+        withDivisionSection.put("divisionSection", inheritedSection);
+        return withDivisionSection;
     }
 
     // 트랙(복수 세부전공)이 있는 학과는 "본전공 트랙"/"부전공 트랙" 표에 겹치는 과목이 (동일 학기·동일

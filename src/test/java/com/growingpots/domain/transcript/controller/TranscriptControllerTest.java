@@ -333,6 +333,43 @@ class TranscriptControllerTest {
         assertThat(course.getTakenSemester()).isEqualTo(expectedTerm);
     }
 
+    // 금학기수강학점 줄은 실제 소속 section 없이 축약돼 있어서(#188), 파서가 일반 목록에서 이어받은
+    // 값을 "divisionSection" 키로 같이 내려주면 그 값으로 이수구분을 판정해야 한다. status(진행중 여부)는
+    // 이 변경과 무관하게 "section"(금학기수강학점)만 보고 그대로 IN_PROGRESS여야 한다.
+    @Test
+    void 금학기수강학점_과목은_divisionSection이_있으면_그_이수구분으로_저장되고_상태는_IN_PROGRESS로_유지된다() throws Exception {
+        StudentProfile studentProfile = onboardedStudent("9009");
+        Division generalElective = divisionRepository.save(Division.builder()
+                .school(studentProfile.getSchool())
+                .code("08")
+                .category(DivisionCategory.GENERAL_ELECTIVE)
+                .build());
+        divisionRepository.save(Division.builder()
+                .school(studentProfile.getSchool())
+                .code("04")
+                .category(DivisionCategory.MAJOR_REQUIRED)
+                .build());
+        Map<String, String> currentSemesterCourse = new java.util.HashMap<>();
+        currentSemesterCourse.put("section", "금학기수강학점");
+        currentSemesterCourse.put("divisionSection", "기타");
+        currentSemesterCourse.put("courseCode", "FR3011");
+        currentSemesterCourse.put("courseName", "고급프랑스어회화");
+        currentSemesterCourse.put("credits", "3");
+        currentSemesterCourse.put("rawClassification", "04");
+        when(pdfTranscriptParser.parse(any()))
+                .thenReturn(new ParsedTranscript(Map.of(), Map.of(), List.of(), List.of(), List.of(currentSemesterCourse)));
+
+        mockMvc.perform(multipart("/api/v1/diagnosis/upload")
+                        .file(new MockMultipartFile("file", "transcript.pdf", "application/pdf", PDF_BYTES))
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isCreated());
+
+        StudentCourse course = coursesOf(studentProfile).getFirst();
+        assertThat(course.getAppliedDivision()).isNotNull();
+        assertThat(course.getAppliedDivision().getId()).isEqualTo(generalElective.getId());
+        assertThat(course.getStatus()).isEqualTo(CourseStatus.IN_PROGRESS);
+    }
+
     @Test
     void 파싱된_학생정보로_StudentProfile의_학적정보가_갱신된다() throws Exception {
         StudentProfile studentProfile = onboardedStudent("7007");

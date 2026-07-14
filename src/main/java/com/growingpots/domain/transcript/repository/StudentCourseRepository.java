@@ -28,36 +28,45 @@ public interface StudentCourseRepository extends JpaRepository<StudentCourse, Lo
             @Param("studentProfile") StudentProfile studentProfile,
             @Param("divisions") List<Division> divisions);
 
+    // 영어/SW는 완료(COMPLETED) 또는 진행중(IN_PROGRESS, 현재 수강신청된 과목)까지 포함한다 - PDF
+    // 스냅샷(GraduationAnalysisSummary.englishCurrent 등)이 진행중 과목까지 세는 학교 공식 집계 방식과
+    // 최대한 맞추기 위함. 같은 과목을 재수강 중이면 같은 courseCode로 여러 행이 나올 수 있는데, 그건
+    // 서비스 레이어(GraduationService)에서 과목 단위로 중복 제거한다(#188 연장선에서 발견).
     @Query("SELECT sc FROM StudentCourse sc JOIN FETCH sc.course c LEFT JOIN FETCH c.offeringDepartment "
-            + "WHERE sc.studentProfile = :studentProfile AND c.isEnglish = true")
+            + "WHERE sc.studentProfile = :studentProfile AND c.isEnglish = true "
+            + "AND sc.status IN (com.growingpots.domain.transcript.entity.enums.CourseStatus.COMPLETED, com.growingpots.domain.transcript.entity.enums.CourseStatus.IN_PROGRESS)")
     List<StudentCourse> findByStudentProfileAndCourseIsEnglish(
             @Param("studentProfile") StudentProfile studentProfile);
 
     @Query("SELECT sc FROM StudentCourse sc JOIN FETCH sc.course c LEFT JOIN FETCH c.offeringDepartment "
-            + "WHERE sc.studentProfile = :studentProfile AND c.isSw = true")
+            + "WHERE sc.studentProfile = :studentProfile AND c.isSw = true "
+            + "AND sc.status IN (com.growingpots.domain.transcript.entity.enums.CourseStatus.COMPLETED, com.growingpots.domain.transcript.entity.enums.CourseStatus.IN_PROGRESS)")
     List<StudentCourse> findByStudentProfileAndCourseIsSw(
             @Param("studentProfile") StudentProfile studentProfile);
 
-    // 영어강의 중 특정 이수구분 카테고리에 해당하는 것만 조회 (GE/OTHERS 탭용)
+    // 영어강의 중 특정 이수구분 카테고리에 해당하는 것만 조회 (GE/OTHERS 탭용).
     @Query("SELECT sc FROM StudentCourse sc JOIN FETCH sc.course c LEFT JOIN FETCH c.offeringDepartment "
             + "WHERE sc.studentProfile = :studentProfile AND c.isEnglish = true "
+            + "AND sc.status IN (com.growingpots.domain.transcript.entity.enums.CourseStatus.COMPLETED, com.growingpots.domain.transcript.entity.enums.CourseStatus.IN_PROGRESS) "
             + "AND sc.appliedDivision IS NOT NULL AND sc.appliedDivision.category IN :categories")
     List<StudentCourse> findByStudentProfileAndCourseIsEnglishAndDivisionCategoryIn(
             @Param("studentProfile") StudentProfile studentProfile,
             @Param("categories") List<DivisionCategory> categories);
 
-    // SW인증강의 중 특정 이수구분 카테고리에 해당하는 것만 조회 (GE/OTHERS 탭용)
+    // SW인증강의 중 특정 이수구분 카테고리에 해당하는 것만 조회 (GE/OTHERS 탭용).
     @Query("SELECT sc FROM StudentCourse sc JOIN FETCH sc.course c LEFT JOIN FETCH c.offeringDepartment "
             + "WHERE sc.studentProfile = :studentProfile AND c.isSw = true "
+            + "AND sc.status IN (com.growingpots.domain.transcript.entity.enums.CourseStatus.COMPLETED, com.growingpots.domain.transcript.entity.enums.CourseStatus.IN_PROGRESS) "
             + "AND sc.appliedDivision IS NOT NULL AND sc.appliedDivision.category IN :categories")
     List<StudentCourse> findByStudentProfileAndCourseIsSwAndDivisionCategoryIn(
             @Param("studentProfile") StudentProfile studentProfile,
             @Param("categories") List<DivisionCategory> categories);
 
     // 영어강의 중 특정 이수구분 + 개설학과 기준 조회 (studentMajorId로 특정 전공 하나만 조회할 때용)
-    // appliedDepartment가 있으면 우선 적용, 없으면 course.offeringDepartment로 판별
+    // appliedDepartment가 있으면 우선 적용, 없으면 course.offeringDepartment로 판별.
     @Query("SELECT sc FROM StudentCourse sc JOIN FETCH sc.course c LEFT JOIN FETCH c.offeringDepartment "
             + "WHERE sc.studentProfile = :studentProfile AND c.isEnglish = true "
+            + "AND sc.status IN (com.growingpots.domain.transcript.entity.enums.CourseStatus.COMPLETED, com.growingpots.domain.transcript.entity.enums.CourseStatus.IN_PROGRESS) "
             + "AND sc.appliedDivision IS NOT NULL AND sc.appliedDivision.category IN :categories "
             + "AND (sc.appliedDepartment = :department "
             + "     OR (sc.appliedDepartment IS NULL AND c.offeringDepartment = :department))")
@@ -66,9 +75,10 @@ public interface StudentCourseRepository extends JpaRepository<StudentCourse, Lo
             @Param("categories") List<DivisionCategory> categories,
             @Param("department") Department department);
 
-    // SW인증강의 중 특정 이수구분 + 개설학과 기준 조회 (studentMajorId로 특정 전공 하나만 조회할 때용)
+    // SW인증강의 중 특정 이수구분 + 개설학과 기준 조회 (studentMajorId로 특정 전공 하나만 조회할 때용).
     @Query("SELECT sc FROM StudentCourse sc JOIN FETCH sc.course c LEFT JOIN FETCH c.offeringDepartment "
             + "WHERE sc.studentProfile = :studentProfile AND c.isSw = true "
+            + "AND sc.status IN (com.growingpots.domain.transcript.entity.enums.CourseStatus.COMPLETED, com.growingpots.domain.transcript.entity.enums.CourseStatus.IN_PROGRESS) "
             + "AND sc.appliedDivision IS NOT NULL AND sc.appliedDivision.category IN :categories "
             + "AND (sc.appliedDepartment = :department "
             + "     OR (sc.appliedDepartment IS NULL AND c.offeringDepartment = :department))")

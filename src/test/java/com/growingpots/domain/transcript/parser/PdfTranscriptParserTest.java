@@ -186,6 +186,25 @@ class PdfTranscriptParserTest {
         assertThat(courseName(result.courses(), "LA332")).isEqualTo("조경설계3");
     }
 
+    // 금학기수강학점 줄은 실제 소속 section("08 기타" 표) 정보 없이 축약돼 있어서, 일반 목록 쪽의
+    // 같은 과목코드에서 이수구분(section)을 이어받아야 한다(#188). 그렇지 않으면 rawClassification="04"만
+    // 보고 전공필수로 오판정된다.
+    @Test
+    void 금학기수강학점_과목은_일반목록에서_실제_소속_section을_이어받는다() throws Exception {
+        Path pdfPath = Path.of("/Users/test/Desktop/광운대/3학년/동아리/sopt/growingpots/졸업관리표/김경민_졸업사정관리표_260623.pdf");
+        assumeTrue(Files.exists(pdfPath));
+
+        ParsedTranscript result = parser.parse(Files.readAllBytes(pdfPath));
+
+        List<Map<String, String>> fr3011 = result.courses().stream()
+                .filter(course -> "FR3011".equals(course.get("courseCode")))
+                .toList();
+        assertThat(fr3011).hasSize(1);
+        Map<String, String> course = fr3011.get(0);
+        assertThat(course.get("section")).isEqualTo("금학기수강학점");
+        assertThat(course.get("divisionSection")).isEqualTo("기타");
+    }
+
     private String courseName(List<Map<String, String>> courses, String courseCode) {
         return courses.stream()
                 .filter(course -> courseCode.equals(course.get("courseCode")))

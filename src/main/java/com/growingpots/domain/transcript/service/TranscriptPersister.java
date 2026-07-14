@@ -161,6 +161,9 @@ public class TranscriptPersister {
             Map<DivisionCategory, Division> divisionsByCategory, Map<String, Division> divisionsByCode,
             LocalDate now) {
         String section = course.get("section");
+        // 금학기수강학점 줄이 일반 목록에서 이어받은 실제 소속 section(PdfTranscriptParser 참고).
+        // 없으면(일반 목록에 없던 순수 진행중 과목 등) section 자체를 그대로 쓴다.
+        String divisionSection = course.getOrDefault("divisionSection", section);
         String rawClassification = course.get("rawClassification");
         String semester = course.get("semester");
         String rawCourseCode = course.get("courseCode");
@@ -175,7 +178,7 @@ public class TranscriptPersister {
         return StudentCourse.builder()
                 .studentProfile(studentProfile)
                 .course(matchedCourse)
-                .appliedDivision(resolveAppliedDivision(section, rawClassification, divisionsByCategory, divisionsByCode))
+                .appliedDivision(resolveAppliedDivision(divisionSection, rawClassification, divisionsByCategory, divisionsByCode))
                 .rawCourseCode(rawCourseCode)
                 // 매칭되는 과목이 있으면 COURSE의 정식 이름을 쓴다. PDF 원문엔 "e영화제작실습"처럼
                 // 영어강의/SW인증 등을 나타내는 접두 마커가 붙어있는데, 학생에게 보여줄 이름엔 필요 없다.
