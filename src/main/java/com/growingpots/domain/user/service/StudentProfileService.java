@@ -34,11 +34,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -151,8 +152,18 @@ public class StudentProfileService {
                 .map(course -> toCourseInfo(course, geFallbackDepartment))
                 .toList();
 
+        List<Division> divisions = divisionRepository.findBySchool(profile.getSchool());
+        List<StudentCourseListResponse.DivisionInfo> divisionInfos = divisions.stream()
+                .sorted(Comparator.comparingInt(d -> d.getCategory().ordinal()))
+                .map(d -> StudentCourseListResponse.DivisionInfo.builder()
+                        .id(d.getId())
+                        .name(divisionCategoryName(d.getCategory()))
+                        .build())
+                .toList();
+
         return StudentCourseListResponse.builder()
                 .courses(courseInfos)
+                .availableDivisions(divisionInfos)
                 .build();
     }
 
