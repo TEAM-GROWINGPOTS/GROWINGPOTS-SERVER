@@ -168,6 +168,24 @@ class PdfTranscriptParserTest {
         assertThat(courseName(result.courses(), "SWCON104")).isEqualTo("웹/파이선프로그래밍");
     }
 
+    // 숫자(교직기본이수분야) 마커는 과목명과 별도 세그먼트(공백으로 분리)로 붙어 나오므로 걸러내야 하고,
+    // "조경설계1"처럼 진짜 과목명 끝에 붙는 일련번호(이름과 한 세그먼트)는 그대로 보존돼야 한다.
+    @Test
+    void 숫자_마커는_제거되고_진짜_과목명_끝의_일련번호는_보존된다() throws Exception {
+        Path pdfPath = Path.of("/Users/test/Desktop/광운대/3학년/동아리/sopt/growingpots/졸업관리표/추가 pdf/환경조경디자인학과_23_최서진_졸업진단표.pdf");
+        assumeTrue(Files.exists(pdfPath));
+
+        ParsedTranscript result = parser.parse(Files.readAllBytes(pdfPath));
+
+        assertThat(courseName(result.courses(), "LA211")).isEqualTo("환경생태계획론");
+        assertThat(courseName(result.courses(), "LA102")).isEqualTo("조경계획학");
+        assertThat(courseName(result.courses(), "LA216")).isEqualTo("조경수목학");
+        assertThat(courseName(result.courses(), "LA336")).isEqualTo("환경심리행태론");
+        assertThat(courseName(result.courses(), "LA338")).isEqualTo("식재계획및설계");
+        assertThat(courseName(result.courses(), "LA213")).isEqualTo("조경설계1");
+        assertThat(courseName(result.courses(), "LA332")).isEqualTo("조경설계3");
+    }
+
     private String courseName(List<Map<String, String>> courses, String courseCode) {
         return courses.stream()
                 .filter(course -> courseCode.equals(course.get("courseCode")))

@@ -806,6 +806,7 @@ public class PdfTranscriptParser {
         double endX = creditSegment == null ? semesterSegment.x1() : creditSegment.x1();
         return segments.stream()
                 .filter(segment -> segment.x1() > codeSegment.x2() && segment.x2() <= endX + 1)
+                .filter(segment -> !isStandaloneMarkerDigit(segment))
                 .map(TextSegment::text)
                 .reduce((left, right) -> left + " " + right)
                 .orElse("")
@@ -819,10 +820,18 @@ public class PdfTranscriptParser {
     ) {
         return segments.stream()
                 .filter(segment -> segment.x1() > codeSegment.x2() && segment.x1() < slashSegment.x1())
+                .filter(segment -> !isStandaloneMarkerDigit(segment))
                 .map(TextSegment::text)
                 .reduce((left, right) -> left + " " + right)
                 .orElse("")
                 .trim();
+    }
+
+    // 범례상 "숫자: 교직기본이수분야" 마커. 과목명이랑 별개 세그먼트로(공백을 두고) 붙어 나온다
+    // ("LA211"의 "3 e환경생태계획론"처럼). 반면 "조경설계1"처럼 진짜 과목명 끝에 붙는 일련번호는
+    // 이름과 한 세그먼트로 붙어있어 텍스트가 숫자 하나만은 아니므로 안 걸린다.
+    private boolean isStandaloneMarkerDigit(TextSegment segment) {
+        return segment.text().trim().matches("\\d");
     }
 
     private String lastDigits(String text, int count) {
