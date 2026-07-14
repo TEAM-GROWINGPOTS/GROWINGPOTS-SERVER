@@ -14,6 +14,21 @@ public class StudentCourseListResponse {
     @Schema(description = "이수 과목 목록")
     private final List<CourseInfo> courses;
 
+    @Schema(description = "이수구분 선택 옵션 목록. 학교마다 보유한 이수구분만 포함되며 "
+            + "전공기초→전공필수→전공선택→필수교과→배분이수교과→자유이수교과→일반선택 순으로 정렬. "
+            + "검수 화면 이수구분 드롭다운에 사용하고, 선택한 항목의 id를 PUT 요청 appliedDivisionId에 넣으면 됨.")
+    private final List<DivisionInfo> availableDivisions;
+
+    @Schema(description = "이수구분 옵션 정보")
+    @Getter
+    @Builder
+    public static class DivisionInfo {
+        @Schema(description = "이수구분 PK. PUT /students/me/courses 요청의 appliedDivisionId에 사용", example = "2")
+        private final Long id;
+        @Schema(description = "이수구분 표시명", example = "전공필수")
+        private final String name;
+    }
+
     @Schema(description = "개별 이수 과목 정보")
     @Getter
     @Builder
