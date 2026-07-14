@@ -57,15 +57,28 @@ public @interface PlannerApi {
                     - versions[].courses[].courseId: 직접추가를 지원하지 않아 항상 존재.
                     - versions[].courses[].isEnglish / isSw: 영어강의·SW인증강의 여부.
                     - versions[].courses[].retakeDisplay: 재수강 표시 유형. 일반 과목은 null이며 JSON 응답에서 필드 자체가 생략된다.
-                      - BADGE: 이미 이수완료(COMPLETED) 또는 이수중(IN_PROGRESS)인 과목이 플래너 여러 학기에 담겨 있을 때, 가장 최신 학기(yearLevel → semester 기준) 항목
-                      - DIMMED: 재수강 과목 중 BADGE가 아닌 이전 학기 항목
-                      - null(필드 생략): 재수강이 아닌 일반 과목
+                      - BADGE: 재수강 과목 중 '메인' 항목. UI에서 재수강 배지를 표시한다.
+                      - DIMMED: 재수강 과목 중 BADGE가 아닌 이전 학기 항목. UI에서 흐리게 표시한다.
+                      - null(필드 자체 생략): 일반 과목(재수강 아님)
 
-                    **재수강 표시 계산 방식**
-                    서버가 GET 응답 시점에 저장된 전체 플래너 기준으로 매번 재계산하는 read-only 파생 값이다.
-                    PUT(저장) 요청 바디에 포함하지 않으며, 포함해도 무시된다.
-                    동일 과목의 재수강 인스턴스가 1개뿐이면 그 항목이 BADGE(DIMMED 없음).
-                    최신 학기 판정 기준: yearLevel 큰 쪽 우선, 같으면 semester 큰 쪽(2학기 > 1학기).
+                    **retakeDisplay — 재수강 표시 상세**
+
+                    *재수강 과목 판정 조건*
+                    courseId가 이미 COMPLETED(이수완료) 또는 IN_PROGRESS(이수중) 상태인 과목을 plannedTerms에 담으면 재수강 과목으로 판정한다.
+                    이수 이력이 없는 순수 신규 과목은 항상 null(필드 생략)이다.
+
+                    *BADGE / DIMMED 배정 규칙*
+                    - 재수강 과목이 1개 학기에만 담긴 경우 → 그 항목이 BADGE (DIMMED 없음)
+                    - 재수강 과목이 여러 학기에 걸쳐 담긴 경우 → 가장 최신 학기 항목만 BADGE, 나머지 이전 학기 항목은 모두 DIMMED
+                    - 최신 학기 판정 기준: yearLevel 큰 쪽 우선, 동일하면 semester 큰 쪽 (2학기 > 1학기)
+
+                    *적용 범위*
+                    isSelected 여부와 무관하게 모든 폴더(버전)의 과목 항목에 계산된다.
+                    폴더를 여러 개 만들어도 각 항목에 독립적으로 retakeDisplay가 부여된다.
+
+                    *read-only 주의*
+                    서버가 GET 응답 시점에 저장된 전체 플래너 기준으로 매번 재계산한다.
+                    PUT(저장) 요청 바디에 포함해도 무시된다.
 
                     **plannedTerms 구성 방식**
                     PLANNER_SIMULATION → PLANNER_TERM → PLANNER_TERM_VERSION → PLANNER_VERSION_ITEM 트리 구조.
