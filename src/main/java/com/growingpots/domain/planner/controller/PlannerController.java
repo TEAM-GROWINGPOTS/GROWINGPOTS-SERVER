@@ -51,7 +51,7 @@ public class PlannerController {
 
     @PlannerApi.SavePlanner
     @PutMapping
-    public ResponseEntity<BaseResponse<GraduationResponse>> savePlanner(
+    public ResponseEntity<BaseResponse<?>> savePlanner(
             @Valid @RequestBody PlannerSaveRequest request,
             Authentication authentication
     ) {
@@ -66,7 +66,7 @@ public class PlannerController {
             if (errorType == ErrorCode.STUDENT_PROFILE_NOT_FOUND || errorType == ErrorCode.PLANNER_ACCESS_DENIED) {
                 throw e;
             }
-            GraduationResponse previousState = computeGraduationQuietly(memberId);
+            PlannerResponse previousState = getPlannerQuietly(memberId);
             return ResponseEntity
                     .status(errorType.getStatus())
                     .body(BaseResponse.error(errorType, previousState));
@@ -80,6 +80,16 @@ public class PlannerController {
             return graduationService.getGraduation(memberId, MajorTypeFilter.ALL, null, GraduationSource.PLANNED);
         } catch (Exception e) {
             log.warn("[PlannerController] 졸업현황 계산 실패 (memberId={}): {}", memberId, e.getMessage());
+            return null;
+        }
+    }
+
+    // savePlanner 실패 시 null 폴백 — 트랜잭션 롤백으로 DB는 이전 상태이므로 저장 전 플래너를 반환한다.
+    private PlannerResponse getPlannerQuietly(Long memberId) {
+        try {
+            return plannerService.getPlanner(memberId);
+        } catch (Exception e) {
+            log.warn("[PlannerController] 이전 플래너 조회 실패 (memberId={}): {}", memberId, e.getMessage());
             return null;
         }
     }

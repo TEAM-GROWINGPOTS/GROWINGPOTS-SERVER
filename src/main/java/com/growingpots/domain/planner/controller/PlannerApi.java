@@ -57,15 +57,28 @@ public @interface PlannerApi {
                     - versions[].courses[].courseId: 직접추가를 지원하지 않아 항상 존재.
                     - versions[].courses[].isEnglish / isSw: 영어강의·SW인증강의 여부.
                     - versions[].courses[].retakeDisplay: 재수강 표시 유형. 일반 과목은 null이며 JSON 응답에서 필드 자체가 생략된다.
-                      - BADGE: 이미 이수완료(COMPLETED) 또는 이수중(IN_PROGRESS)인 과목이 플래너 여러 학기에 담겨 있을 때, 가장 최신 학기(yearLevel → semester 기준) 항목
-                      - DIMMED: 재수강 과목 중 BADGE가 아닌 이전 학기 항목
-                      - null(필드 생략): 재수강이 아닌 일반 과목
+                      - BADGE: 재수강 과목 중 '메인' 항목. UI에서 재수강 배지를 표시한다.
+                      - DIMMED: 재수강 과목 중 BADGE가 아닌 이전 학기 항목. UI에서 흐리게 표시한다.
+                      - null(필드 자체 생략): 일반 과목(재수강 아님)
 
-                    **재수강 표시 계산 방식**
-                    서버가 GET 응답 시점에 저장된 전체 플래너 기준으로 매번 재계산하는 read-only 파생 값이다.
-                    PUT(저장) 요청 바디에 포함하지 않으며, 포함해도 무시된다.
-                    동일 과목의 재수강 인스턴스가 1개뿐이면 그 항목이 BADGE(DIMMED 없음).
-                    최신 학기 판정 기준: yearLevel 큰 쪽 우선, 같으면 semester 큰 쪽(2학기 > 1학기).
+                    **retakeDisplay — 재수강 표시 상세**
+
+                    *재수강 과목 판정 조건*
+                    courseId가 이미 COMPLETED(이수완료) 또는 IN_PROGRESS(이수중) 상태인 과목을 plannedTerms에 담으면 재수강 과목으로 판정한다.
+                    이수 이력이 없는 순수 신규 과목은 항상 null(필드 생략)이다.
+
+                    *BADGE / DIMMED 배정 규칙*
+                    - 재수강 과목이 1개 학기에만 담긴 경우 → 그 항목이 BADGE (DIMMED 없음)
+                    - 재수강 과목이 여러 학기에 걸쳐 담긴 경우 → 가장 최신 학기 항목만 BADGE, 나머지 이전 학기 항목은 모두 DIMMED
+                    - 최신 학기 판정 기준: yearLevel 큰 쪽 우선, 동일하면 semester 큰 쪽 (2학기 > 1학기)
+
+                    *적용 범위*
+                    isSelected 여부와 무관하게 모든 폴더(버전)의 과목 항목에 계산된다.
+                    폴더를 여러 개 만들어도 각 항목에 독립적으로 retakeDisplay가 부여된다.
+
+                    *read-only 주의*
+                    서버가 GET 응답 시점에 저장된 전체 플래너 기준으로 매번 재계산한다.
+                    PUT(저장) 요청 바디에 포함해도 무시된다.
 
                     **plannedTerms 구성 방식**
                     PLANNER_SIMULATION → PLANNER_TERM → PLANNER_TERM_VERSION → PLANNER_VERSION_ITEM 트리 구조.
@@ -258,8 +271,8 @@ public @interface PlannerApi {
 
                     **실패 응답 (4xx) — PLAN_004 · PLAN_001 · PLAN_002**
                     - success: false, code: 에러 코드.
-                    - data: 저장 전 상태의 졸업현황 (롤백된 서버 상태 기준). 클라이언트가 별도 GET 없이 이전 상태로 UI를 복원할 수 있다.
-                    - data가 null인 경우 졸업현황 계산 자체가 불가한 상황이므로 별도 GET을 호출한다.
+                    - data: 저장 전 상태의 플래너 (롤백된 서버 상태 기준, GET /api/v1/planner 와 동일한 스키마). 클라이언트가 별도 GET 없이 이전 상태로 UI를 복원할 수 있다.
+                    - data가 null인 경우 플래너 조회 자체가 불가한 상황이므로 별도 GET을 호출한다.
 
                     **실패 응답 (4xx) — USER_003 · PLAN_003**
                     - 인증·프로필 오류: data는 항상 null.
@@ -295,55 +308,99 @@ public @interface PlannerApi {
                                         },
                                         "graduatable": false,
                                         "conditions": null,
+                                        "graduationRequired": null,
                                         "sections": {
                                           "majors": [
                                             {
                                               "majorName": "컴퓨터공학과",
                                               "majorType": "MAIN",
-                                              "conditions": [],
+                                              "conditions": [
+                                                { "code": "MAJOR_BASIC",    "name": "전공 기초", "current": 6,  "required": 9,  "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
+                                                { "code": "MAJOR_REQUIRED", "name": "전공 필수", "current": 30, "required": 30, "unit": "CREDITS", "satisfied": true,  "chartTarget": true  },
+                                                { "code": "MAJOR_ELECTIVE", "name": "전공 선택", "current": 18, "required": 39, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
+                                                { "code": "ENGLISH_COURSE", "name": "영어 강의",    "current": 2, "required": 3, "unit": "COURSES", "satisfied": false, "chartTarget": false },
+                                                { "code": "SW_CERT_COURSE", "name": "SW 인증 강의", "current": 6, "required": 6, "unit": "CREDITS", "satisfied": true,  "chartTarget": false }
+                                              ],
                                               "graduationRequired": null
                                             }
                                           ],
-                                          "ge": { "majorName": null, "majorType": null, "conditions": [] },
-                                          "others": { "majorName": null, "majorType": null, "conditions": [] }
+                                          "ge": {
+                                            "majorName": null,
+                                            "majorType": null,
+                                            "conditions": [
+                                              { "code": "REQUIRED_GE",    "name": "필수 교과",      "current": 14, "required": 17, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
+                                              { "code": "DISTRIBUTED_GE", "name": "배분 이수 교과", "current": 6,  "required": 9,  "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
+                                              { "code": "FREE_GE",        "name": "자유 이수 교과", "current": 5,  "required": 3,  "unit": "CREDITS", "satisfied": true,  "chartTarget": true  },
+                                              { "code": "SW_CERT_COURSE", "name": "SW 인증 강의",   "current": 6,  "required": 6,  "unit": "CREDITS", "satisfied": true,  "chartTarget": false }
+                                            ],
+                                            "graduationRequired": null
+                                          },
+                                          "others": {
+                                            "majorName": null,
+                                            "majorType": null,
+                                            "conditions": [
+                                              { "code": "GENERAL_ELECTIVE", "name": "기타", "current": 24, "required": null, "unit": "CREDITS", "satisfied": false, "chartTarget": false }
+                                            ],
+                                            "graduationRequired": null
+                                          }
                                         },
-                                        "certs": []
+                                        "certs": [
+                                          { "certType": "ENGLISH", "result": "PASS" },
+                                          { "certType": "SW",      "result": "FAIL" },
+                                          { "certType": "TOPIK",   "result": "NONE" },
+                                          { "certType": "THESIS",  "result": "NONE" }
+                                        ]
                                       }
                                     }
                                     """)
                     )),
             @ApiResponse(
                     responseCode = "400",
-                    description = "데이터 정합성 오류 — data에 저장 전 졸업현황 포함 (PLAN_004). data가 null이면 졸업현황 계산 불가 상태이므로 GET /students/me/graduation 별도 호출",
+                    description = "데이터 정합성 오류 — data에 저장 전 플래너 포함 (PLAN_004). data가 null이면 플래너 조회 불가 상태이므로 GET /api/v1/planner 별도 호출",
                     content = @Content(
                             mediaType = "application/json",
-                            schema = @Schema(implementation = GraduationResponse.class),
+                            schema = @Schema(implementation = PlannerResponse.class),
                             examples = @ExampleObject(value = """
                                     {
                                       "success": false,
                                       "code": "PLAN_004",
                                       "message": "플래너 데이터 정합성 오류입니다.",
                                       "data": {
-                                        "summary": {
-                                          "totalCredits": { "current": 92, "required": 130 },
-                                          "gpa": { "current": 3.85, "min": 2.0 },
-                                          "enrollmentStatus": "재학"
-                                        },
-                                        "graduatable": false,
-                                        "conditions": null,
-                                        "sections": {
-                                          "majors": [
-                                            {
-                                              "majorName": "컴퓨터공학과",
-                                              "majorType": "MAIN",
-                                              "conditions": [],
-                                              "graduationRequired": null
-                                            }
-                                          ],
-                                          "ge": { "majorName": null, "majorType": null, "conditions": [] },
-                                          "others": { "majorName": null, "majorType": null, "conditions": [] }
-                                        },
-                                        "certs": []
+                                        "completedTerms": [],
+                                        "plannedTerms": [
+                                          {
+                                            "plannerTermId": 3001,
+                                            "yearLevel": 1,
+                                            "semester": 1,
+                                            "versions": [
+                                              {
+                                                "plannerTermVersionId": 4001,
+                                                "versionNo": 1,
+                                                "name": "폴더 1",
+                                                "isSelected": true,
+                                                "versionOrder": 0,
+                                                "totalCredit": 3,
+                                                "courses": [
+                                                  {
+                                                    "plannerVersionItemId": 5001,
+                                                    "courseId": 12,
+                                                    "name": "미디어와사회",
+                                                    "departmentName": "미디어학과",
+                                                    "divisionCategory": "MAJOR_REQUIRED",
+                                                    "divisionName": "전공필수",
+                                                    "recommendedYearLow": 1,
+                                                    "recommendedYearHigh": 1,
+                                                    "openedSemester": "FIRST",
+                                                    "credit": 3,
+                                                    "coursePositionOrder": 0,
+                                                    "isEnglish": false,
+                                                    "isSw": false
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
                                       }
                                     }
                                     """)
@@ -352,7 +409,118 @@ public @interface PlannerApi {
             @ApiResponse(responseCode = "403", description = "플래너 접근 권한 없음 — data: null (PLAN_003)"),
             @ApiResponse(
                     responseCode = "404",
-                    description = "학적 정보 없음 — data: null (USER_003) / 플래너 없음 — data에 저장 전 졸업현황 포함 (PLAN_002) / 과목 없음 — data에 저장 전 졸업현황 포함 (PLAN_001)")
+                    description = "학적 정보 없음 — data: null (USER_003) / 플래너 없음 — data에 저장 전 플래너 포함 (PLAN_002) / 과목 없음 — data에 저장 전 플래너 포함 (PLAN_001)",
+                    content = @Content(
+                            mediaType = "application/json",
+                            schema = @Schema(implementation = PlannerResponse.class),
+                            examples = {
+                                    @ExampleObject(
+                                            name = "USER_003",
+                                            summary = "학적 정보 없음(온보딩 미완료) — data: null",
+                                            value = """
+                                    {
+                                      "success": false,
+                                      "code": "USER_003",
+                                      "message": "온보딩이 완료되지 않은 사용자입니다.",
+                                      "data": null
+                                    }
+                                    """),
+                                    @ExampleObject(
+                                            name = "PLAN_002",
+                                            summary = "플래너 없음 — data에 저장 전 플래너 포함",
+                                            value = """
+                                    {
+                                      "success": false,
+                                      "code": "PLAN_002",
+                                      "message": "존재하지 않는 플래너입니다.",
+                                      "data": {
+                                        "completedTerms": [],
+                                        "plannedTerms": [
+                                          {
+                                            "plannerTermId": 3001,
+                                            "yearLevel": 1,
+                                            "semester": 1,
+                                            "versions": [
+                                              {
+                                                "plannerTermVersionId": 4001,
+                                                "versionNo": 1,
+                                                "name": "폴더 1",
+                                                "isSelected": true,
+                                                "versionOrder": 0,
+                                                "totalCredit": 3,
+                                                "courses": [
+                                                  {
+                                                    "plannerVersionItemId": 5001,
+                                                    "courseId": 12,
+                                                    "name": "미디어와사회",
+                                                    "departmentName": "미디어학과",
+                                                    "divisionCategory": "MAJOR_REQUIRED",
+                                                    "divisionName": "전공필수",
+                                                    "recommendedYearLow": 1,
+                                                    "recommendedYearHigh": 1,
+                                                    "openedSemester": "FIRST",
+                                                    "credit": 3,
+                                                    "coursePositionOrder": 0,
+                                                    "isEnglish": false,
+                                                    "isSw": false
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    }
+                                    """),
+                                    @ExampleObject(
+                                            name = "PLAN_001",
+                                            summary = "과목 없음 — data에 저장 전 플래너 포함",
+                                            value = """
+                                    {
+                                      "success": false,
+                                      "code": "PLAN_001",
+                                      "message": "존재하지 않는 과목입니다.",
+                                      "data": {
+                                        "completedTerms": [],
+                                        "plannedTerms": [
+                                          {
+                                            "plannerTermId": 3001,
+                                            "yearLevel": 1,
+                                            "semester": 1,
+                                            "versions": [
+                                              {
+                                                "plannerTermVersionId": 4001,
+                                                "versionNo": 1,
+                                                "name": "폴더 1",
+                                                "isSelected": true,
+                                                "versionOrder": 0,
+                                                "totalCredit": 3,
+                                                "courses": [
+                                                  {
+                                                    "plannerVersionItemId": 5001,
+                                                    "courseId": 12,
+                                                    "name": "미디어와사회",
+                                                    "departmentName": "미디어학과",
+                                                    "divisionCategory": "MAJOR_REQUIRED",
+                                                    "divisionName": "전공필수",
+                                                    "recommendedYearLow": 1,
+                                                    "recommendedYearHigh": 1,
+                                                    "openedSemester": "FIRST",
+                                                    "credit": 3,
+                                                    "coursePositionOrder": 0,
+                                                    "isEnglish": false,
+                                                    "isSw": false
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    }
+                                    """)
+                            }
+                    ))
     })
     @interface SavePlanner {
     }
