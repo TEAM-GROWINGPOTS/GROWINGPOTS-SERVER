@@ -250,15 +250,21 @@ public class StudentProfileService {
     }
 
     private StudentCourseListResponse.CourseInfo toCourseInfo(StudentCourse course, Department geFallbackDepartment) {
+        String departmentName = departmentName(course, geFallbackDepartment);
+        // 개설학부를 알 수 없으면(departmentName=null, 프론트에서 "해당없음") 이수영역도 함께 비운다 -
+        // 학부는 "해당없음"인데 이수영역만 채워져 검수 화면에 뜨는 게 혼란스럽다는 프론트 요청(#195).
+        // 교양 과목은 departmentName이 항상 "교양"(또는 대체 학과명)으로 채워지므로 영향 없다.
+        boolean departmentUnknown = departmentName == null;
         return StudentCourseListResponse.CourseInfo.builder()
                 .studentCourseId(course.getId())
                 .courseCode(course.getRawCourseCode())
                 .name(course.getRawCourseName())
-                .departmentName(departmentName(course, geFallbackDepartment))
+                .departmentName(departmentName)
                 .departmentId(departmentId(course, geFallbackDepartment))
                 .credit(course.getCredit())
-                .appliedDivisionName(appliedDivisionName(course))
-                .appliedDivisionId(course.getAppliedDivision() == null ? null : course.getAppliedDivision().getId())
+                .appliedDivisionName(departmentUnknown ? null : appliedDivisionName(course))
+                .appliedDivisionId(departmentUnknown || course.getAppliedDivision() == null
+                        ? null : course.getAppliedDivision().getId())
                 .takenYear(course.getTakenYear())
                 .takenSemester(takenSemesterName(course.getTakenSemester()))
                 .build();

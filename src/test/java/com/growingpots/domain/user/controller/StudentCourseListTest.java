@@ -268,11 +268,16 @@ class StudentCourseListTest {
     void appliedDivision_카테고리로_이수구분명이_매핑된다() throws Exception {
         StudentProfile studentProfile = onboardedStudent("4004");
         School school = studentProfile.getSchool();
+        Department appliedDepartment = departmentRepository.save(Department.builder()
+                .school(school).college("예술·디자인대학").name("연극영화학과-4004").build());
         Division majorElective = division(school, "05", DivisionCategory.MAJOR_ELECTIVE);
         Division majorBasic = division(school, "11", DivisionCategory.MAJOR_BASIC);
 
+        // 개설학부(appliedDepartment)가 있어야 이수영역도 함께 노출된다(#195) - 매핑 자체를 검증하려면
+        // 학부가 "해당없음"이 아니어야 한다.
         studentCourseRepository.save(StudentCourse.builder()
                 .studentProfile(studentProfile)
+                .appliedDepartment(appliedDepartment)
                 .appliedDivision(majorElective)
                 .rawCourseCode("FT2076")
                 .rawCourseName("초급영화이론")
@@ -284,6 +289,7 @@ class StudentCourseListTest {
                 .build());
         studentCourseRepository.save(StudentCourse.builder()
                 .studentProfile(studentProfile)
+                .appliedDepartment(appliedDepartment)
                 .appliedDivision(majorBasic)
                 .rawCourseCode("FT1003")
                 .rawCourseName("영화사")
@@ -314,6 +320,50 @@ class StudentCourseListTest {
         assertThat(appliedDivisionNameOf(courses, "FT2076")).isEqualTo("전공선택");
         assertThat(appliedDivisionNameOf(courses, "FT1003")).isEqualTo("전공기초");
         assertThat(appliedDivisionNameOf(courses, "FR2042")).isNull();
+    }
+
+    // 개설학부를 알 수 없으면(departmentName=null, 프론트 표시상 "해당없음") appliedDivision이 실제로
+    // 지정돼 있어도 이수영역을 null로 비운다 - 학부는 "해당없음"인데 이수영역만 채워지는 게 검수 화면에서
+    // 혼란스럽다는 프론트 요청(#195). GE 계열은 departmentName이 "교양"으로 항상 채워지므로 영향 없다.
+    @Test
+    void 개설학부가_해당없음이면_이수영역도_해당없음으로_비워진다() throws Exception {
+        StudentProfile studentProfile = onboardedStudent("6006");
+        School school = studentProfile.getSchool();
+        Division majorElective = division(school, "05", DivisionCategory.MAJOR_ELECTIVE);
+
+        // COURSE 매칭도 없고 appliedDepartment도 지정 안 된 전공 과목: departmentName은 null이지만
+        // appliedDivision 자체는 지정돼 있는 상태(시드 누락 등으로 흔히 생기는 케이스).
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(studentProfile)
+                .appliedDivision(majorElective)
+                .rawCourseCode("FT2076")
+                .rawCourseName("초급영화이론")
+                .credit(3)
+                .takenYear(2024)
+                .takenSemester(Semester.FIRST)
+                .status(CourseStatus.COMPLETED)
+                .source(RecordSource.PDF)
+                .build());
+
+        String responseBody = mockMvc.perform(get("/api/v1/students/me/courses")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        JsonNode courses = objectMapper.readTree(responseBody).path("data").path("courses");
+        assertThat(departmentNameOf(courses, "FT2076")).isNull();
+        assertThat(appliedDivisionNameOf(courses, "FT2076")).isNull();
+        assertThat(appliedDivisionIdOf(courses, "FT2076")).isNull();
+    }
+
+    private Long appliedDivisionIdOf(JsonNode courses, String courseCode) {
+        for (JsonNode course : courses) {
+            if (courseCode.equals(course.path("courseCode").asText())) {
+                JsonNode value = course.path("appliedDivisionId");
+                return value.isNull() ? null : value.asLong();
+            }
+        }
+        throw new AssertionError("과목을 찾을 수 없음: " + courseCode);
     }
 
     @Test
