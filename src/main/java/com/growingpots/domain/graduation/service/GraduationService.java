@@ -140,16 +140,16 @@ public class GraduationService {
         if (studentMajorId != null) {
             StudentMajorContext target = findMajorContextByStudentMajorId(majorContexts, studentMajorId);
             return buildSingleTabResponse(profile, target.effectiveSummary(), ConditionsTab.MAJOR,
-                    target.major().getDepartment(), target.judgement(), graduatable, target.certs(),
-                    allPlannedItems, null);
+                    target.judgement(), graduatable, target.certs(), null,
+                    target.major().getMajorType() == MajorType.MAIN);
         }
 
         StudentMajorContext mainContext = mainContext(majorContexts);
         return switch (majorTypeFilter) {
             case GE, OTHERS -> buildSingleTabResponse(profile, mainContext.effectiveSummary(),
                     majorTypeFilter == MajorTypeFilter.GE ? ConditionsTab.GE : ConditionsTab.OTHERS,
-                    null, null, graduatable, mainContext.certs(), allPlannedItems, geAreaResult);
-            case ALL -> buildAllTabResponse(profile, majorContexts, graduatable, allPlannedItems, geAreaResult);
+                    null, graduatable, mainContext.certs(), geAreaResult, false);
+            case ALL -> buildAllTabResponse(profile, majorContexts, graduatable, geAreaResult);
         };
     }
 
@@ -158,17 +158,16 @@ public class GraduationService {
             StudentProfile profile,
             GraduationAnalysisSummary summary,
             ConditionsTab tab,
-            Department department,  // 전공 탭: 해당 전공 학과, GE/OTHERS: null
             GraduationRequiredJudgement judgement,  // 전공 탭만 값 있음, GE/OTHERS는 null
             boolean graduatable,
             List<CertResult> certs,
-            List<PlannerVersionItem> plannedItems,
-            DistributedGeAreaResult geAreaResult  // GE/OTHERS 탭만 전달, 전공 탭은 null
+            DistributedGeAreaResult geAreaResult,  // GE/OTHERS 탭만 전달, 전공 탭은 null
+            boolean isMainMajor  // 영어/SW 실제값 노출 여부(본전공만). GE/OTHERS 탭은 항상 false
     ) {
         return GraduationResponse.builder()
                 .summary(buildSummary(profile, summary))
                 .graduatable(graduatable)
-                .conditions(buildConditionsForTab(profile, summary, tab, department, plannedItems, geAreaResult))
+                .conditions(buildConditionsForTab(summary, tab, geAreaResult, isMainMajor))
                 .graduationRequired(toGraduationRequiredSummary(judgement))
                 .sections(null)
                 .certs(buildCertInfos(certs, summary))
@@ -180,15 +179,15 @@ public class GraduationService {
             StudentProfile profile,
             List<StudentMajorContext> majorContexts,
             boolean graduatable,
-            List<PlannerVersionItem> plannedItems,
             DistributedGeAreaResult geAreaResult
     ) {
         List<TabSection> majorSections = majorContexts.stream()
                 .map(ctx -> TabSection.builder()
                         .majorName(ctx.major().getDepartment().getName())
                         .majorType(ctx.major().getMajorType().name())
-                        .conditions(buildConditionsForTab(profile, ctx.effectiveSummary(),
-                                ConditionsTab.MAJOR, ctx.major().getDepartment(), plannedItems, null))
+                        .conditions(buildConditionsForTab(ctx.effectiveSummary(),
+                                ConditionsTab.MAJOR, null,
+                                ctx.major().getMajorType() == MajorType.MAIN))
                         .graduationRequired(toGraduationRequiredSummary(ctx.judgement()))
                         .build())
                 .toList();
@@ -196,13 +195,13 @@ public class GraduationService {
         StudentMajorContext mainContext = mainContext(majorContexts);
 
         TabSection geSection = TabSection.builder()
-                .conditions(buildConditionsForTab(profile, mainContext.effectiveSummary(),
-                        ConditionsTab.GE, null, plannedItems, geAreaResult))
+                .conditions(buildConditionsForTab(mainContext.effectiveSummary(),
+                        ConditionsTab.GE, geAreaResult, false))
                 .build();
 
         TabSection othersSection = TabSection.builder()
-                .conditions(buildConditionsForTab(profile, mainContext.effectiveSummary(),
-                        ConditionsTab.OTHERS, null, plannedItems, null))
+                .conditions(buildConditionsForTab(mainContext.effectiveSummary(),
+                        ConditionsTab.OTHERS, null, false))
                 .build();
 
         return GraduationResponse.builder()
@@ -248,12 +247,10 @@ public class GraduationService {
     // - 교양 탭(GE): REQUIRED_GE/DISTRIBUTED_GE/FREE_GE + SW(교양 이수구분). 영어는 전공 탭에만 표시.
     // - 기타 탭(OTHERS): GENERAL_ELECTIVE (영어·SW 미포함)
     private List<ConditionInfo> buildConditionsForTab(
-            StudentProfile profile,
             GraduationAnalysisSummary summary,
             ConditionsTab tab,
-            Department department,
-            List<PlannerVersionItem> plannedItems,
-            DistributedGeAreaResult geAreaResult
+            DistributedGeAreaResult geAreaResult,
+            boolean isMainMajor
     ) {
         List<GraduationConditionType> types = switch (tab) {
             case MAJOR -> List.of(
@@ -276,15 +273,16 @@ public class GraduationService {
             }
         }
 
-        // 영어/SW: 이수구분 기준으로 탭 배치.
-        // 전공 탭은 offeringDepartment(appliedDepartment 우선)로 해당 전공 학과만 필터링.
-        // 영어는 전공 탭에만 표시. SW는 전공·교양 탭 모두 표시. OTHERS(기타) 탭에는 둘 다 미포함.
+        // 영어/SW: 기획 확정 - '전체'(본전공) 탭에서만 실제 값을 보여준다. 항목 자체는 다른 탭(복수전공/
+        // 교양/기타)에도 구조 유지를 위해 계속 내려주되, isMainMajor가 아니면 current를 0으로 고정한다.
+        // (예전엔 탭의 이수구분 카테고리로 StudentCourse를 매번 다시 긁어 재계산했는데, 실제 SW인증 과목이
+        // 자유이수(교양) 쪽에 몰려있는 경우가 많아 전공 탭에서 0으로 보이는 버그가 있었다 - PDF 스냅샷
+        // summary.englishCurrent/swCertCurrent는 학생 전체 기준값이라 탭별 재계산 자체가 불필요했다.)
         if (tab != ConditionsTab.OTHERS) {
-            List<DivisionCategory> cats = getDivisionCategoriesForTab(tab);
             if (tab == ConditionsTab.MAJOR) {
-                result.add(buildEnglishConditionInfo(profile, cats, summary, department, plannedItems));
+                result.add(buildEnglishConditionInfo(summary, isMainMajor));
             }
-            result.add(buildSwConditionInfo(profile, cats, summary, department, plannedItems));
+            result.add(buildSwConditionInfo(summary, isMainMajor));
         }
 
         return result;
@@ -298,33 +296,12 @@ public class GraduationService {
         };
     }
 
-    // 해당 탭 이수구분(+ 전공 탭이면 개설학과)에 속하는 영어강의 수 기준으로 조건 정보 생성
-    private ConditionInfo buildEnglishConditionInfo(
-            StudentProfile profile,
-            List<DivisionCategory> categories,
-            GraduationAnalysisSummary summary,
-            Department department,
-            List<PlannerVersionItem> plannedItems
-    ) {
-        List<StudentCourse> courses = (department != null)
-                ? studentCourseRepository
-                        .findByStudentProfileAndCourseIsEnglishAndDivisionCategoryInAndDepartment(
-                                profile, categories, department)
-                : studentCourseRepository
-                        .findByStudentProfileAndCourseIsEnglishAndDivisionCategoryIn(profile, categories);
-        int current = courses.size();
-
-        if (!plannedItems.isEmpty()) {
-            current += (int) plannedItems.stream()
-                    .filter(i -> i.getCourse().isEnglish())
-                    .filter(i -> i.getPlannedDivision() != null
-                            && categories.contains(i.getPlannedDivision().getCategory()))
-                    .filter(i -> department == null
-                            || (i.getCourse().getOfferingDepartment() != null
-                            && department.getId().equals(i.getCourse().getOfferingDepartment().getId())))
-                    .count();
-        }
-
+    // 영어강의 이수 수 조건 정보 생성. current는 본전공 탭에서만 PDF 스냅샷(summary.englishCurrent, 학생
+    // 전체 기준값)을 쓰고, 그 외(복수전공/교양/기타) 탭은 0으로 고정한다 - 영어/SW는 '전체'(본전공) 탭에서만
+    // 노출하기로 기획 확정. summary는 호출부에서 이미 PLANNED 모드 델타(buildAdjustedSummary)까지 반영된
+    // effectiveSummary라 여기서 plannedItems를 또 더하면 이중 계산이 된다 - 그대로 읽기만 한다.
+    private ConditionInfo buildEnglishConditionInfo(GraduationAnalysisSummary summary, boolean isMainMajor) {
+        int current = isMainMajor ? summary.getEnglishCurrent() : 0;
         int required = summary.getEnglishRequired();
         return ConditionInfo.builder()
                 .code(GraduationConditionType.ENGLISH_COURSE.name())
@@ -337,31 +314,14 @@ public class GraduationService {
                 .build();
     }
 
-    // 해당 탭 이수구분(+ 전공 탭이면 개설학과)에 속하는 SW인증강의 학점 합계 기준으로 조건 정보 생성
-    private ConditionInfo buildSwConditionInfo(
-            StudentProfile profile,
-            List<DivisionCategory> categories,
-            GraduationAnalysisSummary summary,
-            Department department,
-            List<PlannerVersionItem> plannedItems
-    ) {
-        List<StudentCourse> courses = (department != null)
-                ? studentCourseRepository
-                        .findByStudentProfileAndCourseIsSwAndDivisionCategoryInAndDepartment(
-                                profile, categories, department)
-                : studentCourseRepository
-                        .findByStudentProfileAndCourseIsSwAndDivisionCategoryIn(profile, categories);
-        int current = courses.stream().mapToInt(StudentCourse::getCredit).sum();
-
-        if (!plannedItems.isEmpty()) {
-            current += plannedItems.stream()
-                    .filter(i -> i.getCourse().isSw())
-                    .filter(i -> i.getPlannedDivision() != null
-                            && categories.contains(i.getPlannedDivision().getCategory()))
-                    .filter(i -> department == null
-                            || (i.getCourse().getOfferingDepartment() != null
-                            && department.getId().equals(i.getCourse().getOfferingDepartment().getId())))
-                    .mapToInt(PlannerVersionItem::getCredit).sum();
+    // SW인증강의 학점 합계 조건 정보 생성. current는 본전공 탭에서만 PDF 스냅샷(summary.swCertCurrent, 학생
+    // 전체 기준값)을 쓰고, 그 외(복수전공/교양/기타) 탭은 0으로 고정한다 - 영어/SW는 '전체'(본전공) 탭에서만
+    // 노출하기로 기획 확정. summary는 호출부에서 이미 PLANNED 모드 델타(buildAdjustedSummary)까지 반영된
+    // effectiveSummary라 여기서 plannedItems를 또 더하면 이중 계산이 된다 - 그대로 읽기만 한다.
+    private ConditionInfo buildSwConditionInfo(GraduationAnalysisSummary summary, boolean isMainMajor) {
+        int current = 0;
+        if (isMainMajor) {
+            current = summary.getSwCertCurrent() != null ? summary.getSwCertCurrent() : 0;
         }
 
         Integer required = summary.getSwCertRequired();
