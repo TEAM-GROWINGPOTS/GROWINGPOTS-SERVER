@@ -21,7 +21,7 @@ app:
   base-url: https://growing-pots.p-e.kr
 
 cors:
-  allowed-origins: https://growingpots.kr
+  allowed-origins: https://www.growingpots.kr,https://growingpots.kr,https://dev.growingpots.kr
 
 discord:
   webhook-url: ${DISCORD_WEBHOOK_URL}
