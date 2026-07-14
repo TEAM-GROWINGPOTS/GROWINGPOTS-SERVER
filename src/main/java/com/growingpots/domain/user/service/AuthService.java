@@ -11,6 +11,7 @@ import com.growingpots.global.exception.BaseException;
 import com.growingpots.global.response.error.ErrorCode;
 import com.growingpots.global.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +23,7 @@ public class AuthService {
     private final StudentProfileRepository studentProfileRepository;
     private final KakaoOAuthClient kakaoOAuthClient;
     private final JwtTokenProvider jwtTokenProvider;
+    private final MemberCreationService memberCreationService;
 
     public record LoginResult(String accessToken, String refreshToken, boolean onboardingCompleted, String nickname) {}
     public record ReissueResult(String accessToken, String refreshToken) {}
@@ -66,12 +68,20 @@ public class AuthService {
     private Member findOrCreateMember(OauthProvider provider, KakaoUserInfoResponse userInfo) {
         String oauthId = String.valueOf(userInfo.id());
         return memberRepository.findByOauthProviderAndOauthId(provider, oauthId)
-                .orElseGet(() -> memberRepository.save(Member.builder()
-                        .nickname(extractNickname(userInfo))
-                        .oauthProvider(provider)
-                        .oauthId(oauthId)
-                        .email(userInfo.kakaoAccount() != null ? userInfo.kakaoAccount().email() : null)
-                        .build()));
+                .orElseGet(() -> {
+                    Member newMember = Member.builder()
+                            .nickname(extractNickname(userInfo))
+                            .oauthProvider(provider)
+                            .oauthId(oauthId)
+                            .email(userInfo.kakaoAccount() != null ? userInfo.kakaoAccount().email() : null)
+                            .build();
+                    try {
+                        return memberCreationService.insert(newMember);
+                    } catch (DataIntegrityViolationException e) {
+                        return memberRepository.findByOauthProviderAndOauthId(provider, oauthId)
+                                .orElseThrow(() -> new BaseException(ErrorCode.INTERNAL_SERVER_ERROR));
+                    }
+                });
     }
 
     private String extractNickname(KakaoUserInfoResponse userInfo) {
