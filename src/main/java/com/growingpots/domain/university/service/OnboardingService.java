@@ -20,7 +20,6 @@ import java.util.stream.IntStream;
 public class OnboardingService {
 
     private static final int ADMISSION_YEAR_RANGE = 8;
-    private static final String GENERAL_EDUCATION_COLLEGE = "후마니타스칼리지";
 
     private final SchoolRepository schoolRepository;
     private final DepartmentRepository departmentRepository;
@@ -42,9 +41,7 @@ public class OnboardingService {
 
         return new OnboardingOptionsResponse(
                 schools.stream().map(OnboardingOptionsResponse.SchoolInfo::from).toList(),
-                departments.stream()
-                        .filter(d -> !GENERAL_EDUCATION_COLLEGE.equals(d.getCollege()))
-                        .map(OnboardingOptionsResponse.DepartmentInfo::from).toList(),
+                departments.stream().map(OnboardingOptionsResponse.DepartmentInfo::from).toList(),
                 buildAdmissionYears()
         );
     }
