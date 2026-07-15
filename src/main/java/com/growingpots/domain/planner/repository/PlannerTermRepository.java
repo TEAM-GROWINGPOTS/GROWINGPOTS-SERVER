@@ -12,7 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 public interface PlannerTermRepository extends JpaRepository<PlannerTerm, Long> {
 
-    List<PlannerTerm> findByPlannerSimulationOrderByYearLevelAscSemesterAsc(PlannerSimulation plannerSimulation);
+    List<PlannerTerm> findByPlannerSimulation(PlannerSimulation plannerSimulation);
 
     @Query("SELECT pt.id FROM PlannerTerm pt WHERE pt.plannerSimulation.id = :simulationId")
     List<Long> findIdsByPlannerSimulationId(@Param("simulationId") Long simulationId);

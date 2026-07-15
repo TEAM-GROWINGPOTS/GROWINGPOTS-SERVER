@@ -42,7 +42,7 @@ public @interface PlannerApi {
 
                     **completedTerms 구성 방식**
                     STUDENT_COURSE를 (수강년도, 수강학기)로 그룹핑한다.
-                    여름학기는 1학기, 겨울학기는 2학기 묶음에 합산된다.
+                    여름학기(semester=3)·겨울학기(semester=4)는 독립 학기로 구분된다.
 
                     **plannedTerms 응답 필드**
                     - plannerTermId: 학기 PK.
@@ -70,7 +70,7 @@ public @interface PlannerApi {
                     *BADGE / DIMMED 배정 규칙*
                     - 재수강 과목이 1개 학기에만 담긴 경우 → 그 항목이 BADGE (DIMMED 없음)
                     - 재수강 과목이 여러 학기에 걸쳐 담긴 경우 → 가장 최신 학기 항목만 BADGE, 나머지 이전 학기 항목은 모두 DIMMED
-                    - 최신 학기 판정 기준: yearLevel 큰 쪽 우선, 동일하면 semester 큰 쪽 (2학기 > 1학기)
+                    - 최신 학기 판정 기준: yearLevel 큰 쪽 우선, 동일하면 시간순 (겨울(4) > 2학기(2) > 여름(3) > 1학기(1))
 
                     *적용 범위*
                     isSelected 여부와 무관하게 모든 폴더(버전)의 과목 항목에 계산된다.
@@ -83,7 +83,7 @@ public @interface PlannerApi {
                     **plannedTerms 구성 방식**
                     PLANNER_SIMULATION → PLANNER_TERM → PLANNER_TERM_VERSION → PLANNER_VERSION_ITEM 트리 구조.
                     한 번도 저장한 적 없는 학생은 빈 배열이 내려간다.
-                    학기 목록은 yearLevel → semester 오름차순으로 정렬된다.
+                    학기 목록은 yearLevel → 시간순(1학기→여름→2학기→겨울)으로 정렬된다.
                     """
     )
     @ApiResponses({
@@ -262,7 +262,7 @@ public @interface PlannerApi {
                     - 각 학기(term)에는 정확히 1개의 isSelected=true 버전이 있어야 한다.
                     - 학기 내 versionNo와 versionOrder는 각각 중복 불가.
                     - 과목의 개설 학기와 무관하게 모든 학기 term에 추가할 수 있다.
-                    - 저장 후 terms는 yearLevel → semester 오름차순으로 정렬되어 반환된다.
+                    - 저장 후 terms는 yearLevel → 시간순(1학기→여름→2학기→겨울)으로 정렬되어 반환된다.
                     - terms를 빈 배열([])로 보내면 기존에 저장된 학기를 전부 삭제한다(계획 전체 비우기).
 
                     **성공 응답 (200)**

@@ -77,7 +77,10 @@ public class PlannerService {
             return List.of();
         }
 
-        List<PlannerTerm> terms = plannerTermRepository.findByPlannerSimulationOrderByYearLevelAscSemesterAsc(simulation);
+        List<PlannerTerm> terms = plannerTermRepository.findByPlannerSimulation(simulation).stream()
+                .sorted(Comparator.comparingInt(PlannerTerm::getYearLevel)
+                        .thenComparingInt(t -> semesterOrder(t.getSemester())))
+                .toList();
         if (terms.isEmpty()) {
             return List.of();
         }
@@ -141,7 +144,7 @@ public class PlannerService {
                     .map(i -> termByVersionId.get(i.getPlannerTermVersion().getId()))
                     .filter(Objects::nonNull)
                     .max(Comparator.comparingInt(PlannerTerm::getYearLevel)
-                                   .thenComparingInt(PlannerTerm::getSemester))
+                                   .thenComparingInt(t -> semesterOrder(t.getSemester())))
                     .orElse(null);
             if (latestTerm == null) continue;
 
@@ -235,12 +238,21 @@ public class PlannerService {
         }
 
         List<PlannerResponse.CompletedTerm> result = new ArrayList<>();
-        int sequence = 0;
-        for (List<StudentCourse> termCourses : grouped.values()) {
-            sequence++;
-            int yearLevel = (sequence - 1) / 2 + 1;
-            int semester = (sequence - 1) % 2 + 1;
-            result.add(toCompletedTerm(yearLevel, semester, termCourses));
+        int regularCount = 0;
+        int currentYearLevel = 1;
+        for (Map.Entry<RawTermKey, List<StudentCourse>> entry : grouped.entrySet()) {
+            Semester sem = entry.getKey().takenSemester();
+            if (sem == Semester.FIRST || sem == Semester.SECOND) {
+                regularCount++;
+                currentYearLevel = (regularCount - 1) / 2 + 1;
+            }
+            int apiSemester = switch (sem) {
+                case FIRST -> 1;
+                case SECOND -> 2;
+                case SUMMER -> 3;
+                case WINTER -> 4;
+            };
+            result.add(toCompletedTerm(currentYearLevel, apiSemester, entry.getValue()));
         }
         return result;
     }
@@ -251,8 +263,7 @@ public class PlannerService {
         if (takenYear == null || takenSemester == null) {
             return null;
         }
-        int semesterBucket = (takenSemester == Semester.FIRST || takenSemester == Semester.SUMMER) ? 1 : 2;
-        return new RawTermKey(takenYear, semesterBucket);
+        return new RawTermKey(takenYear, takenSemester);
     }
 
     private PlannerResponse.CompletedTerm toCompletedTerm(int yearLevel, int semester, List<StudentCourse> courses) {
@@ -266,7 +277,7 @@ public class PlannerService {
                 // AUTO_INCREMENT PK(항상 양수)와 절대 안 겹치도록 음수로 둔다 — 실수로 진짜 PK처럼
                 // 다른 API에 넘겨져도(예: 저장/삭제) DB에 없는 값이라 즉시 실패하도록 하기 위함.
                 .plannerTermVersionId(-(yearLevel * 10L + semester))
-                .name(yearLevel + "학년 " + semester + "학기")
+                .name(yearLevel + "학년 " + semesterDisplayName(semester))
                 .status(inProgress ? "IN_PROGRESS" : "COMPLETED")
                 .totalCredit(totalCredit)
                 .courses(courses.stream().map(this::toCompletedCourse).toList())
@@ -304,12 +315,43 @@ public class PlannerService {
     }
 
     // 달력 기준 수강년도/학기 묶음. 학년/학기 표시값이 아니라 정렬 순서를 정하기 위한 원시 키다.
-    private record RawTermKey(int takenYear, int semesterBucket) implements Comparable<RawTermKey> {
+    private record RawTermKey(int takenYear, Semester takenSemester) implements Comparable<RawTermKey> {
         @Override
         public int compareTo(RawTermKey other) {
             int byYear = Integer.compare(takenYear, other.takenYear);
-            return byYear != 0 ? byYear : Integer.compare(semesterBucket, other.semesterBucket);
+            return byYear != 0 ? byYear
+                    : Integer.compare(chronologicalOrder(takenSemester), chronologicalOrder(other.takenSemester));
         }
+
+        private static int chronologicalOrder(Semester semester) {
+            return switch (semester) {
+                case FIRST -> 0;
+                case SUMMER -> 1;
+                case SECOND -> 2;
+                case WINTER -> 3;
+            };
+        }
+    }
+
+    // 플래너 API semester 값 → 시간순 정렬 인덱스 (1=1학기, 2=2학기, 3=여름, 4=겨울)
+    private static int semesterOrder(int semester) {
+        return switch (semester) {
+            case 1 -> 0;
+            case 3 -> 1;
+            case 2 -> 2;
+            case 4 -> 3;
+            default -> semester;
+        };
+    }
+
+    private static String semesterDisplayName(int semester) {
+        return switch (semester) {
+            case 1 -> "1학기";
+            case 2 -> "2학기";
+            case 3 -> "여름학기";
+            case 4 -> "겨울학기";
+            default -> semester + "학기";
+        };
     }
 
     @Transactional
@@ -439,7 +481,7 @@ public class PlannerService {
 
         List<PlannerSaveRequest.TermRequest> sortedTerms = request.terms().stream()
                 .sorted(Comparator.comparingInt(PlannerSaveRequest.TermRequest::yearLevel)
-                        .thenComparingInt(PlannerSaveRequest.TermRequest::semester))
+                        .thenComparingInt(t -> semesterOrder(t.semester())))
                 .toList();
 
         for (PlannerSaveRequest.TermRequest termReq : sortedTerms) {
