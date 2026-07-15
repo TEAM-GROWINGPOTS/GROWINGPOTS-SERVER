@@ -195,12 +195,14 @@ public class PlannerService {
                 .versionOrder(version.getVersionOrder())
                 .totalCredit(totalCredit)
                 .courses(items.stream()
-                        .map(item -> toPlannedCourse(item, retakeDisplayByItemId.get(item.getId())))
+                        .map(this::toPlannedCourse)
                         .toList())
                 .build();
     }
 
-    private PlannerResponse.PlannedCourse toPlannedCourse(PlannerVersionItem item, RetakeDisplay retakeDisplay) {
+    // retakeDisplay(BADGE/DIMMED)는 응답에서 뺐지만(#238) totalCredit 계산(toVersion)엔 여전히
+    // 필요해서 computeRetakeDisplay()/retakeDisplayByItemId 로직 자체는 그대로 둔다.
+    private PlannerResponse.PlannedCourse toPlannedCourse(PlannerVersionItem item) {
         Course course = item.getCourse();
         Division division = item.getPlannedDivision();
 
@@ -218,7 +220,6 @@ public class PlannerService {
                 .coursePositionOrder(item.getCoursePositionOrder())
                 .isEnglish(course.isEnglish())
                 .isSw(course.isSw())
-                .retakeDisplay(retakeDisplay)
                 .build();
     }
 

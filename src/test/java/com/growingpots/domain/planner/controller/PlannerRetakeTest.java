@@ -166,14 +166,15 @@ class PlannerRetakeTest {
         mockMvc.perform(get("/api/v1/planner")
                         .with(authentication(authOf(profile.getMember().getId()))))
                 .andExpect(status().isOk())
-                // 1-1: retakeCourse(DIMMED, 3학점 제외) + normalCourse(3학점) = 3학점
+                // 1-1: retakeCourse(DIMMED 판정이라 3학점 제외) + normalCourse(3학점) = 3학점
                 .andExpect(jsonPath("$.data.plannedTerms[0].yearLevel").value(1))
                 .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].totalCredit").value(3))
-                .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].courses[0].retakeDisplay").value("DIMMED"))
-                // 2-1: retakeCourse(BADGE, 3학점 포함) = 3학점
+                // retakeDisplay는 응답에 안 실린다(#238) - totalCredit 계산에만 내부적으로 쓰인다
+                .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].courses[0].retakeDisplay").doesNotExist())
+                // 2-1: retakeCourse(BADGE 판정이라 3학점 포함) = 3학점
                 .andExpect(jsonPath("$.data.plannedTerms[1].yearLevel").value(2))
                 .andExpect(jsonPath("$.data.plannedTerms[1].versions[0].totalCredit").value(3))
-                .andExpect(jsonPath("$.data.plannedTerms[1].versions[0].courses[0].retakeDisplay").value("BADGE"));
+                .andExpect(jsonPath("$.data.plannedTerms[1].versions[0].courses[0].retakeDisplay").doesNotExist());
     }
 
     // 같은 학기 내 다른 버전(폴더)에 같은 재수강 과목이 있는 경우:
@@ -220,11 +221,12 @@ class PlannerRetakeTest {
         mockMvc.perform(get("/api/v1/planner")
                         .with(authentication(authOf(profile.getMember().getId()))))
                 .andExpect(status().isOk())
-                // 같은 학기 내 두 버전 모두 BADGE → totalCredit에 모두 포함
+                // 같은 학기 내 두 버전 모두 BADGE 판정 → totalCredit에 모두 포함
                 .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].totalCredit").value(3))
-                .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].courses[0].retakeDisplay").value("BADGE"))
                 .andExpect(jsonPath("$.data.plannedTerms[0].versions[1].totalCredit").value(3))
-                .andExpect(jsonPath("$.data.plannedTerms[0].versions[1].courses[0].retakeDisplay").value("BADGE"));
+                // retakeDisplay는 응답에 안 실린다(#238)
+                .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].courses[0].retakeDisplay").doesNotExist())
+                .andExpect(jsonPath("$.data.plannedTerms[0].versions[1].courses[0].retakeDisplay").doesNotExist());
     }
 
     // ─── PUT /api/v1/planner — hasDuplicateCourse ───────────────────────────

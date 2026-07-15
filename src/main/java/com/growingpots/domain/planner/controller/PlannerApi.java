@@ -57,29 +57,9 @@ public @interface PlannerApi {
                     - versions[].courses[].divisionCategory / divisionName: 기본 이수구분이 없는 과목은 null.
                     - versions[].courses[].courseId: 직접추가를 지원하지 않아 항상 존재.
                     - versions[].courses[].isEnglish / isSw: 영어강의·SW인증강의 여부.
-                    - versions[].courses[].retakeDisplay: 재수강 표시 유형. 일반 과목은 null이며 JSON 응답에서 필드 자체가 생략된다.
-                      - BADGE: 재수강 과목 중 '메인' 항목. UI에서 재수강 배지를 표시한다.
-                      - DIMMED: 재수강 과목 중 BADGE가 아닌 이전 학기 항목. UI에서 흐리게 표시한다.
-                      - null(필드 자체 생략): 일반 과목(재수강 아님)
-
-                    **retakeDisplay — 재수강 표시 상세**
-
-                    *재수강 과목 판정 조건*
-                    courseId가 이미 COMPLETED(이수완료) 또는 IN_PROGRESS(이수중) 상태인 과목을 plannedTerms에 담으면 재수강 과목으로 판정한다.
-                    이수 이력이 없는 순수 신규 과목은 항상 null(필드 생략)이다.
-
-                    *BADGE / DIMMED 배정 규칙*
-                    - 재수강 과목이 1개 학기에만 담긴 경우 → 그 항목이 BADGE (DIMMED 없음)
-                    - 재수강 과목이 여러 학기에 걸쳐 담긴 경우 → 가장 최신 학기 항목만 BADGE, 나머지 이전 학기 항목은 모두 DIMMED
-                    - 최신 학기 판정 기준: yearLevel 큰 쪽 우선, 동일하면 시간순 (겨울(4) > 2학기(2) > 여름(3) > 1학기(1))
-
-                    *적용 범위*
-                    isSelected 여부와 무관하게 모든 폴더(버전)의 과목 항목에 계산된다.
-                    폴더를 여러 개 만들어도 각 항목에 독립적으로 retakeDisplay가 부여된다.
-
-                    *read-only 주의*
-                    서버가 GET 응답 시점에 저장된 전체 플래너 기준으로 매번 재계산한다.
-                    PUT(저장) 요청 바디에 포함해도 무시된다.
+                    - versions[].totalCredit: 재수강 과목이 여러 학기에 걸쳐 담긴 경우, 가장 최신 학기가 아닌
+                      항목의 학점은 제외하고 합산한다(중복 학점 방지). 다만 이 판정 결과 자체는 응답에
+                      노출하지 않는다(#238).
 
                     **plannedTerms 구성 방식**
                     PLANNER_SIMULATION → PLANNER_TERM → PLANNER_TERM_VERSION → PLANNER_VERSION_ITEM 트리 구조.
@@ -95,8 +75,8 @@ public @interface PlannerApi {
                             mediaType = "application/json",
                             schema = @Schema(implementation = PlannerResponse.class),
                             examples = @ExampleObject(
-                                    name = "재수강 표시 포함 예시",
-                                    summary = "미디어와사회(이수완료)를 2-1·2-2에 모두 담은 경우: 2-1=DIMMED, 2-2=BADGE. 경영정보시스템은 신규 과목이라 retakeDisplay 필드 생략.",
+                                    name = "재수강 과목 포함 예시",
+                                    summary = "미디어와사회(이수완료)를 2-1·2-2에 모두 담은 경우: 2-1은 중복 학점이라 totalCredit에서 제외되고 2-2만 포함된다.",
                                     value = """
                                     {
                                       "success": true,
@@ -156,8 +136,7 @@ public @interface PlannerApi {
                                                     "credit": 3,
                                                     "coursePositionOrder": 0,
                                                     "isEnglish": false,
-                                                    "isSw": false,
-                                                    "retakeDisplay": "DIMMED"
+                                                    "isSw": false
                                                   },
                                                   {
                                                     "plannerVersionItemId": 5003,
@@ -204,8 +183,7 @@ public @interface PlannerApi {
                                                     "credit": 3,
                                                     "coursePositionOrder": 0,
                                                     "isEnglish": false,
-                                                    "isSw": false,
-                                                    "retakeDisplay": "BADGE"
+                                                    "isSw": false
                                                   }
                                                 ]
                                               }
