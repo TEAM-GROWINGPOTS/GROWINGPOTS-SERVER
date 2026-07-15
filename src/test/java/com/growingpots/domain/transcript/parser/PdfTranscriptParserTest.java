@@ -209,6 +209,21 @@ class PdfTranscriptParserTest {
         assertThat(course.get("divisionSection")).isEqualTo("기타");
     }
 
+    // PDF 폰트가 특정 글리프의 유니코드 매핑을 못 주면 PDFBox가 U+FFFD(REPLACEMENT CHARACTER, �)를
+    // 대신 반환해서 과목명에 섞여 들어온다(예: "취�창업스쿨(진로의사결정을통한목표설정"). 그 글자
+    // 자체를 복구할 방법은 없지만, 최소한 이상한 문자가 그대로 노출되진 않도록 제거한다(#242).
+    @Test
+    void 유니코드_매핑_실패_글리프는_과목명에서_제거된다() throws Exception {
+        Path pdfPath = Path.of("/Users/test/Desktop/광운대/3학년/동아리/sopt/growingpots/졸업관리표/김경민_졸업사정관리표_260623.pdf");
+        assumeTrue(Files.exists(pdfPath));
+
+        ParsedTranscript result = parser.parse(Files.readAllBytes(pdfPath));
+
+        String name = courseName(result.courses(), "CDG0268");
+        assertThat(name).doesNotContain("�");
+        assertThat(name).contains("창업스쿨");
+    }
+
     private String courseName(List<Map<String, String>> courses, String courseCode) {
         return courses.stream()
                 .filter(course -> courseCode.equals(course.get("courseCode")))
