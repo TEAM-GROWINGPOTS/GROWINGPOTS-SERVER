@@ -2,6 +2,7 @@ package com.growingpots.domain.planner.controller;
 
 import com.growingpots.domain.graduation.dto.response.GraduationResponse;
 import com.growingpots.domain.planner.dto.response.PlannerResponse;
+import com.growingpots.domain.planner.dto.response.PlannerSaveResponse;
 import com.growingpots.domain.planner.dto.response.PrerequisiteCheckResponse;
 import com.growingpots.domain.planner.dto.response.SelectVersionResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -266,8 +267,8 @@ public @interface PlannerApi {
                     - terms를 빈 배열([])로 보내면 기존에 저장된 학기를 전부 삭제한다(계획 전체 비우기).
 
                     **성공 응답 (200)**
-                    - data: 방금 저장된 플래너가 반영된 졸업현황 (GET /students/me/graduation?majorType=ALL&source=PLANNED 와 동일한 스키마).
-                    - 졸업현황 계산이 일시적으로 실패한 경우 data는 null이 될 수 있다. 이 경우 별도로 GET /students/me/graduation을 호출한다.
+                    - data.graduation: 방금 저장된 플래너가 반영된 졸업현황 (GET /students/me/graduation?majorType=ALL&source=PLANNED 와 동일한 스키마). 졸업현황 계산이 일시적으로 실패한 경우 null이 될 수 있다. 이 경우 별도로 GET /students/me/graduation을 호출한다.
+                    - data.hasDuplicateCourse: 이번 저장에서 선택 버전에 새로 추가된 과목 중 이미 이수완료(COMPLETED) 또는 수강중(IN_PROGRESS)인 과목이 하나라도 있으면 true. 이전부터 있던 재수강 과목은 제외(새로 추가된 과목 기준). 프론트는 이 값이 true일 때 재수강 안내 토스트를 노출한다.
 
                     **실패 응답 (4xx) — PLAN_004 · PLAN_001 · PLAN_002**
                     - success: false, code: 에러 코드.
@@ -291,65 +292,68 @@ public @interface PlannerApi {
     @ApiResponses({
             @ApiResponse(
                     responseCode = "200",
-                    description = "저장 성공 — 저장이 반영된 졸업현황 반환 (PLAN_200_1)",
+                    description = "저장 성공 — 저장이 반영된 졸업현황과 재수강 중복 여부 반환 (PLAN_200_1)",
                     content = @Content(
                             mediaType = "application/json",
-                            schema = @Schema(implementation = GraduationResponse.class),
+                            schema = @Schema(implementation = PlannerSaveResponse.class),
                             examples = @ExampleObject(value = """
                                     {
                                       "success": true,
                                       "code": "PLAN_200_1",
                                       "message": "플래너를 저장했습니다.",
                                       "data": {
-                                        "summary": {
-                                          "totalCredits": { "current": 98, "required": 130 },
-                                          "gpa": { "current": 3.85, "min": 2.0 },
-                                          "enrollmentStatus": "재학 중"
-                                        },
-                                        "graduatable": false,
-                                        "conditions": null,
-                                        "graduationRequired": null,
-                                        "sections": {
-                                          "majors": [
-                                            {
-                                              "majorName": "컴퓨터공학과",
-                                              "majorType": "MAIN",
+                                        "graduation": {
+                                          "summary": {
+                                            "totalCredits": { "current": 98, "required": 130 },
+                                            "gpa": { "current": 3.85, "min": 2.0 },
+                                            "enrollmentStatus": "재학 중"
+                                          },
+                                          "graduatable": false,
+                                          "conditions": null,
+                                          "graduationRequired": null,
+                                          "sections": {
+                                            "majors": [
+                                              {
+                                                "majorName": "컴퓨터공학과",
+                                                "majorType": "MAIN",
+                                                "conditions": [
+                                                  { "code": "MAJOR_BASIC",    "name": "전공 기초", "current": 6,  "required": 9,  "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
+                                                  { "code": "MAJOR_REQUIRED", "name": "전공 필수", "current": 30, "required": 30, "unit": "CREDITS", "satisfied": true,  "chartTarget": true  },
+                                                  { "code": "MAJOR_ELECTIVE", "name": "전공 선택", "current": 18, "required": 39, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
+                                                  { "code": "ENGLISH_COURSE", "name": "영어 강의",    "current": 2, "required": 3, "unit": "COURSES", "satisfied": false, "chartTarget": false },
+                                                  { "code": "SW_CERT_COURSE", "name": "SW 인증 강의", "current": 6, "required": 6, "unit": "CREDITS", "satisfied": true,  "chartTarget": false }
+                                                ],
+                                                "graduationRequired": null
+                                              }
+                                            ],
+                                            "ge": {
+                                              "majorName": null,
+                                              "majorType": null,
                                               "conditions": [
-                                                { "code": "MAJOR_BASIC",    "name": "전공 기초", "current": 6,  "required": 9,  "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
-                                                { "code": "MAJOR_REQUIRED", "name": "전공 필수", "current": 30, "required": 30, "unit": "CREDITS", "satisfied": true,  "chartTarget": true  },
-                                                { "code": "MAJOR_ELECTIVE", "name": "전공 선택", "current": 18, "required": 39, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
-                                                { "code": "ENGLISH_COURSE", "name": "영어 강의",    "current": 2, "required": 3, "unit": "COURSES", "satisfied": false, "chartTarget": false },
-                                                { "code": "SW_CERT_COURSE", "name": "SW 인증 강의", "current": 6, "required": 6, "unit": "CREDITS", "satisfied": true,  "chartTarget": false }
+                                                { "code": "REQUIRED_GE",    "name": "필수 교과",      "current": 14, "required": 17, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
+                                                { "code": "DISTRIBUTED_GE", "name": "배분 이수 교과", "current": 6,  "required": 9,  "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
+                                                { "code": "FREE_GE",        "name": "자유 이수 교과", "current": 5,  "required": 3,  "unit": "CREDITS", "satisfied": true,  "chartTarget": true  },
+                                                { "code": "SW_CERT_COURSE", "name": "SW 인증 강의",   "current": 6,  "required": 6,  "unit": "CREDITS", "satisfied": true,  "chartTarget": false }
+                                              ],
+                                              "graduationRequired": null
+                                            },
+                                            "others": {
+                                              "majorName": null,
+                                              "majorType": null,
+                                              "conditions": [
+                                                { "code": "GENERAL_ELECTIVE", "name": "기타", "current": 24, "required": null, "unit": "CREDITS", "satisfied": false, "chartTarget": false }
                                               ],
                                               "graduationRequired": null
                                             }
-                                          ],
-                                          "ge": {
-                                            "majorName": null,
-                                            "majorType": null,
-                                            "conditions": [
-                                              { "code": "REQUIRED_GE",    "name": "필수 교과",      "current": 14, "required": 17, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
-                                              { "code": "DISTRIBUTED_GE", "name": "배분 이수 교과", "current": 6,  "required": 9,  "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
-                                              { "code": "FREE_GE",        "name": "자유 이수 교과", "current": 5,  "required": 3,  "unit": "CREDITS", "satisfied": true,  "chartTarget": true  },
-                                              { "code": "SW_CERT_COURSE", "name": "SW 인증 강의",   "current": 6,  "required": 6,  "unit": "CREDITS", "satisfied": true,  "chartTarget": false }
-                                            ],
-                                            "graduationRequired": null
                                           },
-                                          "others": {
-                                            "majorName": null,
-                                            "majorType": null,
-                                            "conditions": [
-                                              { "code": "GENERAL_ELECTIVE", "name": "기타", "current": 24, "required": null, "unit": "CREDITS", "satisfied": false, "chartTarget": false }
-                                            ],
-                                            "graduationRequired": null
-                                          }
+                                          "certs": [
+                                            { "certType": "ENGLISH", "result": "PASS" },
+                                            { "certType": "SW",      "result": "FAIL" },
+                                            { "certType": "TOPIK",   "result": "NONE" },
+                                            { "certType": "THESIS",  "result": "NONE" }
+                                          ]
                                         },
-                                        "certs": [
-                                          { "certType": "ENGLISH", "result": "PASS" },
-                                          { "certType": "SW",      "result": "FAIL" },
-                                          { "certType": "TOPIK",   "result": "NONE" },
-                                          { "certType": "THESIS",  "result": "NONE" }
-                                        ]
+                                        "hasDuplicateCourse": false
                                       }
                                     }
                                     """)

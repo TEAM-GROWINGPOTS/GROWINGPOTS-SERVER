@@ -181,7 +181,9 @@ public class PlannerService {
             List<PlannerVersionItem> items,
             Map<Long, RetakeDisplay> retakeDisplayByItemId
     ) {
-        int totalCredit = items.stream().mapToInt(PlannerVersionItem::getCredit).sum();
+        int totalCredit = items.stream()
+                .filter(item -> retakeDisplayByItemId.get(item.getId()) != RetakeDisplay.DIMMED)
+                .mapToInt(PlannerVersionItem::getCredit).sum();
         return PlannerResponse.Version.builder()
                 .plannerTermVersionId(version.getId())
                 .versionNo(version.getVersionNo())
@@ -313,7 +315,7 @@ public class PlannerService {
     }
 
     @Transactional
-    public void savePlanner(Long memberId, PlannerSaveRequest request) {
+    public boolean savePlanner(Long memberId, PlannerSaveRequest request) {
         StudentProfile profile = studentProfileRepository.findWithDetailsByMemberId(memberId)
                 .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
 
@@ -323,9 +325,41 @@ public class PlannerService {
 
         Map<Long, Course> courseMap = loadCourseMap(request, profile);
 
+        Set<Long> beforeCourseIds = plannerVersionItemRepository.findSelectedByStudentProfile(profile)
+                .stream()
+                .map(i -> i.getCourse().getId())
+                .collect(Collectors.toSet());
+
         deleteExistingData(simulation.getId());
 
         buildAndSave(simulation, request, courseMap, profile);
+
+        return computeHasDuplicateCourse(profile, request, beforeCourseIds);
+    }
+
+    private boolean computeHasDuplicateCourse(
+            StudentProfile profile,
+            PlannerSaveRequest request,
+            Set<Long> beforeCourseIds
+    ) {
+        Set<Long> requestSelectedCourseIds = request.terms().stream()
+                .flatMap(t -> t.versions().stream())
+                .filter(v -> Boolean.TRUE.equals(v.isSelected()))
+                .filter(v -> v.items() != null)
+                .flatMap(v -> v.items().stream())
+                .map(PlannerSaveRequest.ItemRequest::courseId)
+                .collect(Collectors.toSet());
+
+        Set<Long> newlyAdded = new HashSet<>(requestSelectedCourseIds);
+        newlyAdded.removeAll(beforeCourseIds);
+
+        if (newlyAdded.isEmpty()) return false;
+
+        Set<Long> alreadyTaken = new HashSet<>(
+                studentCourseRepository.findCourseIdsByStudentProfileAndStatusIn(
+                        profile, List.of(CourseStatus.COMPLETED, CourseStatus.IN_PROGRESS)));
+
+        return newlyAdded.stream().anyMatch(alreadyTaken::contains);
     }
 
     // 학생당 시뮬레이션은 1개뿐이라, id 없이 저장 요청이 오면 새로 만들기 전에 기존 걸 먼저 찾는다
