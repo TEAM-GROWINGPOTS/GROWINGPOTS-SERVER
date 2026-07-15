@@ -257,6 +257,7 @@ public class StudentProfileService {
         boolean departmentUnknown = departmentName == null;
         return StudentCourseListResponse.CourseInfo.builder()
                 .studentCourseId(course.getId())
+                .courseId(course.getCourse() != null ? course.getCourse().getId() : null)
                 .courseCode(course.getRawCourseCode())
                 .name(course.getRawCourseName())
                 .departmentName(departmentName)
