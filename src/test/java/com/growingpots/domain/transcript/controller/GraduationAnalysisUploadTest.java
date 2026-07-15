@@ -120,7 +120,7 @@ class GraduationAnalysisUploadTest {
         assertThat(major.getMajorType()).isEqualTo(MajorType.MAIN);
 
         GraduationAnalysisSummary summary = graduationAnalysisSummaryRepository.findByStudentMajor(major).orElseThrow();
-        assertThat(summary.getTotalCreditCurrent()).isEqualTo(44);
+        assertThat(summary.getTotalCreditCurrent()).isEqualTo(62); // "44(62)": 44=완료, 62=완료+수강중 합계
         assertThat(summary.getTotalCreditRequired()).isEqualTo(120);
         assertThat(summary.getGpaCurrent()).isEqualByComparingTo(new BigDecimal("2.788"));
         assertThat(summary.getMajorBasicCurrent()).isEqualTo(6);

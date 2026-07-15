@@ -101,13 +101,14 @@ public class GraduationService {
 
         List<StudentMajor> majors = studentMajorRepository.findWithDepartmentByStudentProfile(profile);
 
-        // PLANNED: 플래너 선택 버전의 계획 과목 중 이미 이수/수강 중인 과목을 제외한 신규 항목만 사용
-        // 플래너가 없거나 신규 항목이 없으면 COMPLETED와 동일한 응답
+        // PLANNED: 플래너 선택 버전의 계획 과목 중 이미 이수/수강 중인 과목을 제외한 신규 항목만 사용.
+        // 플래너가 없거나 신규 항목이 없으면 COMPLETED와 동일한 응답.
+        // PDF 카테고리 필드(전공/교양 등)는 이미 수강중 학점을 포함한다. IN_PROGRESS를 delta에
+        // 추가하면 이중 계산이 되므로 alreadyCounted에 넣어 제외하고 신규 계획 과목만 delta로 더한다.
         List<PlannerVersionItem> allPlannedItems = List.of();
         if (source == GraduationSource.PLANNED) {
-            List<Long> alreadyCountedIds = studentCourseRepository.findCourseIdsByStudentProfileAndStatusIn(
-                    profile, List.of(CourseStatus.COMPLETED, CourseStatus.IN_PROGRESS));
-            Set<Long> alreadyCounted = new HashSet<>(alreadyCountedIds);
+            Set<Long> alreadyCounted = new HashSet<>(studentCourseRepository.findCourseIdsByStudentProfileAndStatusIn(
+                    profile, List.of(CourseStatus.COMPLETED, CourseStatus.IN_PROGRESS)));
             allPlannedItems = plannerVersionItemRepository.findSelectedByStudentProfile(profile).stream()
                     .filter(i -> !alreadyCounted.contains(i.getCourse().getId()))
                     .toList();
@@ -373,7 +374,7 @@ public class GraduationService {
                 .build();
     }
 
-    // PLANNED 모드용: 스냅샷 기반 summary에 계획 과목의 학점 delta를 더해 새 in-memory summary를 반환한다.
+    // PLANNED 모드용: 스냅샷 기반 summary에 신규 계획 과목의 학점 delta를 더해 새 in-memory summary를 반환한다.
     // majorDept: 전공 학점 귀속 판단 기준 (본전공 또는 복수전공). null이면 전공 delta는 0.
     // GPA는 미래 예측 불가이므로 원본 값 유지.
     private GraduationAnalysisSummary buildAdjustedSummary(
