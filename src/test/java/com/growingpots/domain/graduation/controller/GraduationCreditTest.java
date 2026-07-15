@@ -50,9 +50,9 @@ import org.springframework.test.web.servlet.MockMvc;
 
 // 총학점·카테고리별 학점 계산 정합성 검증.
 // 핵심 불변식:
-//   1. PDF 총학점은 이미 IN_PROGRESS를 포함한 값(extractTotalCredit 결과)이 스냅샷에 저장된다.
-//   2. PLANNED 모드에서 delta는 신규 계획 과목(COMPLETED·IN_PROGRESS 아닌 것)에서만 온다.
-//      → IN_PROGRESS 과목이 플래너에도 들어 있어도 이중 계산되지 않는다.
+//   1. PDF 총학점 스냅샷은 그대로 COMPLETED 기준 기저값이다.
+//   2. PLANNED 모드에서 delta는 플래너에 담긴 모든 과목(재수강·IN_PROGRESS 포함)에서 온다.
+//      → 재수강 계획 과목의 학점도 delta에 합산된다(#203 기획 확정).
 @ActiveProfiles("test")
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -130,19 +130,18 @@ class GraduationCreditTest {
     // 테스트 2: PLANNED 모드 - 신규 계획 과목만 총학점 delta로 더해진다
     // ────────────────────────────────────────────────────────────────────────
 
-    // IN_PROGRESS 과목이 플래너에도 담겨 있어도 `alreadyCounted`로 걸러져 delta에서 제외된다.
-    // 오직 아직 수강 이력이 없는 신규 계획 과목만 총학점에 더해진다.
+    // 플래너에 담긴 모든 과목(IN_PROGRESS 포함)이 delta로 더해진다.
     //
     // 세팅:
-    //   - PDF 스냅샷 총학점: 62 (IN_PROGRESS 3학점 포함)
-    //   - course A (IN_PROGRESS, 3학점) → alreadyCounted에 포함 → 플래너 item이어도 delta 제외
+    //   - PDF 스냅샷 총학점: 62
+    //   - course A (IN_PROGRESS, 3학점) → 플래너에 담겨 있음 → delta +3
     //   - course B (수강 이력 없음, 3학점) → 신규 계획 → delta +3
     //
     // 기대:
     //   - COMPLETED: 62
-    //   - PLANNED:   62 + 3 = 65  (course A가 이중으로 더해지면 68이 되는데 그래서는 안 됨)
+    //   - PLANNED:   62 + 3 + 3 = 68
     @Test
-    void PLANNED_총학점은_스냅샷에_신규계획과목만_더해지고_IN_PROGRESS는_이중계산되지_않는다() throws Exception {
+    void PLANNED_총학점은_스냅샷에_플래너_전체_과목이_더해진다() throws Exception {
         School school = schoolRepository.save(School.builder().name("경희대학교-8002").build());
         Department dept = departmentRepository.save(Department.builder()
                 .school(school).college("공과대학").name("컴퓨터공학과-8002").build());
@@ -202,33 +201,31 @@ class GraduationCreditTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.summary.totalCredits.current").value(62));
 
-        // PLANNED: course A는 alreadyCounted로 걸러짐 → delta = course B의 3학점만
-        // 62 + 3 = 65. course A가 이중 반영되면 68이 되므로, 65인지 검증이 핵심.
+        // PLANNED: course A(IN_PROGRESS)와 course B(신규) 둘 다 delta → 62 + 3 + 3 = 68
         mockMvc.perform(get("/api/v1/students/me/graduation")
                         .param("studentMajorId", String.valueOf(major.getId()))
                         .param("source", "PLANNED")
                         .with(authentication(authOf(member.getId()))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.summary.totalCredits.current").value(65));
+                .andExpect(jsonPath("$.data.summary.totalCredits.current").value(68));
     }
 
     // ────────────────────────────────────────────────────────────────────────
     // 테스트 3: PLANNED 모드 - 카테고리별 학점 delta도 신규 계획 과목에서만 온다
     // ────────────────────────────────────────────────────────────────────────
 
-    // IN_PROGRESS 과목의 카테고리 학점은 PDF 스냅샷에 이미 반영됐으므로, PLANNED delta에서도
-    // IN_PROGRESS는 건너뛰고 신규 계획 과목만 더해야 한다.
+    // 플래너에 담긴 모든 과목(IN_PROGRESS 포함)이 카테고리별 delta로 더해진다.
     //
     // 세팅:
-    //   - PDF 스냅샷 전공필수(MAJOR_REQUIRED) = 20 (IN_PROGRESS 3학점 포함)
-    //   - course A (IN_PROGRESS, MAJOR_REQUIRED, 3학점) → 스냅샷 20에 이미 포함
-    //   - course B (신규 계획, MAJOR_REQUIRED, 3학점)
+    //   - PDF 스냅샷 전공필수(MAJOR_REQUIRED) = 20
+    //   - course A (IN_PROGRESS, MAJOR_REQUIRED, 3학점) → 플래너에 담겨 있음 → delta +3
+    //   - course B (신규 계획, MAJOR_REQUIRED, 3학점) → delta +3
     //
     // 기대:
     //   - COMPLETED: MAJOR_REQUIRED.current = 20
-    //   - PLANNED:   MAJOR_REQUIRED.current = 23 (course A가 이중 반영되면 26)
+    //   - PLANNED:   MAJOR_REQUIRED.current = 26 (20 + 3 + 3)
     @Test
-    void PLANNED_카테고리별_학점은_신규계획과목만_delta로_반영된다() throws Exception {
+    void PLANNED_카테고리별_학점은_플래너_전체_과목이_delta로_반영된다() throws Exception {
         School school = schoolRepository.save(School.builder().name("경희대학교-8003").build());
         Department dept = departmentRepository.save(Department.builder()
                 .school(school).college("공과대학").name("컴퓨터공학과-8003").build());
@@ -289,14 +286,13 @@ class GraduationCreditTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.conditions[?(@.code=='MAJOR_REQUIRED')].current").value(20));
 
-        // PLANNED: course A는 걸러짐 → delta = course B(3학점)만
-        // 20 + 3 = 23. course A가 이중 반영되면 26이 되므로, 23인지 검증이 핵심.
+        // PLANNED: course A(IN_PROGRESS)와 course B(신규) 둘 다 delta → 20 + 3 + 3 = 26
         mockMvc.perform(get("/api/v1/students/me/graduation")
                         .param("studentMajorId", String.valueOf(major.getId()))
                         .param("source", "PLANNED")
                         .with(authentication(authOf(member.getId()))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.conditions[?(@.code=='MAJOR_REQUIRED')].current").value(23));
+                .andExpect(jsonPath("$.data.conditions[?(@.code=='MAJOR_REQUIRED')].current").value(26));
     }
 
     // ────────────────────────────────────────────────────────────────────────

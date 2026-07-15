@@ -11,7 +11,9 @@ import java.util.List;
 @Builder
 public class StudentCourseListResponse {
 
-    @Schema(description = "이수 과목 목록")
+    @Schema(description = "이수 과목 목록. 같은 이수구분끼리 연속으로 모이도록 이수구분이 아직 없는 과목이 맨 "
+            + "앞에 모이고, 그 뒤로 전공기초→전공필수→전공선택→필수교과→배분이수교과→자유이수교과→일반선택 "
+            + "순으로 정렬됨. 같은 이수구분 안에서는 원래 순서(파싱 순서, 직접 추가한 과목은 맨 앞)가 유지됨.")
     private final List<CourseInfo> courses;
 
     @Schema(description = "이수구분 선택 옵션 목록. 학교마다 보유한 이수구분만 포함되며 "

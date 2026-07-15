@@ -404,6 +404,54 @@ class StudentCourseListTest {
         throw new AssertionError("과목을 찾을 수 없음: " + courseCode);
     }
 
+    // courses는 flat 배열 그대로지만, 같은 이수구분끼리 연속으로 모이도록 이수구분 미지정 과목이 맨 앞에
+    // 오고 그 뒤로 전공기초→전공필수→...→일반선택 순으로 재정렬된다(#194). 미지정을 맨 앞에 두는 이유는
+    // 검수 화면에서 직접 추가한 과목이 보통 이수구분을 아직 안 고른 채로 들어오기 때문 — 미지정을 맨
+    // 뒤로 두면 "새 과목이 맨 위에 온다"는 요구사항과 어긋난다. 같은 이수구분 안에서는 원래 저장 순서가
+    // 유지된다(안정 정렬).
+    @Test
+    void courses는_flat_배열이지만_이수구분끼리_연속으로_모이도록_정렬된다() throws Exception {
+        StudentProfile studentProfile = onboardedStudent("7007");
+        School school = studentProfile.getSchool();
+        Department dept = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과-7007").build());
+        Division freeGe = division(school, "02", DivisionCategory.FREE_GE);
+        Division majorRequired = division(school, "04", DivisionCategory.MAJOR_REQUIRED);
+        Division majorBasic = division(school, "11", DivisionCategory.MAJOR_BASIC);
+
+        // 일부러 카테고리 순서와 반대로(자유이수 → 전공필수 → 전공기초 → 미지정) 저장해도
+        // 응답은 항상 미지정 → 전공기초 → 전공필수 → 자유이수 순으로 나와야 한다.
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(studentProfile).appliedDepartment(dept).appliedDivision(freeGe)
+                .rawCourseCode("GEE1001").rawCourseName("자유이수과목").credit(3)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).build());
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(studentProfile).appliedDepartment(dept).appliedDivision(majorRequired)
+                .rawCourseCode("CS201").rawCourseName("전공필수과목").credit(3)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).build());
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(studentProfile).appliedDepartment(dept).appliedDivision(majorBasic)
+                .rawCourseCode("CS101").rawCourseName("전공기초과목").credit(3)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).build());
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(studentProfile)
+                .rawCourseCode("ETC001").rawCourseName("미지정과목").credit(3)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).build());
+
+        mockMvc.perform(get("/api/v1/students/me/courses")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.courses.length()").value(4))
+                .andExpect(jsonPath("$.data.courses[0].courseCode").value("ETC001"))
+                .andExpect(jsonPath("$.data.courses[0].appliedDivisionName").doesNotExist())
+                .andExpect(jsonPath("$.data.courses[1].courseCode").value("CS101"))
+                .andExpect(jsonPath("$.data.courses[1].appliedDivisionName").value("전공기초"))
+                .andExpect(jsonPath("$.data.courses[2].courseCode").value("CS201"))
+                .andExpect(jsonPath("$.data.courses[2].appliedDivisionName").value("전공필수"))
+                .andExpect(jsonPath("$.data.courses[3].courseCode").value("GEE1001"))
+                .andExpect(jsonPath("$.data.courses[3].appliedDivisionName").value("자유이수교과"));
+    }
+
     @Test
     void 온보딩_전이면_404_USER_003을_반환한다() throws Exception {
         Member member = memberRepository.save(Member.builder()

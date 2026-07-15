@@ -156,15 +156,19 @@ public class TranscriptPersister {
             StudentProfile studentProfile, List<Map<String, String>> courses, Map<String, Course> coursesByCode,
             Map<DivisionCategory, Division> divisionsByCategory, Map<String, Division> divisionsByCode,
             LocalDate now) {
-        return courses.stream()
-                .map(course -> toStudentCourse(studentProfile, course, coursesByCode, divisionsByCategory, divisionsByCode, now))
-                .toList();
+        // displayOrder는 PDF에 파싱된 순서 그대로 0,1,2...로 매겨 검수 화면 기본 정렬에 쓴다(#194).
+        List<StudentCourse> result = new ArrayList<>();
+        for (int i = 0; i < courses.size(); i++) {
+            result.add(toStudentCourse(
+                    studentProfile, courses.get(i), coursesByCode, divisionsByCategory, divisionsByCode, now, i));
+        }
+        return result;
     }
 
     private StudentCourse toStudentCourse(
             StudentProfile studentProfile, Map<String, String> course, Map<String, Course> coursesByCode,
             Map<DivisionCategory, Division> divisionsByCategory, Map<String, Division> divisionsByCode,
-            LocalDate now) {
+            LocalDate now, int displayOrder) {
         String section = course.get("section");
         // 금학기수강학점 줄이 일반 목록에서 이어받은 실제 소속 section(PdfTranscriptParser 참고).
         // 없으면(일반 목록에 없던 순수 진행중 과목 등) section 자체를 그대로 쓴다.
@@ -201,6 +205,7 @@ public class TranscriptPersister {
                 .isRetake(RETAKE_SECTION.equals(section))
                 .status(inProgress ? CourseStatus.IN_PROGRESS : CourseStatus.COMPLETED)
                 .source(RecordSource.PDF)
+                .displayOrder(displayOrder)
                 .build();
     }
 

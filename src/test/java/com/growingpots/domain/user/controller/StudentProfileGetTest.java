@@ -77,7 +77,7 @@ class StudentProfileGetTest {
                 .andExpect(jsonPath("$.data.studentNo").value("2023123456"))
                 .andExpect(jsonPath("$.data.gradeLevel").value(3))
                 .andExpect(jsonPath("$.data.semester").value(1))
-                .andExpect(jsonPath("$.data.enrollmentStatus").value("재학"))
+                .andExpect(jsonPath("$.data.enrollmentStatus").value("재학 중"))
                 .andExpect(jsonPath("$.data.admissionYear").value(2023));
     }
 }
