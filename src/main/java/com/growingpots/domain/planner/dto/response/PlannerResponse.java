@@ -1,6 +1,5 @@
 package com.growingpots.domain.planner.dto.response;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
@@ -198,10 +197,5 @@ public class PlannerResponse {
         @Schema(description = "SW 인증 강의 여부")
         @Getter(onMethod_ = @__(@JsonProperty("isSw")))
         private final boolean isSw;
-
-        @JsonInclude(JsonInclude.Include.NON_NULL)
-        @Schema(description = "재수강 표시 유형. null = 일반 과목(직렬화 생략), BADGE = 재수강 최신학기, DIMMED = 재수강 이전학기",
-                nullable = true, allowableValues = {"BADGE", "DIMMED"})
-        private final RetakeDisplay retakeDisplay;
     }
 }
