@@ -2,6 +2,7 @@ package com.growingpots.domain.university.repository;
 
 import com.growingpots.domain.university.entity.Course;
 import com.growingpots.domain.university.entity.Department;
+import com.growingpots.domain.university.entity.Division;
 import com.growingpots.domain.university.entity.School;
 import com.growingpots.domain.university.entity.enums.DivisionCategory;
 import java.util.List;
@@ -23,4 +24,9 @@ public interface CourseRepository extends JpaRepository<Course, Long>, JpaSpecif
     List<Course> findActiveByDepartmentAndDivisionCategory(
             @Param("department") Department department,
             @Param("category") DivisionCategory category);
+
+    // 필수교과(REQUIRED_GE)처럼 학과가 아닌 이수구분(Division) 단위로 필수 과목을 조회할 때 사용.
+    // 학교 공통 교양은 offeringDepartment가 학생 소속 학과와 일치하지 않아 위 메서드로 조회 불가.
+    @Query("SELECT c FROM Course c WHERE c.defaultDivision = :division AND c.isActive = true")
+    List<Course> findActiveByDefaultDivision(@Param("division") Division division);
 }
