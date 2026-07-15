@@ -222,7 +222,8 @@ public class StudentProfileService {
                 throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
             }
             existing.applyEdit(course, item.rawCourseName(), department, item.credit(), division,
-                    item.takenYear(), item.takenSemester());
+                    item.takenYear() != null ? item.takenYear() : existing.getTakenYear(),
+                    item.takenSemester() != null ? item.takenSemester() : existing.getTakenSemester());
             keepIds.add(existing.getId());
         }
 
