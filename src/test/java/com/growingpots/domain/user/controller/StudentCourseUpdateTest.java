@@ -401,6 +401,72 @@ class StudentCourseUpdateTest {
                 .andExpect(jsonPath("$.data.courses[0].name").value("컴퓨터개론(수정)"));
     }
 
+    // courseId를 null로 보내도(프론트가 아직 못 돌려주는 과도기 등) 기존 매칭이 지워지면 안 된다(#214).
+    // courseId는 화면에 노출되는 값이 아니라 유저가 "명시적으로 매칭 해제"할 UI가 없어서, null은
+    // "안 건드림"으로 해석하는 방어 로직이 서버에 있다 - departmentId/appliedDivisionId(null이면 진짜로
+    // 지움)와는 의도적으로 다른 동작.
+    @Test
+    void courseId를_null로_보내도_기존_과목매칭이_보존된다() throws Exception {
+        StudentProfile studentProfile = onboardedStudent("3610");
+        School school = studentProfile.getSchool();
+        Department offeringDepartment = departmentRepository.save(Department.builder()
+                .school(school)
+                .college("공과대학")
+                .name("컴퓨터공학과-3610")
+                .build());
+        Course course = courseRepository.save(Course.builder()
+                .school(school)
+                .courseCode("CS102")
+                .name("자료구조")
+                .credit(3)
+                .offeringDepartment(offeringDepartment)
+                .build());
+        StudentCourse existing = studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(studentProfile)
+                .course(course)
+                .rawCourseCode("CS102")
+                .rawCourseName("자료구조")
+                .credit(3)
+                .status(CourseStatus.COMPLETED)
+                .source(RecordSource.PDF)
+                .build());
+
+        // 옛날 프론트처럼 courseId를 항상 null로 보내는 PUT (departmentId는 정상 echo).
+        String requestBody = """
+                {
+                  "courses": [
+                    {
+                      "studentCourseId": %d,
+                      "courseId": null,
+                      "rawCourseName": "자료구조(수정)",
+                      "departmentId": %d,
+                      "credit": 3,
+                      "appliedDivisionId": null,
+                      "takenYear": null,
+                      "takenSemester": null
+                    }
+                  ]
+                }
+                """.formatted(existing.getId(), offeringDepartment.getId());
+
+        mockMvc.perform(put("/api/v1/students/me/courses")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId())))
+                        .contentType("application/json")
+                        .content(requestBody))
+                .andExpect(status().isOk());
+
+        StudentCourse afterUpdate = studentCourseRepository.findById(existing.getId()).orElseThrow();
+        assertThat(afterUpdate.getCourse()).isNotNull();
+        assertThat(afterUpdate.getCourse().getId()).isEqualTo(course.getId());
+        assertThat(afterUpdate.getRawCourseName()).isEqualTo("자료구조(수정)");
+
+        mockMvc.perform(get("/api/v1/students/me/courses")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.courses[0].courseId").value(course.getId()))
+                .andExpect(jsonPath("$.data.courses[0].departmentName").value("컴퓨터공학과-3610"));
+    }
+
     // 검수 화면에서 새로 추가한 과목(studentCourseId 없음)은 기존 과목들보다 먼저(위에) 노출돼야 한다(#194).
     @Test
     void 새로_추가한_과목은_기존_과목보다_displayOrder가_작아서_맨_위에_온다() throws Exception {
