@@ -2,6 +2,7 @@ package com.growingpots.domain.user.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -318,6 +319,140 @@ class StudentCourseUpdateTest {
                         .content(SINGLE_MANUAL_COURSE_BODY))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("CMN_005"));
+    }
+
+    // 검수 화면에서 새로 추가한 과목(studentCourseId 없음)은 기존 과목들보다 먼저(위에) 노출돼야 한다(#194).
+    @Test
+    void 새로_추가한_과목은_기존_과목보다_displayOrder가_작아서_맨_위에_온다() throws Exception {
+        StudentProfile studentProfile = onboardedStudent("3607");
+        StudentCourse existing1 = studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(studentProfile)
+                .rawCourseCode("OLD001")
+                .rawCourseName("기존과목1")
+                .credit(3)
+                .status(CourseStatus.COMPLETED)
+                .source(RecordSource.PDF)
+                .build());
+        StudentCourse existing2 = studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(studentProfile)
+                .rawCourseCode("OLD002")
+                .rawCourseName("기존과목2")
+                .credit(3)
+                .status(CourseStatus.COMPLETED)
+                .source(RecordSource.PDF)
+                .build());
+
+        String requestBody = """
+                {
+                  "courses": [
+                    {
+                      "studentCourseId": %d,
+                      "courseId": null,
+                      "rawCourseName": "기존과목1",
+                      "departmentId": null,
+                      "credit": 3,
+                      "appliedDivisionId": null,
+                      "takenYear": null,
+                      "takenSemester": null
+                    },
+                    {
+                      "studentCourseId": %d,
+                      "courseId": null,
+                      "rawCourseName": "기존과목2",
+                      "departmentId": null,
+                      "credit": 3,
+                      "appliedDivisionId": null,
+                      "takenYear": null,
+                      "takenSemester": null
+                    },
+                    {
+                      "studentCourseId": null,
+                      "courseId": null,
+                      "rawCourseName": "새로추가한과목",
+                      "departmentId": null,
+                      "credit": 2,
+                      "appliedDivisionId": null,
+                      "takenYear": 2024,
+                      "takenSemester": "FIRST"
+                    }
+                  ]
+                }
+                """.formatted(existing1.getId(), existing2.getId());
+
+        mockMvc.perform(put("/api/v1/students/me/courses")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId())))
+                        .contentType("application/json")
+                        .content(requestBody))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/students/me/courses")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.courses.length()").value(3))
+                .andExpect(jsonPath("$.data.courses[0].name").value("새로추가한과목"));
+    }
+
+    // 기존 과목엔 이수구분이 있고 새로 추가한 과목엔 없는 경우도 새 과목이 맨 위에 와야 한다(#194).
+    // 이수구분 재정렬(sortByDivision)이 미지정 과목을 맨 뒤로 보내버리면, 이수구분이 이미 있는 기존
+    // 과목들에 밀려 새 과목이 오히려 맨 아래로 가는 회귀가 생길 수 있어 이를 방지하는 테스트.
+    @Test
+    void 기존_과목에_이수구분이_있어도_이수구분_없는_새_과목이_맨_위에_온다() throws Exception {
+        StudentProfile studentProfile = onboardedStudent("3608");
+        School school = studentProfile.getSchool();
+        Division majorRequired = divisionRepository.save(Division.builder()
+                .school(school)
+                .code("04")
+                .category(DivisionCategory.MAJOR_REQUIRED)
+                .build());
+        StudentCourse existing = studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(studentProfile)
+                .appliedDivision(majorRequired)
+                .rawCourseCode("OLD003")
+                .rawCourseName("기존과목")
+                .credit(3)
+                .status(CourseStatus.COMPLETED)
+                .source(RecordSource.PDF)
+                .build());
+
+        String requestBody = """
+                {
+                  "courses": [
+                    {
+                      "studentCourseId": %d,
+                      "courseId": null,
+                      "rawCourseName": "기존과목",
+                      "departmentId": null,
+                      "credit": 3,
+                      "appliedDivisionId": %d,
+                      "takenYear": null,
+                      "takenSemester": null
+                    },
+                    {
+                      "studentCourseId": null,
+                      "courseId": null,
+                      "rawCourseName": "새로추가한과목",
+                      "departmentId": null,
+                      "credit": 2,
+                      "appliedDivisionId": null,
+                      "takenYear": 2024,
+                      "takenSemester": "FIRST"
+                    }
+                  ]
+                }
+                """.formatted(existing.getId(), majorRequired.getId());
+
+        mockMvc.perform(put("/api/v1/students/me/courses")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId())))
+                        .contentType("application/json")
+                        .content(requestBody))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/students/me/courses")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.courses.length()").value(2))
+                .andExpect(jsonPath("$.data.courses[0].name").value("새로추가한과목"))
+                .andExpect(jsonPath("$.data.courses[1].name").value("기존과목"));
     }
 
     private static final String SINGLE_MANUAL_COURSE_BODY = """

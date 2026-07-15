@@ -18,8 +18,9 @@ public interface StudentCourseRepository extends JpaRepository<StudentCourse, Lo
 
     List<StudentCourse> findByStudentProfile(StudentProfile studentProfile);
 
+    // displayOrder 오름차순 - 검수 화면 노출 순서(#194). 같은 값이면 id로 안정적인 타이브레이크.
     @Query("SELECT sc FROM StudentCourse sc LEFT JOIN FETCH sc.course c LEFT JOIN FETCH c.offeringDepartment "
-            + "WHERE sc.studentProfile = :studentProfile")
+            + "WHERE sc.studentProfile = :studentProfile ORDER BY sc.displayOrder ASC, sc.id ASC")
     List<StudentCourse> findWithCourseByStudentProfile(@Param("studentProfile") StudentProfile studentProfile);
 
     @Query("SELECT sc FROM StudentCourse sc LEFT JOIN FETCH sc.course c LEFT JOIN FETCH c.offeringDepartment "

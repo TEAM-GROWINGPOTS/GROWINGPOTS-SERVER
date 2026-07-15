@@ -76,6 +76,12 @@ public class StudentCourse extends BaseTimeEntity {
     @Column(nullable = false)
     private RecordSource source;
 
+    // 검수 화면 목록 정렬 순서. 값이 작을수록 먼저(위에) 노출된다. PDF 파싱 시 파싱된 순서대로
+    // 0,1,2...가 매겨지고, 검수 화면에서 사용자가 직접 추가한 과목은 그 시점 기존 최솟값보다
+    // 작은 값을 받아 맨 위로 온다(#194). 기존 row에 컬럼 추가하는 마이그레이션이라 기본값 0.
+    @Column(nullable = false, columnDefinition = "INT DEFAULT 0")
+    private int displayOrder;
+
     @Builder
     private StudentCourse(
             StudentProfile studentProfile,
@@ -89,7 +95,8 @@ public class StudentCourse extends BaseTimeEntity {
             Semester takenSemester,
             boolean isRetake,
             CourseStatus status,
-            RecordSource source
+            RecordSource source,
+            int displayOrder
     ) {
         this.studentProfile = studentProfile;
         this.course = course;
@@ -103,6 +110,7 @@ public class StudentCourse extends BaseTimeEntity {
         this.isRetake = isRetake;
         this.status = status;
         this.source = source;
+        this.displayOrder = displayOrder;
     }
 
     // 이수 과목 검수/저장 화면(PUT)에서 사용자가 확정한 값으로 덮어쓴다.

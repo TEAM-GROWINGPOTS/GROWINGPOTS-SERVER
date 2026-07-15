@@ -222,6 +222,32 @@ class TranscriptControllerTest {
         assertThat(winter.getTakenYear()).isEqualTo(2024);
     }
 
+    // PDF 파싱 순서 그대로 displayOrder가 0,1,2...로 매겨져야 검수 화면에서 원본 순서가 보존된다(#194).
+    @Test
+    void 파싱된_과목은_파싱_순서대로_displayOrder가_매겨진다() throws Exception {
+        StudentProfile studentProfile = onboardedStudent("1006");
+        Map<String, String> first = Map.of(
+                "section", "자유이수", "courseCode", "AAA001", "courseName", "가과목", "credits", "3", "semester", "2023/1");
+        Map<String, String> second = Map.of(
+                "section", "자유이수", "courseCode", "BBB002", "courseName", "나과목", "credits", "3", "semester", "2023/1");
+        Map<String, String> third = Map.of(
+                "section", "자유이수", "courseCode", "CCC003", "courseName", "다과목", "credits", "3", "semester", "2023/1");
+        when(pdfTranscriptParser.parse(any()))
+                .thenReturn(new ParsedTranscript(Map.of(), Map.of(), List.of(), List.of(), List.of(first, second, third)));
+
+        mockMvc.perform(multipart("/api/v1/diagnosis/upload")
+                        .file(new MockMultipartFile("file", "transcript.pdf", "application/pdf", PDF_BYTES))
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isCreated());
+
+        List<StudentCourse> courses = coursesOf(studentProfile);
+        StudentCourse a = courses.stream().filter(c -> "AAA001".equals(c.getRawCourseCode())).findFirst().orElseThrow();
+        StudentCourse b = courses.stream().filter(c -> "BBB002".equals(c.getRawCourseCode())).findFirst().orElseThrow();
+        StudentCourse c = courses.stream().filter(cc -> "CCC003".equals(cc.getRawCourseCode())).findFirst().orElseThrow();
+        assertThat(a.getDisplayOrder()).isLessThan(b.getDisplayOrder());
+        assertThat(b.getDisplayOrder()).isLessThan(c.getDisplayOrder());
+    }
+
     @Test
     void 재업로드하면_기존_PDF_데이터는_삭제되고_수동입력_데이터는_보존된다() throws Exception {
         StudentProfile studentProfile = onboardedStudent("2002");
