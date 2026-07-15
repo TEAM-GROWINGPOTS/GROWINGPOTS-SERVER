@@ -140,6 +140,7 @@ public class StudentProfileService {
         StudentProfile profile = studentProfileRepository.findWithDetailsByMemberId(memberId)
                 .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
 
+        // displayOrder 오름차순으로 이미 정렬돼 나온다(검수 화면 노출 순서, #194).
         List<StudentCourse> courses = studentCourseRepository.findWithCourseByStudentProfile(profile);
 
         // 매칭되는 개설학과가 없는 교양 과목에 쓸 학교별 대체 학과. 없으면 "교양" 표시값으로 폴백한다.
@@ -147,13 +148,15 @@ public class StudentProfileService {
                 .findBySchoolIdAndName(profile.getSchool().getId(), GENERAL_EDUCATION_FALLBACK_DEPARTMENT_NAME)
                 .orElse(null);
 
-        List<StudentCourseListResponse.CourseInfo> courseInfos = courses.stream()
-                .map(course -> toCourseInfo(course, geFallbackDepartment))
+        List<Division> divisions = divisionRepository.findBySchool(profile.getSchool()).stream()
+                .sorted(Comparator.comparingInt(d -> d.getCategory().ordinal()))
                 .toList();
 
-        List<Division> divisions = divisionRepository.findBySchool(profile.getSchool());
+        List<StudentCourseListResponse.CourseInfo> courseInfos = sortByDivision(
+                courses.stream().map(course -> toCourseInfo(course, geFallbackDepartment)).toList(),
+                divisions);
+
         List<StudentCourseListResponse.DivisionInfo> divisionInfos = divisions.stream()
-                .sorted(Comparator.comparingInt(d -> d.getCategory().ordinal()))
                 .map(d -> StudentCourseListResponse.DivisionInfo.builder()
                         .id(d.getId())
                         .name(d.getCategory().getDisplayName())
@@ -164,6 +167,25 @@ public class StudentProfileService {
                 .courses(courseInfos)
                 .availableDivisions(divisionInfos)
                 .build();
+    }
+
+    // 같은 이수구분끼리 연속으로 모이도록 전공기초→전공필수→...→일반선택 순으로 재정렬하고, 이수구분이
+    // 없는 과목은 맨 앞에 모은다(#194). 검수 화면에서 직접 추가한 과목은 이수구분을 아직 안 고른 채로
+    // 들어오는 게 보통이라, 미지정 그룹을 맨 뒤로 두면 "새 과목이 맨 위에 온다"는 요구사항과 어긋난다
+    // (기존 과목들은 이미 이수구분이 있어서 앞쪽 그룹에 자리 잡고, 미지정 새 과목만 맨 뒤로 밀려버림).
+    // Stream.sorted()는 안정 정렬이라 같은 이수구분 안에서는 원래 순서(= displayOrder 순, 검수 화면에서
+    // 새로 추가한 과목이 맨 앞에 오는 것 포함)가 그대로 유지된다.
+    private List<StudentCourseListResponse.CourseInfo> sortByDivision(
+            List<StudentCourseListResponse.CourseInfo> courseInfos, List<Division> divisions) {
+        Map<Long, Integer> divisionOrdinalById = divisions.stream()
+                .collect(Collectors.toMap(Division::getId, d -> d.getCategory().ordinal()));
+        return courseInfos.stream()
+                .sorted(Comparator.comparingInt(info -> {
+                    Long divisionId = info.getAppliedDivisionId();
+                    Integer ordinal = divisionId != null ? divisionOrdinalById.get(divisionId) : null;
+                    return ordinal != null ? ordinal : Integer.MIN_VALUE;
+                }))
+                .toList();
     }
 
     // 검수 화면([저장하기])에서 넘어온 전체 목록으로 STUDENT_COURSE를 완전히 교체한다.
@@ -190,6 +212,16 @@ public class StudentProfileService {
         Map<Long, StudentCourse> existingById = studentCourseRepository.findByStudentProfile(profile).stream()
                 .collect(Collectors.toMap(StudentCourse::getId, sc -> sc));
 
+        // 검수 화면에서 직접 추가한(studentCourseId 없는) 신규 과목은 목록 맨 위로 오도록, 기존 과목들의
+        // 최소 displayOrder보다 작은 값을 요청에 나온 순서 그대로 매긴다(#194). 기존 과목이 아예 없으면
+        // (첫 업로드 전 직접 추가 등) 0을 기준으로 잡는다.
+        int minExistingOrder = existingById.values().stream()
+                .mapToInt(StudentCourse::getDisplayOrder)
+                .min()
+                .orElse(0);
+        long newItemCount = items.stream().filter(item -> item.studentCourseId() == null).count();
+        int nextNewOrder = minExistingOrder - (int) newItemCount;
+
         Set<Long> keepIds = new HashSet<>();
         List<StudentCourse> newCourses = new ArrayList<>();
 
@@ -212,6 +244,7 @@ public class StudentProfileService {
                         .isRetake(false)
                         .status(CourseStatus.COMPLETED)
                         .source(RecordSource.MANUAL)
+                        .displayOrder(nextNewOrder++)
                         .build());
                 continue;
             }
