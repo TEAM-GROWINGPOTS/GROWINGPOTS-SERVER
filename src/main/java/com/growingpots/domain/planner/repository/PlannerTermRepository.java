@@ -25,6 +25,6 @@ public interface PlannerTermRepository extends JpaRepository<PlannerTerm, Long> 
 
     @Transactional
     @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("DELETE FROM PlannerTerm pt WHERE pt.plannerSimulation.id = :simulationId")
-    void deleteAllByPlannerSimulationId(@Param("simulationId") Long simulationId);
+    @Query("DELETE FROM PlannerTerm pt WHERE pt.id IN :ids")
+    void deleteAllByIdIn(@Param("ids") List<Long> ids);
 }
