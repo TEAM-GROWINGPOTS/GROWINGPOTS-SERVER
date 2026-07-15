@@ -24,7 +24,7 @@ public record StudentCourseUpdateRequest(
             // 덮어쓰면 안 된다.
             @Schema(description = "과목 마스터 PK. 매칭된 과목이 있으면 GET 응답의 courseId를 그대로 넣어야 "
                     + "매칭이 유지됨 - null로 보내면 기존 매칭도 풀림. 직접 추가한 신규 과목이라 매칭이 "
-                    + "없으면 null", nullable = true) Long courseId,
+                    + "없으면 null", example = "12", nullable = true) Long courseId,
             @Schema(description = "과목명 (PDF 원문 또는 직접 입력)") @NotBlank String rawCourseName,
             @Schema(description = "개설 학과 PK. 없으면 null", nullable = true) Long departmentId,
             @Schema(description = "학점") @NotNull Integer credit,
