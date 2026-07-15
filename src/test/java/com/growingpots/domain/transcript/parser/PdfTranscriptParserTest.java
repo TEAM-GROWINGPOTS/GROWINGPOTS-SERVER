@@ -76,6 +76,9 @@ class PdfTranscriptParserTest {
         ParsedTranscript result = parser.parse(Files.readAllBytes(pdfPath));
 
         assertThat(result.studentInfo().get("department")).isEqualTo("연극영화학과");
+        // KHCU0045(경희사이버대 학점교류 과목)는 과목명 자체에 슬래시가 섞여 있어 년도/학기를 못 찾지만,
+        // 조용히 빠지지 않고 "확인 필요" 상태(학점 0)로 남는다(#192 후속) - 옆 전공 과목(FT3039)은
+        // 더 이상 통째로 삼켜지지 않고 정상 분리된다.
         assertThat(countInSection(result.courses(), "배분이수")).isEqualTo(6);
         assertThat(countInSection(result.courses(), "자유이수")).isEqualTo(5);
         assertThat(countInSection(result.courses(), "기타")).isEqualTo(3);
@@ -86,7 +89,8 @@ class PdfTranscriptParserTest {
         assertThat(result.courses()).hasSize(41);
         assertThat(inSection(result.courses(), "배분이수"))
                 .anySatisfy(course -> assertThat(course.get("courseCode")).isEqualTo("GED11020"))
-                .anySatisfy(course -> assertThat(course.get("courseCode")).isEqualTo("GED11107"));
+                .anySatisfy(course -> assertThat(course.get("courseCode")).isEqualTo("GED11107"))
+                .anySatisfy(course -> assertThat(course.get("courseCode")).isEqualTo("KHCU0045"));
         // SW인증 필요/취득 학점이 판정(미통과) 결과와 일치하는지 확인: 6학점 필요에 4학점 취득 → 미통과
         assertThat(result.graduationSummary().get("swCertRequirement")).isEqualTo("6");
         assertThat(result.graduationSummary().get("swCertEarned")).isEqualTo("4");
@@ -246,6 +250,94 @@ class PdfTranscriptParserTest {
         assertThat(courseName(result.courses(), "SM320")).isEqualTo("운동손상평가");
         assertThat(result.courses().stream()
                         .filter(course -> "SM320".equals(course.get("courseCode")))
+                        .findFirst().orElseThrow().get("credits"))
+                .isEqualTo("3");
+    }
+
+    // 같은 줄(row)에서 왼쪽(교양) 과목명 세그먼트가 슬래시/괄호가 섞인 형태로 뭉쳐 나와(경희사이버대
+    // 학점교류 과목 등) 왼쪽 과목 자체의 "년도/학기"를 못 찾으면, 정규식 기반 폴백 파서가 오른쪽(전공)
+    // 컬럼의 실제 "년도/학기"까지 넘어가 버려서 그 사이에 있는 오른쪽 과목의 코드·이름·학점을 통째로
+    // 왼쪽 과목명에 삼켜버리는 문제가 있었다(#192, 실제로 로컬 DB에서 손상된 row 발견). 왼쪽 과목명이
+    // 이상해지는 것 자체는 막기 어렵지만(그 과목 고유의 형식 문제), 최소한 오른쪽 과목은 삼켜지지
+    // 않고 자기 자신의 code/name/credit으로 정확히 파싱돼야 한다.
+    @Test
+    void 왼쪽_과목명이_슬래시를_포함해도_오른쪽_과목을_흡수하지_않는다() throws Exception {
+        Path pdfPath = Path.of("/Users/test/Desktop/광운대/3학년/동아리/sopt/growingpots/졸업관리표/추가 pdf/컴퓨터공학과_21_신진수_졸업진단표.pdf");
+        assumeTrue(Files.exists(pdfPath));
+
+        ParsedTranscript result = parser.parse(Files.readAllBytes(pdfPath));
+
+        // 오른쪽(전공) 과목은 왼쪽 과목의 이름에 흡수되지 않고 자기 자신의 정보로 정확히 파싱돼야 한다.
+        List<Map<String, String>> aphy1002 = result.courses().stream()
+                .filter(course -> "APHY1002".equals(course.get("courseCode")))
+                .toList();
+        assertThat(aphy1002).hasSize(1);
+        assertThat(aphy1002.get(0).get("courseName")).isEqualTo("물리학및실험1");
+        assertThat(aphy1002.get(0).get("credits")).isEqualTo("3");
+
+        // 왼쪽(EXCH01713) 과목명 자체의 형식이 깨져서 학점/학기를 못 찾는 경우 그 행 자체는 버려지는데,
+        // 적어도 다른 과목 코드가 섞여 들어간 "손상된" 형태로 저장되면 안 된다.
+        assertThat(result.courses()).noneMatch(
+                course -> String.valueOf(course.get("courseName")).contains("APHY1002"));
+    }
+
+    // 연극영화과 PDF에도 같은 패턴(경희사이버대 과목명에 슬래시 포함)이 있고, 그 옆에 있던 전공
+    // 과목(FT3039/FT3081)이 예전엔 통째로 사라지거나 손상된 이름에 흡수됐었다.
+    @Test
+    void 연극영화과_PDF에서도_옆_전공과목이_정상적으로_파싱된다() throws Exception {
+        Path pdfPath = Path.of("/Users/test/Desktop/광운대/3학년/동아리/sopt/growingpots/졸업관리표/연극영화과/23연극영화과_졸업사정관리표.pdf");
+        assumeTrue(Files.exists(pdfPath));
+
+        ParsedTranscript result = parser.parse(Files.readAllBytes(pdfPath));
+
+        assertThat(courseName(result.courses(), "FT3039")).isEqualTo("영화편집연구");
+        assertThat(courseName(result.courses(), "FT3081")).isEqualTo("고급시나리오창작");
+        assertThat(result.courses()).noneMatch(course -> String.valueOf(course.get("courseName")).contains("FT30"));
+    }
+
+    // KHCU0045(경희사이버대 학점교류 과목)처럼 옆 과목을 삼키던 형태로 깨진 과목은, 학점/학기를
+    // 알아볼 수 없어도 조용히 빠지지 않고 "확인 필요" 상태(학점 0, 학기 없음)로라도 남아야 한다(#192
+    // 후속) - 검수 화면에서 사용자가 직접 고칠 수 있게. 옆 전공 과목(FT3039)은 그대로 정상 분리된다.
+    @Test
+    void 옆_과목을_삼키던_과목도_확인_필요_상태로_남는다() throws Exception {
+        Path pdfPath = Path.of("/Users/test/Desktop/광운대/3학년/동아리/sopt/growingpots/졸업관리표/연극영화과/23연극영화과_졸업사정관리표.pdf");
+        assumeTrue(Files.exists(pdfPath));
+
+        ParsedTranscript result = parser.parse(Files.readAllBytes(pdfPath));
+
+        List<Map<String, String>> khcu0045 = result.courses().stream()
+                .filter(course -> "KHCU0045".equals(course.get("courseCode")))
+                .toList();
+        assertThat(khcu0045).hasSize(1);
+        assertThat(khcu0045.get(0).get("courseName")).contains("여행을통한인간삶의가치증진");
+        assertThat(khcu0045.get(0).get("credits")).isEqualTo("0");
+        assertThat(khcu0045.get(0).get("section")).isEqualTo("배분이수");
+
+        assertThat(courseName(result.courses(), "FT3039")).isEqualTo("영화편집연구");
+        assertThat(result.courses().stream()
+                        .filter(course -> "FT3039".equals(course.get("courseCode")))
+                        .findFirst().orElseThrow().get("credits"))
+                .isEqualTo("3");
+    }
+
+    // 같은 패턴(EXCH01713)이 다른 학과 PDF에도 있다 - 학점교류 과목 전반에 적용되는지 확인.
+    @Test
+    void 다른_PDF에서도_학점교류_과목이_확인_필요_상태로_남고_옆_과목은_정상_분리된다() throws Exception {
+        Path pdfPath = Path.of("/Users/test/Desktop/광운대/3학년/동아리/sopt/growingpots/졸업관리표/추가 pdf/컴퓨터공학과_21_신진수_졸업진단표.pdf");
+        assumeTrue(Files.exists(pdfPath));
+
+        ParsedTranscript result = parser.parse(Files.readAllBytes(pdfPath));
+
+        List<Map<String, String>> exch = result.courses().stream()
+                .filter(course -> "EXCH01713".equals(course.get("courseCode")))
+                .toList();
+        assertThat(exch).hasSize(1);
+        assertThat(exch.get(0).get("courseName")).contains("로컬콘텐츠실감미디어");
+        assertThat(exch.get(0).get("credits")).isEqualTo("0");
+
+        assertThat(courseName(result.courses(), "APHY1002")).isEqualTo("물리학및실험1");
+        assertThat(result.courses().stream()
+                        .filter(course -> "APHY1002".equals(course.get("courseCode")))
                         .findFirst().orElseThrow().get("credits"))
                 .isEqualTo("3");
     }
