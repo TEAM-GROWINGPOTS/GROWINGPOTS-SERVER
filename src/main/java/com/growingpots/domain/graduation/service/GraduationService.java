@@ -148,8 +148,7 @@ public class GraduationService {
 
         List<CertResult> allCerts = majorContexts.stream().flatMap(c -> c.certs().stream()).toList();
         boolean graduatable = computeGraduatable(majorContexts, allCerts, geAreaResult);
-        boolean curriculumSatisfied = computeAcademicRequirementMet(
-                profile, majorContexts, geAreaResult, allPlannedItems);
+        boolean curriculumSatisfied = computeAcademicRequirementMet(majorContexts, geAreaResult);
 
         if (studentMajorId != null) {
             StudentMajorContext target = findMajorContextByStudentMajorId(majorContexts, studentMajorId);
@@ -1209,37 +1208,21 @@ public class GraduationService {
         return true;
     }
 
-    // 학점·과목 이수 기반 졸업요건 충족 여부. GPA·비학점 인증 요건을 제외하고, 전공필수·전공기초·
-    // 필수교과 개별 과목 이수까지 포함해 확인한다. graduatable과 달리 평점·인증 외 요소만으로 "사실상
-    // 이수 완료"인지 빠르게 판단할 때 사용한다.
-    // - 전공 요건(학점 + 졸업필수 + 개별 과목)은 보유 전공 전부 독립적으로 확인
+    // 학점 이수 기반 졸업요건 충족 여부. GPA·비학점 인증 요건을 제외하고, 카테고리별 이수 학점 합
+    // 기준으로만 판정한다. 전공필수·전공기초·필수교과는 PDF 스냅샷(COMPLETED + IN_PROGRESS +
+    // courseId 미매칭 과목 포함)을 그대로 사용하므로, 수강중 과목과 rawCourseCode 과목도 자동으로
+    // 반영된다. graduatable과 달리 평점·인증 외 요소만으로 "사실상 이수 완료"인지 판단할 때 사용한다.
+    // - 전공 요건(학점 합 + 졸업필수)은 보유 전공 전부 독립적으로 확인
     // - 교양·영어·SW는 공통 기준(본전공)
     private boolean computeAcademicRequirementMet(
-            StudentProfile profile,
             List<StudentMajorContext> majorContexts,
-            DistributedGeAreaResult geAreaResult,
-            List<PlannerVersionItem> allPlannedItems
+            DistributedGeAreaResult geAreaResult
     ) {
-        // 이수 완료 과목 ID + 계획 과목 ID를 하나의 집합으로 관리 (개별 과목 이수 판정용)
-        Set<Long> takenIds = new HashSet<>(studentCourseRepository
-                .findCourseIdsByStudentProfileAndStatusIn(profile, List.of(CourseStatus.COMPLETED)));
-        allPlannedItems.forEach(i -> takenIds.add(i.getCourse().getId()));
-
         for (StudentMajorContext ctx : majorContexts) {
             // 카테고리별 학점 기준 충족 (전공기초/전공필수/전공선택 각각 독립 확인)
             if (!isMajorRequirementMet(ctx.effectiveSummary())) return false;
             // 학과 독립 졸업필수 요건 (스포츠의학과 등 해당 학과에만 존재)
             if (!ctx.judgement().satisfied()) return false;
-
-            Department dept = ctx.major().getDepartment();
-            // 전공필수 개별 과목 모두 이수 여부
-            List<Course> majorRequired = courseRepository.findActiveByDepartmentAndDivisionCategory(
-                    dept, DivisionCategory.MAJOR_REQUIRED);
-            if (majorRequired.stream().anyMatch(c -> !takenIds.contains(c.getId()))) return false;
-            // 전공기초 개별 과목 모두 이수 여부
-            List<Course> majorBasic = courseRepository.findActiveByDepartmentAndDivisionCategory(
-                    dept, DivisionCategory.MAJOR_BASIC);
-            if (majorBasic.stream().anyMatch(c -> !takenIds.contains(c.getId()))) return false;
         }
 
         GraduationAnalysisSummary mainSummary = mainContext(majorContexts).effectiveSummary();
@@ -1252,18 +1235,10 @@ public class GraduationService {
         if (geAreaResult != null && !geAreaResult.satisfied()) return false;
         if (mainSummary.getFreeGeCurrent() < mainSummary.getFreeGeRequired()) return false;
 
-        // 필수교과 개별 과목 모두 이수 여부 (학교 공통 교양 - Division 기준 조회)
-        Optional<Division> requiredGeDivision = divisionRepository.findBySchoolAndCategory(
-                profile.getSchool(), DivisionCategory.REQUIRED_GE);
-        if (requiredGeDivision.isPresent()) {
-            List<Course> requiredGeCourses = courseRepository.findActiveByDefaultDivision(requiredGeDivision.get());
-            if (requiredGeCourses.stream().anyMatch(c -> !takenIds.contains(c.getId()))) return false;
-        }
-
-        // 영어 강의 수 기준 (과목 수, 비학점 인증 아님)
+        // 영어 강의 수 기준 (과목 수)
         if (mainSummary.getEnglishCurrent() < mainSummary.getEnglishRequired()) return false;
 
-        // SW 인증 강의 수 기준 (과목 수, 비학점 인증 아님)
+        // SW 인증 강의 학점 기준
         Integer swRequired = mainSummary.getSwCertRequired();
         if (swRequired != null) {
             int swCurrent = mainSummary.getSwCertCurrent() != null ? mainSummary.getSwCertCurrent() : 0;
