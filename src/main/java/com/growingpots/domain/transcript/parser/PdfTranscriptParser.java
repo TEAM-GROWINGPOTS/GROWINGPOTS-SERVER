@@ -1189,7 +1189,14 @@ public class PdfTranscriptParser {
             double maxX = Double.MIN_VALUE;
 
             for (TextPosition position : positions) {
-                content.append(position.getUnicode());
+                String unicode = position.getUnicode();
+                // 폰트가 글리프의 유니코드 매핑을 못 주면 PDFBox가 U+FFFD(REPLACEMENT CHARACTER, �)를
+                // 대신 반환한다(예: "취�창업스쿨"). 좌표 계산엔 안 쓰이니 텍스트에서만 제거한다(#242) -
+                // 그 글자 자체를 복구할 방법은 없어서 없앨 뿐이고, 그 자리 앞뒤로 다른 텍스트가 통째로
+                // 누락되는 문제(닫는 괄호 없이 끊기는 등)까지 고치는 건 아니다.
+                if (unicode != null) {
+                    content.append(unicode.replace("�", ""));
+                }
                 minX = Math.min(minX, position.getXDirAdj());
                 maxX = Math.max(maxX, position.getXDirAdj() + position.getWidthDirAdj());
             }
