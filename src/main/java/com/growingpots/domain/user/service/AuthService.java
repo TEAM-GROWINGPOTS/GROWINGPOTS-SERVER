@@ -1,12 +1,12 @@
 package com.growingpots.domain.user.service;
 
+import com.growingpots.domain.transcript.repository.GraduationAnalysisSummaryRepository;
 import com.growingpots.domain.user.client.KakaoOAuthClient;
 import com.growingpots.domain.user.client.KakaoUserInfoResponse;
 import com.growingpots.domain.user.dto.request.OAuthLoginRequest;
 import com.growingpots.domain.user.entity.Member;
 import com.growingpots.domain.user.entity.enums.OauthProvider;
 import com.growingpots.domain.user.repository.MemberRepository;
-import com.growingpots.domain.user.repository.StudentProfileRepository;
 import com.growingpots.global.exception.BaseException;
 import com.growingpots.global.response.error.ErrorCode;
 import com.growingpots.global.security.JwtTokenProvider;
@@ -20,7 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuthService {
 
     private final MemberRepository memberRepository;
-    private final StudentProfileRepository studentProfileRepository;
+    private final GraduationAnalysisSummaryRepository graduationAnalysisSummaryRepository;
     private final KakaoOAuthClient kakaoOAuthClient;
     private final JwtTokenProvider jwtTokenProvider;
     private final MemberCreationService memberCreationService;
@@ -34,7 +34,10 @@ public class AuthService {
         KakaoUserInfoResponse userInfo = kakaoOAuthClient.getUserInfo(request.oauthAccessToken());
 
         Member member = findOrCreateMember(provider, userInfo);
-        boolean onboardingCompleted = studentProfileRepository.existsByMember(member);
+        // 온보딩 완료 = PDF 분석까지 끝난 시점(#221). StudentProfile만 있고 아직 PDF를 안 올렸으면
+        // (기본정보입력만 하고 이탈한 경우) 다시 로그인했을 때 온보딩 화면부터 다시 보여줘야 한다 -
+        // StudentProfile 존재 여부만으로는 이 상태를 "완료"로 잘못 판단하게 된다.
+        boolean onboardingCompleted = graduationAnalysisSummaryRepository.existsByStudentMajor_StudentProfile_Member(member);
 
         String accessToken = jwtTokenProvider.generateToken(member.getId().toString());
         String refreshToken = jwtTokenProvider.generateRefreshToken(member.getId().toString());

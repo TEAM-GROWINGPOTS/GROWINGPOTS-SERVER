@@ -24,8 +24,11 @@ public @interface StudentApi {
     @Target(ElementType.METHOD)
     @Retention(RetentionPolicy.RUNTIME)
     @Operation(
-            summary = "학생 프로필 생성",
-            description = "학교, 학과, 입학연도를 기반으로 학생 프로필을 생성합니다."
+            summary = "학생 프로필 생성/수정",
+            description = "학교, 학과, 입학연도를 기반으로 학생 프로필을 생성합니다. 이미 생성된 프로필이 있어도 "
+                    + "아직 PDF를 분석한 적이 없으면(온보딩 완료 전) 그 값으로 덮어씁니다 - 기본정보입력 화면에서 "
+                    + "뒤로 갔다가 다시 제출하는 경우를 지원하기 위함입니다(#221). PDF를 이미 한 번이라도 "
+                    + "분석했으면(온보딩 완료) 409로 막습니다."
     )
     @ApiResponses({
             @ApiResponse(
@@ -82,7 +85,8 @@ public @interface StudentApi {
             ),
             @ApiResponse(
                     responseCode = "409",
-                    description = "이미 온보딩 완료된 사용자",
+                    description = "이미 온보딩 완료된 사용자(PDF 분석까지 끝난 상태) - PDF 분석 전이면 이 응답 "
+                            + "대신 201로 프로필이 갱신됨",
                     content = @Content(
                             mediaType = "application/json",
                             examples = @ExampleObject(value = """

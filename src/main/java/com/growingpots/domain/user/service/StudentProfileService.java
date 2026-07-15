@@ -4,6 +4,7 @@ import com.growingpots.domain.transcript.entity.StudentCourse;
 import com.growingpots.domain.transcript.entity.enums.CourseStatus;
 import com.growingpots.domain.transcript.entity.enums.RecordSource;
 import com.growingpots.domain.transcript.entity.enums.Semester;
+import com.growingpots.domain.transcript.repository.GraduationAnalysisSummaryRepository;
 import com.growingpots.domain.transcript.repository.StudentCourseRepository;
 import com.growingpots.domain.university.entity.Course;
 import com.growingpots.domain.university.entity.Department;
@@ -38,6 +39,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -58,15 +60,16 @@ public class StudentProfileService {
     private final DepartmentRepository departmentRepository;
     private final CourseRepository courseRepository;
     private final DivisionRepository divisionRepository;
+    private final GraduationAnalysisSummaryRepository graduationAnalysisSummaryRepository;
 
+    // 기본정보입력 화면의 "다음"은 이 메서드를 호출한다. 온보딩 완료 = PDF 분석까지 끝난 시점(#221)이라,
+    // PDF를 아직 안 올린 상태(GraduationAnalysisSummary 없음)에서 유저가 검수 화면에서 뒤로 가서
+    // 기본정보를 다시 제출하면(학교/학과를 잘못 골랐다거나) 새 값으로 덮어쓴다 - 이 시점엔 StudentCourse가
+    // 아예 없어서 학과가 바뀌어도 붕 뜨는 이수 데이터가 없다. PDF를 이미 분석한 뒤에는 기존처럼 막는다.
     @Transactional
     public StudentProfileCreateResponse create(Long memberId, StudentProfileCreateRequest request) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND));
-
-        if (studentProfileRepository.existsByMember(member)) {
-            throw new BaseException(ErrorCode.STUDENT_PROFILE_ALREADY_EXISTS);
-        }
 
         School school = schoolRepository.findById(request.schoolId())
                 .orElseThrow(() -> new BaseException(ErrorCode.UNIVERSITY_NOT_FOUND));
@@ -76,6 +79,11 @@ public class StudentProfileService {
 
         if (!department.getSchool().getId().equals(school.getId())) {
             throw new BaseException(ErrorCode.DEPARTMENT_NOT_IN_SCHOOL);
+        }
+
+        Optional<StudentProfile> existingProfile = studentProfileRepository.findByMember(member);
+        if (existingProfile.isPresent()) {
+            return updateOnboardingInfo(existingProfile.get(), school, department, request.admissionYear());
         }
 
         StudentProfile studentProfile = studentProfileRepository.save(
@@ -100,6 +108,33 @@ public class StudentProfileService {
                 .studentProfileId(studentProfile.getId())
                 .mainMajor(StudentProfileCreateResponse.MainMajorInfo.builder()
                         .studentMajorId(studentMajor.getId())
+                        .departmentName(department.getName())
+                        .build())
+                .build();
+    }
+
+    private StudentProfileCreateResponse updateOnboardingInfo(
+            StudentProfile profile, School school, Department department, int admissionYear) {
+        if (graduationAnalysisSummaryRepository.existsByStudentMajor_StudentProfile(profile)) {
+            throw new BaseException(ErrorCode.STUDENT_PROFILE_ALREADY_EXISTS);
+        }
+
+        profile.updateOnboardingInfo(school, department, admissionYear);
+
+        // create()가 항상 MAIN StudentMajor를 하나만 만들고, PDF 분석 전(=여기 온 시점)엔 복수전공이
+        // 추가될 일이 없으므로 정확히 하나가 있어야 한다 - 없으면 데이터 정합성이 깨진 상태라 500으로
+        // 처리하되, 원인 파악이 쉽도록 전용 에러코드를 쓴다(코드리뷰 반영, 범용 CMN_001 대신).
+        StudentMajor mainMajor = studentMajorRepository.findWithDepartmentByStudentProfile(profile).stream()
+                .filter(sm -> sm.getMajorType() == MajorType.MAIN)
+                .findFirst()
+                .orElseThrow(() -> new BaseException(ErrorCode.MAIN_MAJOR_NOT_FOUND,
+                        "studentProfileId=" + profile.getId()));
+        mainMajor.updateDepartment(department);
+
+        return StudentProfileCreateResponse.builder()
+                .studentProfileId(profile.getId())
+                .mainMajor(StudentProfileCreateResponse.MainMajorInfo.builder()
+                        .studentMajorId(mainMajor.getId())
                         .departmentName(department.getName())
                         .build())
                 .build();
