@@ -35,7 +35,7 @@ public class StudentProfileResponse {
     @Schema(description = "현재 학기. PDF 미업로드 시 null", nullable = true)
     private final Integer semester;
 
-    @Schema(description = "재학 상태 (예: 재학, 휴학). PDF 미업로드 시 null", nullable = true)
+    @Schema(description = "재학 상태 (예: 재학 중, 휴학 중). PDF 미업로드 시 null", nullable = true)
     private final String enrollmentStatus;
 
     @Schema(description = "보유 전공 목록")

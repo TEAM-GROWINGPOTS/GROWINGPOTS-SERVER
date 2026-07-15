@@ -36,7 +36,7 @@ public @interface GraduationApi {
                     **공통 응답 필드**
                     - summary.totalCredits: current(현재 이수 학점) / required(졸업 필요 학점).
                     - summary.gpa: current(현재 누적 평점) / min(졸업 최소 요구 평점. 요건 없으면 null).
-                    - summary.enrollmentStatus: 재학 상태(예: 재학, 휴학).
+                    - summary.enrollmentStatus: 재학 상태(예: 재학 중, 휴학 중). PDF 미업로드 시 null.
                     - graduatable: 총 이수학점·학점 요건·비학점 인증·평점 요건을 모두 충족한 경우 true.
                     - curriculumSatisfied: 총 이수학점·카테고리별 학점(전공기초/전공필수/전공선택/교양 각각)·전공필수·전공기초·필수교과 개별 과목 이수·배분이수 영역·졸업필수·영어·SW 수강 기준을 충족한 경우 true. 평점·비학점 인증 요건은 제외.
                     - certs[].certType: THESIS | GRADUATION_CERT | ENGLISH | SW | TOPIK.
@@ -96,7 +96,7 @@ public @interface GraduationApi {
                                         "summary": {
                                           "totalCredits": { "current": 87, "required": 130 },
                                           "gpa": { "current": 3.85, "min": 2.0 },
-                                          "enrollmentStatus": "재학"
+                                          "enrollmentStatus": "재학 중"
                                         },
                                         "graduatable": false,
                                         "curriculumSatisfied": false,
@@ -191,7 +191,7 @@ public @interface GraduationApi {
                                         "summary": {
                                           "totalCredits": { "current": 45, "required": 130 },
                                           "gpa": { "current": 3.42, "min": 2.0 },
-                                          "enrollmentStatus": "재학"
+                                          "enrollmentStatus": "재학 중"
                                         },
                                         "graduatable": false,
                                         "curriculumSatisfied": false,

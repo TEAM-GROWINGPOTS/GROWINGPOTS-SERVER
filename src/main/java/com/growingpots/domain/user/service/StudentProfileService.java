@@ -130,7 +130,7 @@ public class StudentProfileService {
                 .admissionYear(profile.getAdmissionYear())
                 .gradeLevel(profile.getCurrentGrade())
                 .semester(profile.getCurrentTerm())
-                .enrollmentStatus(profile.getEnrollmentStatus())
+                .enrollmentStatus(profile.getEnrollmentStatus() != null ? profile.getEnrollmentStatus() + " 중" : null)
                 .majors(majorInfos)
                 .build();
     }

@@ -447,7 +447,7 @@ public class GraduationService {
         return Summary.builder()
                 .totalCredits(new CreditInfo(summary.getTotalCreditCurrent(), summary.getTotalCreditRequired()))
                 .gpa(new GpaInfo(summary.getGpaCurrent(), summary.getGpaRequired()))
-                .enrollmentStatus(profile.getEnrollmentStatus())
+                .enrollmentStatus(profile.getEnrollmentStatus() != null ? profile.getEnrollmentStatus() + " 중" : null)
                 .build();
     }
 
