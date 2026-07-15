@@ -262,6 +262,64 @@ class CourseSearchTest {
                         .value(org.hamcrest.Matchers.containsInAnyOrder("A2", "A3")));
     }
 
+    // "1학기+2학기" 동시 선택은 "전체학기(BOTH)" 단독 선택과 정확히 같은 결과셋이어야 한다(#219, 기획
+    // 요구사항). BOTH 선택은 학기 필터를 아예 안 건 것과 동일하게 전체가 나와야 하고, FIRST/SECOND
+    // 단독 선택엔 그 학기 전용 과목뿐 아니라 BOTH(매학기 개설) 과목도 같이 포함돼야 한다.
+    @Test
+    void 학기_필터에서_1학기와_2학기를_동시선택하면_전체학기_선택과_결과가_같다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-9114").build());
+        Department cs = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과").build());
+        courseRepository.save(Course.builder()
+                .school(school).courseCode("F1").name("1학기전용과목").credit(3)
+                .offeringDepartment(cs).recommendedYearLow(1).recommendedYearHigh(1)
+                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).isActive(true).build());
+        courseRepository.save(Course.builder()
+                .school(school).courseCode("S1").name("2학기전용과목").credit(3)
+                .offeringDepartment(cs).recommendedYearLow(1).recommendedYearHigh(1)
+                .openedSemester(OpenedSemester.SECOND).isEnglish(false).isSw(false).isActive(true).build());
+        courseRepository.save(Course.builder()
+                .school(school).courseCode("B1").name("매학기개설과목").credit(3)
+                .offeringDepartment(cs).recommendedYearLow(1).recommendedYearHigh(1)
+                .openedSemester(OpenedSemester.BOTH).isEnglish(false).isSw(false).isActive(true).build());
+        StudentProfile studentProfile = onboardedStudent("9114", cs);
+        Authentication auth = authenticationOf(studentProfile.getMember().getId());
+
+        // 전체학기(BOTH) 단독 선택 -> 전체 3개 다 나와야 함(학기 필터 안 건 것과 동일).
+        mockMvc.perform(get("/api/v1/courses")
+                        .param("semester", "BOTH")
+                        .with(authentication(auth)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.courses.length()").value(3));
+
+        // 1학기 단독 선택 -> 1학기전용 + 매학기개설, 2학기전용은 제외.
+        mockMvc.perform(get("/api/v1/courses")
+                        .param("semester", "FIRST")
+                        .with(authentication(auth)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.courses.length()").value(2))
+                .andExpect(jsonPath("$.data.courses[*].courseCode")
+                        .value(org.hamcrest.Matchers.containsInAnyOrder("F1", "B1")));
+
+        // 2학기 단독 선택 -> 2학기전용 + 매학기개설, 1학기전용은 제외.
+        mockMvc.perform(get("/api/v1/courses")
+                        .param("semester", "SECOND")
+                        .with(authentication(auth)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.courses.length()").value(2))
+                .andExpect(jsonPath("$.data.courses[*].courseCode")
+                        .value(org.hamcrest.Matchers.containsInAnyOrder("S1", "B1")));
+
+        // 1학기+2학기 동시 선택 -> 전체학기(BOTH) 단독 선택과 정확히 같은 결과(3개 전부).
+        mockMvc.perform(get("/api/v1/courses")
+                        .param("semester", "FIRST", "SECOND")
+                        .with(authentication(auth)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.courses.length()").value(3))
+                .andExpect(jsonPath("$.data.courses[*].courseCode")
+                        .value(org.hamcrest.Matchers.containsInAnyOrder("F1", "S1", "B1")));
+    }
+
     @Test
     void 권장학년이_없는_과목은_학년_필터를_걸어도_제외되지_않는다() throws Exception {
         School school = schoolRepository.save(School.builder().name("경희대학교-9109").build());

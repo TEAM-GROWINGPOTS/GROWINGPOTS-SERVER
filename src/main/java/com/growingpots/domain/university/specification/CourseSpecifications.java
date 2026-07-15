@@ -83,11 +83,18 @@ public class CourseSpecifications {
         };
     }
 
+    // BOTH(전체학기)는 "openedSemester가 정확히 BOTH인 과목만"이 아니라 "학기 필터를 안 건 것과
+    // 동일"하게 취급한다(#219, 기획 요구사항) - BOTH가 선택되면 학기 필터 자체를 건너뛴다.
+    // FIRST/SECOND는 그 학기 전용 과목뿐 아니라 BOTH(매학기 개설) 과목도 같이 포함해야 한다 - BOTH 과목은
+    // 1학기에도 2학기에도 실제로 열리기 때문. 이렇게 해야 "1학기+2학기 동시 선택"이 "전체학기 선택"과
+    // 정확히 같은 결과셋이 된다: (FIRST∪BOTH) ∪ (SECOND∪BOTH) = FIRST∪SECOND∪BOTH = 전체.
     public static Specification<Course> withSemesters(List<OpenedSemester> semesters) {
-        if (semesters == null || semesters.isEmpty()) {
+        if (semesters == null || semesters.isEmpty() || semesters.contains(OpenedSemester.BOTH)) {
             return null;
         }
-        return (root, query, cb) -> root.get("openedSemester").in(semesters);
+        List<OpenedSemester> effectiveSemesters = new ArrayList<>(semesters);
+        effectiveSemesters.add(OpenedSemester.BOTH);
+        return (root, query, cb) -> root.get("openedSemester").in(effectiveSemesters);
     }
 
     // credits 중 4가 있으면 "4학점 이상"(>=4)으로 처리하고, 나머지는 정확히 일치하는 값으로 OR 결합
