@@ -11,10 +11,12 @@ import com.growingpots.global.exception.BaseException;
 import com.growingpots.global.response.error.ErrorCode;
 import com.growingpots.global.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -57,8 +59,16 @@ public class AuthService {
         }
 
         Long memberId = Long.valueOf(validated.subject());
+        // 프론트에서 "발급된 지 몇 분 안 된 refreshToken인데 reissue가 401난다"는 제보가 반복됨(#233).
+        // JWT 자체는 유효한데 DB에 저장된 현재 토큰과 문자열이 달라서 나는 에러라, "제출된 토큰"과
+        // "DB에 실제 저장된 토큰"을 나란히 남겨야 재현 없이도 원인(로테이션 경합 vs 클라이언트가
+        // 계속 같은 죽은 토큰을 재전송하는 것)을 구분할 수 있다. 토큰 전체가 아니라 앞 12자만 남긴다.
         Member member = memberRepository.findByIdAndRefreshToken(memberId, refreshToken)
-                .orElseThrow(() -> new BaseException(ErrorCode.REFRESH_TOKEN_NOT_FOUND));
+                .orElseThrow(() -> {
+                    log.warn("refresh token mismatch: memberId={}, presentedPrefix={}, storedPrefix={}",
+                            memberId, tokenPrefix(refreshToken), storedTokenPrefix(memberId));
+                    return new BaseException(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
+                });
 
         String subject = memberId.toString();
         String newAccessToken = jwtTokenProvider.generateToken(subject);
@@ -66,6 +76,16 @@ public class AuthService {
         member.updateRefreshToken(newRefreshToken);
 
         return new ReissueResult(newAccessToken, newRefreshToken);
+    }
+
+    private String tokenPrefix(String token) {
+        return token == null ? "null" : token.substring(0, Math.min(12, token.length()));
+    }
+
+    private String storedTokenPrefix(Long memberId) {
+        return memberRepository.findById(memberId)
+                .map(m -> tokenPrefix(m.getRefreshToken()))
+                .orElse("member-not-found");
     }
 
     private Member findOrCreateMember(OauthProvider provider, KakaoUserInfoResponse userInfo) {
