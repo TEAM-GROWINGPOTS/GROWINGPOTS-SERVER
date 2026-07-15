@@ -134,4 +134,44 @@ class GraduationCourseListDedupTest {
                 .andExpect(jsonPath("$.data.majors[0].courses[?(@.name=='운동손상')].taken").value(true))
                 .andExpect(jsonPath("$.data.majors[0].courses[?(@.name=='기능해부학')].taken").value(true));
     }
+
+    // 검수 화면에서 과목 검색 없이 직접 입력한 과목(RecordSource.MANUAL)은 과목 마스터와 매칭되지
+    // 않아 course=null이다. dedupeByCourse가 course=null 행을 통째로 걸러내던 탓에 이수구분별 상세
+    // 목록에서 완전히 빠지는 버그가 있었다(#218) - 총 이수학점 계산에는 반영되는데 이 목록에는 안
+    // 뜨는 모순이 있었다.
+    @Test
+    void 직접_추가한_미매칭_과목도_전공필수_이수과목_목록에_뜬다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-9502").build());
+        Department department = departmentRepository.save(Department.builder()
+                .school(school).college("체육대학").name("스포츠의학과-9502").build());
+        Member member = memberRepository.save(Member.builder()
+                .nickname("테스트유저").oauthProvider(OauthProvider.KAKAO).oauthId("9502").email(null).build());
+        StudentProfile profile = studentProfileRepository.save(StudentProfile.builder()
+                .member(member).school(school).department(department).admissionYear(2023).build());
+        StudentMajor main = studentMajorRepository.save(StudentMajor.builder()
+                .studentProfile(profile).department(department).majorType(MajorType.MAIN).build());
+        graduationAnalysisSummaryRepository.save(GraduationAnalysisSummary.builder()
+                .studentMajor(main)
+                .majorRequiredCurrent(3).majorRequiredRequired(3)
+                .build());
+
+        Division majorRequired = divisionRepository.save(Division.builder()
+                .school(school).code("04").category(DivisionCategory.MAJOR_REQUIRED).build());
+
+        // 과목 검색 없이 직접 입력 - course/rawCourseCode 둘 다 null (편입학점 등 과목 마스터에
+        // 아예 없는 과목을 수동으로 추가한 경우를 재현)
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(null).appliedDivision(majorRequired)
+                .rawCourseCode(null).rawCourseName("편입인정과목").credit(3)
+                .takenYear(2023).takenSemester(Semester.FIRST)
+                .status(CourseStatus.COMPLETED).source(RecordSource.MANUAL).isRetake(false).build());
+
+        mockMvc.perform(get("/api/v1/students/me/graduation/MAJOR_REQUIRED/courses")
+                        .param("studentMajorId", String.valueOf(main.getId()))
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.majors[0].courses.length()").value(1))
+                .andExpect(jsonPath("$.data.majors[0].courses[0].name").value("편입인정과목"))
+                .andExpect(jsonPath("$.data.majors[0].courses[0].taken").value(true));
+    }
 }
