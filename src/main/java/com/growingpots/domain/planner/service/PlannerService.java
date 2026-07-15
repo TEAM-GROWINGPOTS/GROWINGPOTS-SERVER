@@ -43,6 +43,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -354,7 +355,7 @@ public class PlannerService {
         };
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void savePlanner(Long memberId, PlannerSaveRequest request) {
         StudentProfile profile = studentProfileRepository.findWithDetailsByMemberId(memberId)
                 .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
@@ -374,7 +375,7 @@ public class PlannerService {
     // (안 그러면 두 번째 저장부터 studentProfile 유니크 제약에 걸린다).
     private PlannerSimulation resolveSimulation(Long simulationId, StudentProfile profile) {
         if (simulationId == null) {
-            return plannerSimulationRepository.findByStudentProfile(profile)
+            return plannerSimulationRepository.findByStudentProfileForUpdate(profile)
                     .orElseGet(() -> plannerSimulationRepository.save(
                             PlannerSimulation.builder()
                                     .studentProfile(profile)
@@ -382,7 +383,7 @@ public class PlannerService {
                                     .build()
                     ));
         }
-        PlannerSimulation simulation = plannerSimulationRepository.findById(simulationId)
+        PlannerSimulation simulation = plannerSimulationRepository.findByIdForUpdate(simulationId)
                 .orElseThrow(() -> new BaseException(ErrorCode.PLANNER_NOT_FOUND));
         if (!simulation.getStudentProfile().getId().equals(profile.getId())) {
             throw new BaseException(ErrorCode.PLANNER_ACCESS_DENIED);
@@ -468,7 +469,7 @@ public class PlannerService {
             plannerVersionItemRepository.deleteAllByPlannerTermVersionIdIn(versionIds);
         }
         plannerTermVersionRepository.deleteAllByPlannerTermIdIn(termIds);
-        plannerTermRepository.deleteAllByPlannerSimulationId(simulationId);
+        plannerTermRepository.deleteAllByIdIn(termIds);
     }
 
     private void buildAndSave(
