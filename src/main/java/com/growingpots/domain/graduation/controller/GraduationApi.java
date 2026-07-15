@@ -37,7 +37,8 @@ public @interface GraduationApi {
                     - summary.totalCredits: current(현재 이수 학점) / required(졸업 필요 학점).
                     - summary.gpa: current(현재 누적 평점) / min(졸업 최소 요구 평점. 요건 없으면 null).
                     - summary.enrollmentStatus: 재학 상태(예: 재학, 휴학).
-                    - graduatable: 학점·평점·비학점 인증 요건을 모두 충족한 경우 true.
+                    - graduatable: 총 이수학점·학점 요건·비학점 인증·평점 요건을 모두 충족한 경우 true.
+                    - curriculumSatisfied: 총 이수학점·카테고리별 학점(전공기초/전공필수/전공선택/교양 각각)·전공필수·전공기초·필수교과 개별 과목 이수·배분이수 영역·졸업필수·영어·SW 수강 기준을 충족한 경우 true. 평점·비학점 인증 요건은 제외.
                     - certs[].certType: THESIS | GRADUATION_CERT | ENGLISH | SW | TOPIK.
                     - certs[].result: PASS(통과) | FAIL(미통과, 졸업 불가 처리) | EXEMPT(면제) | NONE(해당없음).
 
@@ -98,6 +99,7 @@ public @interface GraduationApi {
                                           "enrollmentStatus": "재학"
                                         },
                                         "graduatable": false,
+                                        "curriculumSatisfied": false,
                                         "conditions": null,
                                         "graduationRequired": null,
                                         "sections": {
@@ -192,6 +194,7 @@ public @interface GraduationApi {
                                           "enrollmentStatus": "재학"
                                         },
                                         "graduatable": false,
+                                        "curriculumSatisfied": false,
                                         "conditions": [
                                           { "code": "MAJOR_BASIC",    "name": "전공 기초", "current": 9,  "required": 12, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
                                           { "code": "MAJOR_REQUIRED", "name": "전공 필수", "current": 15, "required": 30, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
