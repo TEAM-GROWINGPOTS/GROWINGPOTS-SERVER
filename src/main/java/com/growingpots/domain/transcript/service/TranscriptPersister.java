@@ -340,7 +340,7 @@ public class TranscriptPersister {
     ) {
         return GraduationAnalysisSummary.builder()
                 .studentMajor(studentMajor)
-                .totalCreditCurrent(extractInt(graduationSummary.get("earnedCredits")))
+                .totalCreditCurrent(extractTotalCredit(graduationSummary.get("earnedCredits")))
                 .totalCreditRequired(extractInt(graduationSummary.get("requiredCredits")))
                 .gpaCurrent(extractDecimal(graduationSummary.get("gpaEarned")))
                 .gpaRequired(extractDecimal(graduationSummary.get("gpaRequirement")))
@@ -420,6 +420,18 @@ public class TranscriptPersister {
         }
         Matcher matcher = DIGITS_PATTERN.matcher(value);
         return matcher.find() ? Integer.parseInt(matcher.group()) : 0;
+    }
+
+    // "44(62)" 형태에서 괄호 안 숫자(완료+수강중 합계)를 꺼낸다. 괄호 없으면 첫 번째 숫자로 폴백.
+    private int extractTotalCredit(String value) {
+        if (value == null) {
+            return 0;
+        }
+        Matcher parenMatcher = Pattern.compile("\\((\\d+)\\)").matcher(value);
+        if (parenMatcher.find()) {
+            return Integer.parseInt(parenMatcher.group(1));
+        }
+        return extractInt(value);
     }
 
     private BigDecimal extractDecimal(String value) {
