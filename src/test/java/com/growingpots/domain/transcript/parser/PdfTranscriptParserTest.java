@@ -222,4 +222,31 @@ class PdfTranscriptParserTest {
                 .filter(course -> section.equals(course.get("section")))
                 .toList();
     }
+
+    // 금학기수강학점 영역에서 과목코드와 과목명이 공백 없이 붙어 나오는 행("SM320운동손상평가"처럼)이
+    // 있는데, 그중 과목명 끝자리가 숫자로 끝나는 과목("공학수학2")은 비탐욕 매칭이 그 숫자를 학점으로
+    // 먼저 채가고 진짜 학점(3)을 트레일링 텍스트로 통째로 버리는 버그가 있었다(#210). 과목명 그룹과
+    // 학점 숫자 그룹 사이에 실제 공백을 강제해서 고쳤다 — 회귀 방지용 테스트.
+    @Test
+    void 금학기수강학점_과목명이_숫자로_끝나도_학점을_정확히_구분한다() throws Exception {
+        Path pdfPath = Path.of("/Users/test/Desktop/광운대/3학년/동아리/sopt/growingpots/졸업관리표/스포츠의학과/24스포츠의학과_졸업사정관리표.pdf");
+        assumeTrue(Files.exists(pdfPath));
+
+        ParsedTranscript result = parser.parse(Files.readAllBytes(pdfPath));
+
+        List<Map<String, String>> bme204 = result.courses().stream()
+                .filter(course -> "BME204".equals(course.get("courseCode")))
+                .toList();
+        assertThat(bme204).hasSize(1);
+        assertThat(bme204.get(0).get("courseName")).isEqualTo("공학수학2");
+        assertThat(bme204.get(0).get("credits")).isEqualTo("3");
+
+        // 같은 영역의 다른 과목들(과목명이 숫자로 안 끝나는 경우)도 여전히 정확히 파싱돼야 한다.
+        assertThat(countInSection(result.courses(), "금학기수강학점")).isEqualTo(6);
+        assertThat(courseName(result.courses(), "SM320")).isEqualTo("운동손상평가");
+        assertThat(result.courses().stream()
+                        .filter(course -> "SM320".equals(course.get("courseCode")))
+                        .findFirst().orElseThrow().get("credits"))
+                .isEqualTo("3");
+    }
 }
