@@ -298,4 +298,128 @@ class GraduationCreditTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.conditions[?(@.code=='MAJOR_REQUIRED')].current").value(23));
     }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // 테스트 4: 카테고리별 학점 합 = 총학점
+    // ────────────────────────────────────────────────────────────────────────
+
+    // 각 탭(MAJOR/GE/OTHERS)에서 노출되는 카테고리별 학점 current의 합이 summary.totalCredits.current와
+    // 일치하는지 확인한다. COMPLETED·PLANNED 양쪽 모두 검증한다.
+    //
+    // 스냅샷 값 (합이 62가 되도록 설계):
+    //   전공기초  6 + 전공필수  9 + 전공선택 12
+    // + 필수교과 15 + 배분이수  6 + 자유이수  9
+    // + 기타    5
+    // = 62
+    //
+    // PLANNED에서 신규 전공필수 과목 3학점 추가 시:
+    //   전공필수 9→12, 총학점 62→65, 나머지 카테고리 동일 → 합=65
+    @Test
+    void 카테고리별_학점_합이_총학점과_일치한다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-8004").build());
+        Department dept = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과-8004").build());
+        Division majorRequired = divisionRepository.save(Division.builder()
+                .school(school).code("04-8004").category(DivisionCategory.MAJOR_REQUIRED).build());
+        Member member = memberRepository.save(Member.builder()
+                .nickname("테스트").oauthProvider(OauthProvider.KAKAO).oauthId("8004").email(null).build());
+        StudentProfile profile = studentProfileRepository.save(StudentProfile.builder()
+                .member(member).school(school).department(dept).admissionYear(2023).build());
+        StudentMajor major = studentMajorRepository.save(StudentMajor.builder()
+                .studentProfile(profile).department(dept).majorType(MajorType.MAIN).build());
+
+        // 각 카테고리 합 = 6+9+12+15+6+9+5 = 62
+        graduationAnalysisSummaryRepository.save(GraduationAnalysisSummary.builder()
+                .studentMajor(major)
+                .majorBasicCurrent(6).majorBasicRequired(6)
+                .majorRequiredCurrent(9).majorRequiredRequired(30)
+                .majorElectiveCurrent(12).majorElectiveRequired(18)
+                .requiredGeCurrent(15).requiredGeRequired(15)
+                .distributedGeCurrent(6).distributedGeRequired(9)
+                .freeGeCurrent(9).freeGeRequired(9)
+                .generalElectiveCurrent(5)
+                .totalCreditCurrent(62).totalCreditRequired(130)
+                .build());
+
+        // 신규 전공필수 과목(3학점) - PLANNED delta용
+        Course newCourse = courseRepository.save(Course.builder()
+                .school(school).courseCode("CS401-8004").name("분산시스템").credit(3)
+                .offeringDepartment(dept).defaultDivision(majorRequired)
+                .recommendedYearLow(4).recommendedYearHigh(4).openedSemester(OpenedSemester.FIRST)
+                .isEnglish(false).isSw(false).isActive(true).build());
+
+        PlannerSimulation simulation = plannerSimulationRepository.save(PlannerSimulation.builder()
+                .studentProfile(profile).name("플래너-8004").build());
+        PlannerTerm term = plannerTermRepository.save(PlannerTerm.builder()
+                .plannerSimulation(simulation).yearLevel(4).semester(1).build());
+        PlannerTermVersion version = plannerTermVersionRepository.save(PlannerTermVersion.builder()
+                .plannerTerm(term).versionNo(1).name("폴더1").isSelected(true).versionOrder(0).build());
+        plannerVersionItemRepository.save(PlannerVersionItem.builder()
+                .plannerTermVersion(version).course(newCourse).plannedDivision(majorRequired)
+                .credit(3).coursePositionOrder(0).build());
+
+        // ── COMPLETED 모드 ──────────────────────────────────────────────────
+        // MAJOR 탭 (studentMajorId): 전공 3개 카테고리 검증
+        mockMvc.perform(get("/api/v1/students/me/graduation")
+                        .param("studentMajorId", String.valueOf(major.getId()))
+                        .param("source", "COMPLETED")
+                        .with(authentication(authOf(member.getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.summary.totalCredits.current").value(62))
+                .andExpect(jsonPath("$.data.conditions[?(@.code=='MAJOR_BASIC')].current").value(6))
+                .andExpect(jsonPath("$.data.conditions[?(@.code=='MAJOR_REQUIRED')].current").value(9))
+                .andExpect(jsonPath("$.data.conditions[?(@.code=='MAJOR_ELECTIVE')].current").value(12));
+
+        // GE 탭 (majorType=GE): 교양 3개 카테고리 검증
+        mockMvc.perform(get("/api/v1/students/me/graduation")
+                        .param("majorType", "GE")
+                        .param("source", "COMPLETED")
+                        .with(authentication(authOf(member.getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.summary.totalCredits.current").value(62))
+                .andExpect(jsonPath("$.data.conditions[?(@.code=='REQUIRED_GE')].current").value(15))
+                .andExpect(jsonPath("$.data.conditions[?(@.code=='DISTRIBUTED_GE')].current").value(6))
+                .andExpect(jsonPath("$.data.conditions[?(@.code=='FREE_GE')].current").value(9));
+
+        // OTHERS 탭 (majorType=OTHERS): 기타 카테고리 검증
+        // 전체 합: 6+9+12 + 15+6+9 + 5 = 62 = totalCreditCurrent ✓
+        mockMvc.perform(get("/api/v1/students/me/graduation")
+                        .param("majorType", "OTHERS")
+                        .param("source", "COMPLETED")
+                        .with(authentication(authOf(member.getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.summary.totalCredits.current").value(62))
+                .andExpect(jsonPath("$.data.conditions[?(@.code=='GENERAL_ELECTIVE')].current").value(5));
+
+        // ── PLANNED 모드 ──────────────────────────────────────────────────
+        // 신규 전공필수 3학점 추가 → 전공필수 9→12, 총학점 62→65
+        // 나머지 카테고리 불변 → 합: 6+12+12+15+6+9+5 = 65 ✓
+        mockMvc.perform(get("/api/v1/students/me/graduation")
+                        .param("studentMajorId", String.valueOf(major.getId()))
+                        .param("source", "PLANNED")
+                        .with(authentication(authOf(member.getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.summary.totalCredits.current").value(65))
+                .andExpect(jsonPath("$.data.conditions[?(@.code=='MAJOR_BASIC')].current").value(6))
+                .andExpect(jsonPath("$.data.conditions[?(@.code=='MAJOR_REQUIRED')].current").value(12))
+                .andExpect(jsonPath("$.data.conditions[?(@.code=='MAJOR_ELECTIVE')].current").value(12));
+
+        mockMvc.perform(get("/api/v1/students/me/graduation")
+                        .param("majorType", "GE")
+                        .param("source", "PLANNED")
+                        .with(authentication(authOf(member.getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.summary.totalCredits.current").value(65))
+                .andExpect(jsonPath("$.data.conditions[?(@.code=='REQUIRED_GE')].current").value(15))
+                .andExpect(jsonPath("$.data.conditions[?(@.code=='DISTRIBUTED_GE')].current").value(6))
+                .andExpect(jsonPath("$.data.conditions[?(@.code=='FREE_GE')].current").value(9));
+
+        mockMvc.perform(get("/api/v1/students/me/graduation")
+                        .param("majorType", "OTHERS")
+                        .param("source", "PLANNED")
+                        .with(authentication(authOf(member.getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.summary.totalCredits.current").value(65))
+                .andExpect(jsonPath("$.data.conditions[?(@.code=='GENERAL_ELECTIVE')].current").value(5));
+    }
 }
