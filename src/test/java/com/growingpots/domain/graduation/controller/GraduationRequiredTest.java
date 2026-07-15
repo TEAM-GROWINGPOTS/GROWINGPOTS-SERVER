@@ -205,9 +205,10 @@ class GraduationRequiredTest {
                         .with(authentication(authenticationOf(profile.getMember().getId()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.majors[0].satisfied").value(false))
-                // 전문실기가 minCount 기준으로 바뀌면서 과목수 기준 조건이 되어 unmetDescriptions엔
-                // 안 담긴다(과목 카드로만 표시) — 이하 courses 검증으로 충분히 확인됨.
-                .andExpect(jsonPath("$.data.majors[0].unmetDescriptions.length()").value(0))
+                // 과목수 기준 조건(전문실기·맨손체조)은 한 줄로 합쳐져 unmetDescriptions에 담긴다(#227).
+                .andExpect(jsonPath("$.data.majors[0].unmetDescriptions.length()").value(1))
+                .andExpect(jsonPath("$.data.majors[0].unmetDescriptions[0]")
+                        .value("[졸업필수(전문실기 2과목)] 1/2과목 이수 완료, 맨손체조 미이수"))
                 .andExpect(jsonPath("$.data.majors[0].courses[?(@.name=='전문실기1')].taken").value(true))
                 .andExpect(jsonPath("$.data.majors[0].courses[?(@.name=='전문실기2')].taken").value(false))
                 .andExpect(jsonPath("$.data.majors[0].courses[?(@.name=='맨손체조')].taken").value(false));
@@ -220,7 +221,9 @@ class GraduationRequiredTest {
                 .andExpect(jsonPath("$.data.graduationRequired.hasGraduationRequired").value(true))
                 .andExpect(jsonPath("$.data.graduationRequired.satisfied").value(false))
                 .andExpect(jsonPath("$.data.graduationRequired.totalCredit").value(2))
-                .andExpect(jsonPath("$.data.graduationRequired.unmetDescriptions.length()").value(0))
+                .andExpect(jsonPath("$.data.graduationRequired.unmetDescriptions.length()").value(1))
+                .andExpect(jsonPath("$.data.graduationRequired.unmetDescriptions[0]")
+                        .value("[졸업필수(전문실기 2과목)] 1/2과목 이수 완료, 맨손체조 미이수"))
                 .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='전문실기')].current").value(1))
                 .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='전문실기')].required").value(2))
                 .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='전문실기')].satisfied").value(false))
@@ -229,8 +232,7 @@ class GraduationRequiredTest {
     }
 
     // 전문실기(과목수 기준)는 만족했지만 맨손체조(과목수 기준)만 미충족인 경우.
-    // 둘 다 과목수 기준이라 unmetDescriptions는 항상 비어있고, current(만족한 조건 수)는 그대로
-    // 반영돼 satisfied=false와 모순되지 않아야 한다(1/2, unmetDescriptions는 빈 리스트).
+    // 만족한 조건은 결합 문구에서 빠지고, 미충족인 맨손체조만 담긴다(#227).
     @Test
     void 전문실기는_만족하고_맨손체조만_미이수면_current_required가_만족여부와_모순되지_않는다() throws Exception {
         StudentMajor sportsMajor = setUpSportsScienceStudent("9204");
@@ -245,7 +247,9 @@ class GraduationRequiredTest {
                 .andExpect(jsonPath("$.data.majors[0].satisfied").value(false))
                 .andExpect(jsonPath("$.data.majors[0].current").value(1))
                 .andExpect(jsonPath("$.data.majors[0].required").value(2))
-                .andExpect(jsonPath("$.data.majors[0].unmetDescriptions.length()").value(0));
+                .andExpect(jsonPath("$.data.majors[0].unmetDescriptions.length()").value(1))
+                .andExpect(jsonPath("$.data.majors[0].unmetDescriptions[0]")
+                        .value("[졸업필수(맨손체조 1과목)] 미이수"));
 
         mockMvc.perform(get("/api/v1/students/me/graduation")
                         .param("studentMajorId", String.valueOf(sportsMajor.getId()))
@@ -253,7 +257,9 @@ class GraduationRequiredTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.graduatable").value(false))
                 .andExpect(jsonPath("$.data.graduationRequired.satisfied").value(false))
-                .andExpect(jsonPath("$.data.graduationRequired.unmetDescriptions.length()").value(0));
+                .andExpect(jsonPath("$.data.graduationRequired.unmetDescriptions.length()").value(1))
+                .andExpect(jsonPath("$.data.graduationRequired.unmetDescriptions[0]")
+                        .value("[졸업필수(맨손체조 1과목)] 미이수"));
     }
 
     // RequirementCourse row는 있는데 RequirementCourseItem(연결 과목)을 안 넣은 경우.

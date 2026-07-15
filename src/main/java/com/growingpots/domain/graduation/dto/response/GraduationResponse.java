@@ -185,8 +185,10 @@ public class GraduationResponse {
         @Schema(description = "연결 과목 중 이수(COMPLETED)한 학점 합계. source=PLANNED면 계획 과목 학점도 합산")
         private final int totalCredit;
 
-        @Schema(description = "미충족 학점 기준 하위조건 안내 문구 목록 (예: '[졸업필수] 2/4학점 이수완료'). "
-                + "과목수 기준 조건은 미포함 — 하위 요건별 수치는 items를 사용할 것")
+        @Schema(description = "미충족 하위조건 안내 문구 목록. 학점 기준 조건은 조건별로 한 줄씩 "
+                + "(예: '[전문교과] 2/4학점 이수완료'), 과목수 기준 조건(예: 전문실기, 맨손체조)은 전부 합쳐 "
+                + "한 줄로 담긴다(예: '[졸업필수(전문실기 2과목)] 1/2과목 이수 완료, 맨손체조 미이수'). "
+                + "하위 요건별 수치는 items를 사용할 것")
         private final List<String> unmetDescriptions;
 
         @Schema(description = "하위 요건별(예: 전문실기, 맨손체조) 진행 현황. 플래너·노드뷰 화면에서 사용")

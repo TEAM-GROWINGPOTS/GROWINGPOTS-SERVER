@@ -59,9 +59,9 @@ public class GraduationCourseResponse {
                 + "true이면 courses에 미이수 필수과목(taken=false)이 포함됨")
         private final boolean hasRequiredList;
 
-        @Schema(description = "미충족 학점 기준 하위조건 안내 문구 목록. "
-                + "GRADUATION_REQUIRED 전용. 그 외는 항상 빈 리스트. "
-                + "과목수 기준 조건은 과목 카드로만 표시되어 이 목록에 포함되지 않음.")
+        @Schema(description = "미충족 하위조건 안내 문구 목록. GRADUATION_REQUIRED 전용, 그 외는 항상 빈 리스트. "
+                + "학점 기준 조건은 조건별로 한 줄씩, 과목수 기준 조건(예: 전문실기, 맨손체조)은 전부 합쳐 "
+                + "한 줄로 담긴다(예: '[졸업필수(전문실기 2과목)] 1/2과목 이수 완료, 맨손체조 미이수').")
         @Builder.Default
         private final List<String> unmetDescriptions = List.of();
 

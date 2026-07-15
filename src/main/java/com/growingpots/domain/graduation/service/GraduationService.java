@@ -816,13 +816,15 @@ public class GraduationService {
 
         // minCredit이 있으면 학점 합으로, minCount가 있으면 이수 과목 수로 판정한다. 둘 다 설정된
         // row는 아래 루프에서 바로 예외를 던지므로 여기까지 오면 정확히 하나만 설정된 상태다.
-        // 안내 문구(unmetDescriptions)는 학점 기준 조건만 담는다. 과목수 기준 조건(예: 맨손체조)은
-        // 어차피 과목 자체가 이수/미이수 카드로 리스트에 나오기 때문에 문구로 중복해서 보여줄 필요가 없다.
-        // 하위 요건별 수치는 itemProgress(→ RequirementProgress)가 대신 담당한다.
+        // 안내 문구(unmetDescriptions): 학점 기준 조건은 조건별로 한 줄씩 담고, 과목수 기준 조건
+        // (예: 전문실기, 맨손체조)은 buildCourseUnmetDescription으로 한 줄에 합쳐서 담는다(#227) -
+        // 스포츠의학과처럼 하위 요건이 전부 과목수 기준이면 예전엔 unmetDescriptions가 항상 빈
+        // 리스트라 프론트 help text가 아예 안 내려가는 버그가 있었다.
         boolean satisfied = true;
         int satisfiedCount = 0;
         List<String> unmetDescriptions = new ArrayList<>();
         List<RequirementItemProgress> itemProgress = new ArrayList<>();
+        List<RequirementItemProgress> unmetCourseItems = new ArrayList<>();
         for (RequirementCourse rc : requirementCourses) {
             // minCredit/minCount는 시드 데이터로 직접 들어가서(Java 빌더를 안 거침) 엔티티 레벨 검증으로는
             // 못 막는다. 둘 다 설정된 row가 들어오면 어느 쪽이 무시됐는지 모른 채 조용히 잘못 판정하는
@@ -851,21 +853,52 @@ public class GraduationService {
                             .count();
             int required = byCredit ? rc.getMinCredit() : rc.getMinCount();
             boolean rowSatisfied = current >= required;
+            RequirementItemProgress progress = new RequirementItemProgress(rc.getName(), current, required, byCredit, rowSatisfied);
             if (!rowSatisfied) {
                 satisfied = false;
                 if (byCredit) {
                     unmetDescriptions.add("[" + rc.getName() + "] " + current + "/" + required + "학점 이수완료");
+                } else {
+                    unmetCourseItems.add(progress);
                 }
             } else {
                 satisfiedCount++;
             }
-            itemProgress.add(new RequirementItemProgress(rc.getName(), current, required, byCredit, rowSatisfied));
+            itemProgress.add(progress);
+        }
+        String courseUnmetDescription = buildCourseUnmetDescription(unmetCourseItems);
+        if (courseUnmetDescription != null) {
+            unmetDescriptions.add(courseUnmetDescription);
         }
 
         int totalCredit = takenCourses.stream().mapToInt(StudentCourse::getCredit).sum()
                 + plannedInScope.stream().mapToInt(PlannerVersionItem::getCredit).sum();
         return new GraduationRequiredJudgement(satisfied, unmetDescriptions, totalCredit,
                 satisfiedCount, requirementCourses.size(), allItems, takenCourses, itemProgress);
+    }
+
+    // 과목수 기준 하위요건(예: 전문실기, 맨손체조)의 미충족 현황을 한 줄로 합친다(#227).
+    // 첫 항목만 "[졸업필수(이름 요구과목수과목)] 상태" 형태로 라벨을 달고, 나머지는 "이름 상태"로
+    // 콤마 연결한다. 상태는 0과목 이수했으면 "미이수", 아니면 "현재/요구과목 이수 완료".
+    // 예: "[졸업필수(전문실기 2과목)] 1/2과목 이수 완료, 맨손체조 미이수"
+    private String buildCourseUnmetDescription(List<RequirementItemProgress> unmetCourseItems) {
+        if (unmetCourseItems.isEmpty()) {
+            return null;
+        }
+        StringBuilder description = new StringBuilder();
+        for (int i = 0; i < unmetCourseItems.size(); i++) {
+            RequirementItemProgress item = unmetCourseItems.get(i);
+            String status = item.current() == 0
+                    ? "미이수"
+                    : item.current() + "/" + item.required() + "과목 이수 완료";
+            if (i == 0) {
+                description.append("[졸업필수(").append(item.name()).append(' ').append(item.required())
+                        .append("과목)] ").append(status);
+            } else {
+                description.append(", ").append(item.name()).append(' ').append(status);
+            }
+        }
+        return description.toString();
     }
 
     // satisfiedRequirementCount/totalRequirementCount는 학점/과목수 조건 전부(unmetDescriptions에
