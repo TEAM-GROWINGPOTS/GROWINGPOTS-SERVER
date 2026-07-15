@@ -76,20 +76,21 @@ class PdfTranscriptParserTest {
         ParsedTranscript result = parser.parse(Files.readAllBytes(pdfPath));
 
         assertThat(result.studentInfo().get("department")).isEqualTo("연극영화학과");
-        // 원래 6개였는데, KHCU0045(경희사이버대 학점교류 과목)는 과목명 자체에 슬래시가 섞여 있어
-        // 년도/학기를 못 찾고 파싱에서 제외된다(#192) - 예전엔 옆 전공 과목(FT3039)을 통째로 삼켜서
-        // 잘못된 이름으로라도 존재했는데, 그 손상된 형태보다는 아예 빠지는 게 낫다.
-        assertThat(countInSection(result.courses(), "배분이수")).isEqualTo(5);
+        // KHCU0045(경희사이버대 학점교류 과목)는 과목명 자체에 슬래시가 섞여 있어 년도/학기를 못 찾지만,
+        // 조용히 빠지지 않고 "확인 필요" 상태(학점 0)로 남는다(#192 후속) - 옆 전공 과목(FT3039)은
+        // 더 이상 통째로 삼켜지지 않고 정상 분리된다.
+        assertThat(countInSection(result.courses(), "배분이수")).isEqualTo(6);
         assertThat(countInSection(result.courses(), "자유이수")).isEqualTo(5);
         assertThat(countInSection(result.courses(), "기타")).isEqualTo(3);
         // 이 학과는 "연극영화학"/"영화트랙" 두 트랙 표에 같은 과목(같은 학기·학점)이 중복으로 나열되는데,
         // 실제 수강 이력은 한 번뿐이니 먼저 나온 "연극영화학" 쪽만 남고 "영화트랙" 중복은 전부 제거돼야 한다.
         assertThat(countInSection(result.courses(), "영화트랙")).isEqualTo(0);
         assertThat(countInSection(result.courses(), "연극영화학")).isEqualTo(15);
-        assertThat(result.courses()).hasSize(40);
+        assertThat(result.courses()).hasSize(41);
         assertThat(inSection(result.courses(), "배분이수"))
                 .anySatisfy(course -> assertThat(course.get("courseCode")).isEqualTo("GED11020"))
-                .anySatisfy(course -> assertThat(course.get("courseCode")).isEqualTo("GED11107"));
+                .anySatisfy(course -> assertThat(course.get("courseCode")).isEqualTo("GED11107"))
+                .anySatisfy(course -> assertThat(course.get("courseCode")).isEqualTo("KHCU0045"));
         // SW인증 필요/취득 학점이 판정(미통과) 결과와 일치하는지 확인: 6학점 필요에 4학점 취득 → 미통과
         assertThat(result.graduationSummary().get("swCertRequirement")).isEqualTo("6");
         assertThat(result.graduationSummary().get("swCertEarned")).isEqualTo("4");
@@ -292,5 +293,52 @@ class PdfTranscriptParserTest {
         assertThat(courseName(result.courses(), "FT3039")).isEqualTo("영화편집연구");
         assertThat(courseName(result.courses(), "FT3081")).isEqualTo("고급시나리오창작");
         assertThat(result.courses()).noneMatch(course -> String.valueOf(course.get("courseName")).contains("FT30"));
+    }
+
+    // KHCU0045(경희사이버대 학점교류 과목)처럼 옆 과목을 삼키던 형태로 깨진 과목은, 학점/학기를
+    // 알아볼 수 없어도 조용히 빠지지 않고 "확인 필요" 상태(학점 0, 학기 없음)로라도 남아야 한다(#192
+    // 후속) - 검수 화면에서 사용자가 직접 고칠 수 있게. 옆 전공 과목(FT3039)은 그대로 정상 분리된다.
+    @Test
+    void 옆_과목을_삼키던_과목도_확인_필요_상태로_남는다() throws Exception {
+        Path pdfPath = Path.of("/Users/test/Desktop/광운대/3학년/동아리/sopt/growingpots/졸업관리표/연극영화과/23연극영화과_졸업사정관리표.pdf");
+        assumeTrue(Files.exists(pdfPath));
+
+        ParsedTranscript result = parser.parse(Files.readAllBytes(pdfPath));
+
+        List<Map<String, String>> khcu0045 = result.courses().stream()
+                .filter(course -> "KHCU0045".equals(course.get("courseCode")))
+                .toList();
+        assertThat(khcu0045).hasSize(1);
+        assertThat(khcu0045.get(0).get("courseName")).contains("여행을통한인간삶의가치증진");
+        assertThat(khcu0045.get(0).get("credits")).isEqualTo("0");
+        assertThat(khcu0045.get(0).get("section")).isEqualTo("배분이수");
+
+        assertThat(courseName(result.courses(), "FT3039")).isEqualTo("영화편집연구");
+        assertThat(result.courses().stream()
+                        .filter(course -> "FT3039".equals(course.get("courseCode")))
+                        .findFirst().orElseThrow().get("credits"))
+                .isEqualTo("3");
+    }
+
+    // 같은 패턴(EXCH01713)이 다른 학과 PDF에도 있다 - 학점교류 과목 전반에 적용되는지 확인.
+    @Test
+    void 다른_PDF에서도_학점교류_과목이_확인_필요_상태로_남고_옆_과목은_정상_분리된다() throws Exception {
+        Path pdfPath = Path.of("/Users/test/Desktop/광운대/3학년/동아리/sopt/growingpots/졸업관리표/추가 pdf/컴퓨터공학과_21_신진수_졸업진단표.pdf");
+        assumeTrue(Files.exists(pdfPath));
+
+        ParsedTranscript result = parser.parse(Files.readAllBytes(pdfPath));
+
+        List<Map<String, String>> exch = result.courses().stream()
+                .filter(course -> "EXCH01713".equals(course.get("courseCode")))
+                .toList();
+        assertThat(exch).hasSize(1);
+        assertThat(exch.get(0).get("courseName")).contains("로컬콘텐츠실감미디어");
+        assertThat(exch.get(0).get("credits")).isEqualTo("0");
+
+        assertThat(courseName(result.courses(), "APHY1002")).isEqualTo("물리학및실험1");
+        assertThat(result.courses().stream()
+                        .filter(course -> "APHY1002".equals(course.get("courseCode")))
+                        .findFirst().orElseThrow().get("credits"))
+                .isEqualTo("3");
     }
 }

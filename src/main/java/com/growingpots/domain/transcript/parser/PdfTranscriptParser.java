@@ -423,7 +423,13 @@ public class PdfTranscriptParser {
                 if (leftCourse.isPresent()) {
                     courses.add(leftCourse.get());
                 } else if (hasCourseCodeOnSide(line, CourseSide.LEFT)) {
-                    parseCompletedCourseFromLine(line, state.leftSection()).ifPresent(courses::add);
+                    Optional<Map<String, String>> completed =
+                            parseCompletedCourseFromLine(line, state.leftSection());
+                    if (completed.isPresent()) {
+                        courses.add(completed.get());
+                    } else {
+                        parseFallbackCourseFromLine(line, state.leftSection(), state).ifPresent(courses::add);
+                    }
                 }
             }
             parseCourseFromSide(line, CourseSide.RIGHT, state.rightSection(), state)
@@ -742,6 +748,42 @@ public class PdfTranscriptParser {
         course.put("credits", credits);
         course.put("semester", matcher.group(4).replaceAll("\\s+", ""));
         course.put("rawClassification", rawClassification);
+        return Optional.of(course);
+    }
+
+    // 경희사이버대 학점교류 과목처럼 학점/연도 숫자가 과목명 글자 위에 겹쳐 찍혀서(#192), 학수번호는
+    // 알아도 학점·학기를 도저히 못 알아보는 행의 마지막 수단이다. 조용히 빠뜨리기보다는 "확인 필요"
+    // 상태로라도 남겨서, 검수 화면에서 사용자가 직접 학점/학기를 채워 넣을 수 있게 한다. 학점은 0(값을
+    // 몰라서 채운 자리표시자), 학기는 비워서(null) 검수 화면에 빈 값으로 뜨게 한다.
+    private Optional<Map<String, String>> parseFallbackCourseFromLine(
+            TextLine line, String section, CourseSectionState state) {
+        List<TextSegment> leftSegments = line.segments().stream()
+                .filter(segment -> CourseSide.LEFT.contains(segment, line))
+                .toList();
+        TextSegment codeSegment = findFirstMatchingSegment(leftSegments, COURSE_CODE_PATTERN);
+        if (codeSegment == null) {
+            return Optional.empty();
+        }
+        String courseCode = firstMatch(codeSegment.text(), COURSE_CODE_PATTERN);
+        String leftText = sideText(line, CourseSide.LEFT);
+        int codeIndex = leftText.indexOf(courseCode);
+        if (codeIndex < 0) {
+            return Optional.empty();
+        }
+        String rawCourseName = leftText.substring(codeIndex + courseCode.length()).trim();
+        if (rawCourseName.isBlank()) {
+            return Optional.empty();
+        }
+
+        String rawClassificationText = carriedRawClassification(line.segments(), CourseSide.LEFT, state);
+        Map<String, String> course = new LinkedHashMap<>();
+        course.put("section", courseSection(section, rawClassificationText, CourseSide.LEFT));
+        course.put("courseCode", courseCode);
+        course.put("courseName", stripLeadingMarker(rawCourseName));
+        course.put("credits", "0");
+        if (rawClassificationText != null) {
+            course.put("rawClassification", rawClassificationText);
+        }
         return Optional.of(course);
     }
 
