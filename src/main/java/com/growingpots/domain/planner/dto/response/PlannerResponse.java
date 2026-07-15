@@ -26,7 +26,7 @@ public class PlannerResponse {
         @Schema(description = "학년", example = "1")
         private final int yearLevel;
 
-        @Schema(description = "학기 (1 또는 2)", example = "1")
+        @Schema(description = "학기 (1=1학기, 2=2학기, 3=여름학기, 4=겨울학기)", example = "1")
         private final int semester;
 
         // completedTerms는 조회전용이라 실제 PLANNER_TERM_VERSION row가 없어 합성 ID를 만들어 넣는다.
@@ -110,7 +110,7 @@ public class PlannerResponse {
         @Schema(description = "학년", example = "2")
         private final int yearLevel;
 
-        @Schema(description = "학기 (1 또는 2)", example = "1")
+        @Schema(description = "학기 (1=1학기, 2=2학기, 3=여름학기, 4=겨울학기)", example = "1")
         private final int semester;
 
         @Schema(description = "버전(폴더) 목록")

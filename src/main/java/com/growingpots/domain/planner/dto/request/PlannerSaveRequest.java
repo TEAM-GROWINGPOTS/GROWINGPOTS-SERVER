@@ -17,7 +17,7 @@ public record PlannerSaveRequest(
     @Schema(description = "학기 요청")
     public record TermRequest(
             @Schema(description = "학년 (1 이상)", example = "1") @NotNull @Min(1) Integer yearLevel,
-            @Schema(description = "학기 (1 또는 2)", example = "1") @NotNull @Min(1) @Max(2) Integer semester,
+            @Schema(description = "학기 (1=1학기, 2=2학기, 3=여름학기, 4=겨울학기)", example = "1") @NotNull @Min(1) @Max(4) Integer semester,
             @Schema(description = "버전(폴더) 목록. 정확히 1개의 isSelected=true 버전 필요") @NotEmpty @Valid List<VersionRequest> versions
     ) {
     }
