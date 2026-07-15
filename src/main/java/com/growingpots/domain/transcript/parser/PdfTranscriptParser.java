@@ -56,8 +56,14 @@ public class PdfTranscriptParser {
                     + "(\\d+)\\s*/\\s*(\\d+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)"
     );
     private static final Pattern COURSE_CODE_PATTERN = Pattern.compile("[A-Z]{2,5}\\d{3,5}");
+    // 과목코드와 과목명 사이는 세그먼트가 붙어 나올 때가 있어(예: "SM320운동손상평가") \s*(0개 허용)를
+    // 유지해야 하지만, 과목명과 학점 숫자 그룹 사이는 반드시 실제 공백(\s+)으로 구분해야 한다. 여기를
+    // \s*로 두면 "공학수학2"처럼 과목명 끝에 일련번호가 붙은 과목에서 비탐욕(.+?) 매칭이 그 붙어있는
+    // "2"를 학점으로 먼저 채가고, 진짜 학점(3)은 뒤 트레일링 그룹으로 통째로 버려진다(#210). 공백을
+    // 강제하면 과목명 세그먼트에 딱 붙어있는 숫자는 학점 후보에서 제외되고, 별도 세그먼트(진짜 공백으로
+    // 구분된 숫자)만 학점으로 인식된다.
     private static final Pattern CURRENT_COURSE_PATTERN = Pattern.compile(
-            "^\\s*(\\d{2})\\s+([A-Z]{2,5}\\d{3,5})\\s*(.+?)\\s*(\\d)(?:\\s+.*)?$"
+            "^\\s*(\\d{2})\\s+([A-Z]{2,5}\\d{3,5})\\s*(.+?)\\s+(\\d)(?:\\s+.*)?$"
     );
     private static final Pattern COMPLETED_COURSE_LINE_PATTERN = Pattern.compile(
             "^\\s*(\\d{2,4})(?:\\s+\\d{2})?\\s+([A-Z]{2,5}\\d{3,5})\\s*(.+?)\\s*(\\d{4}\\s*/\\s*\\d)(?:\\s+.*)?$"
