@@ -52,4 +52,9 @@ public class StudentMajor extends BaseTimeEntity {
         this.majorType = majorType;
         this.track = track;
     }
+
+    // 온보딩 기본정보를 다시 제출한 경우(#221) 본전공 학과를 새 값으로 갱신한다.
+    public void updateDepartment(Department department) {
+        this.department = department;
+    }
 }

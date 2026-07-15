@@ -1,6 +1,8 @@
 package com.growingpots.domain.user.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.growingpots.domain.transcript.entity.GraduationAnalysisSummary;
+import com.growingpots.domain.transcript.repository.GraduationAnalysisSummaryRepository;
 import com.growingpots.domain.university.entity.Department;
 import com.growingpots.domain.university.entity.School;
 import com.growingpots.domain.university.repository.DepartmentRepository;
@@ -8,9 +10,11 @@ import com.growingpots.domain.university.repository.SchoolRepository;
 import com.growingpots.domain.user.client.KakaoOAuthClient;
 import com.growingpots.domain.user.client.KakaoUserInfoResponse;
 import com.growingpots.domain.user.entity.Member;
+import com.growingpots.domain.user.entity.StudentMajor;
 import com.growingpots.domain.user.entity.StudentProfile;
 import com.growingpots.domain.user.entity.enums.OauthProvider;
 import com.growingpots.domain.user.repository.MemberRepository;
+import com.growingpots.domain.user.repository.StudentMajorRepository;
 import com.growingpots.domain.user.repository.StudentProfileRepository;
 import com.growingpots.global.exception.BaseException;
 import com.growingpots.global.response.error.ErrorCode;
@@ -60,11 +64,19 @@ class AuthControllerTest {
     @Autowired
     private DepartmentRepository departmentRepository;
 
+    @Autowired
+    private StudentMajorRepository studentMajorRepository;
+
+    @Autowired
+    private GraduationAnalysisSummaryRepository graduationAnalysisSummaryRepository;
+
     @MockitoBean
     private KakaoOAuthClient kakaoOAuthClient;
 
     @AfterEach
     void tearDown() {
+        graduationAnalysisSummaryRepository.deleteAll();
+        studentMajorRepository.deleteAll();
         studentProfileRepository.deleteAll();
         memberRepository.deleteAll();
         departmentRepository.deleteAll();
@@ -93,9 +105,12 @@ class AuthControllerTest {
                 .andExpect(cookie().httpOnly("refreshToken", true));
     }
 
+    // 기본정보입력만 하고 PDF를 아직 안 올린 상태(GraduationAnalysisSummary 없음)는 온보딩 완료가
+    // 아니다(#221) - 재로그인 시 온보딩 화면부터 다시 보여줘야 하기 때문에, StudentProfile 존재만으로
+    // true를 주면 PDF 업로드 화면을 건너뛰고 잘못된 곳으로 보내게 된다.
     @Test
-    void 온보딩을_완료한_기존_회원은_onboardingCompleted가_true다() throws Exception {
-        School school = schoolRepository.save(School.builder().name("경희대학교 국제캠퍼스").build());
+    void 기본정보만_입력하고_PDF를_안_올렸으면_onboardingCompleted가_false다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교 국제캠퍼스-2002").build());
         Department department = departmentRepository.save(Department.builder()
                 .school(school)
                 .college("공과대학")
@@ -118,6 +133,51 @@ class AuthControllerTest {
         when(kakaoOAuthClient.getUserInfo(anyString())).thenReturn(
                 new KakaoUserInfoResponse(2002L,
                         new KakaoUserInfoResponse.Properties("기존회원"),
+                        null));
+
+        mockMvc.perform(post("/api/v1/auth/oauth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new LoginRequestFixture("KAKAO", "kakao_access_token_xxx"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.onboardingCompleted").value(false));
+    }
+
+    // PDF 분석까지 끝난(GraduationAnalysisSummary 있음) 회원만 진짜 온보딩 완료다(#221).
+    @Test
+    void PDF_분석까지_끝난_회원은_onboardingCompleted가_true다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교 국제캠퍼스-2003").build());
+        Department department = departmentRepository.save(Department.builder()
+                .school(school)
+                .college("공과대학")
+                .name("컴퓨터공학과")
+                .build());
+
+        Member member = memberRepository.save(Member.builder()
+                .nickname("PDF분석완료회원")
+                .oauthProvider(OauthProvider.KAKAO)
+                .oauthId("2003")
+                .email(null)
+                .build());
+        StudentProfile profile = studentProfileRepository.save(StudentProfile.builder()
+                .member(member)
+                .school(school)
+                .department(department)
+                .admissionYear(2022)
+                .build());
+        StudentMajor mainMajor = studentMajorRepository.save(StudentMajor.builder()
+                .studentProfile(profile)
+                .department(department)
+                .majorType(StudentMajor.MajorType.MAIN)
+                .track(null)
+                .build());
+        graduationAnalysisSummaryRepository.save(GraduationAnalysisSummary.builder()
+                .studentMajor(mainMajor)
+                .build());
+
+        when(kakaoOAuthClient.getUserInfo(anyString())).thenReturn(
+                new KakaoUserInfoResponse(2003L,
+                        new KakaoUserInfoResponse.Properties("PDF분석완료회원"),
                         null));
 
         mockMvc.perform(post("/api/v1/auth/oauth/login")
