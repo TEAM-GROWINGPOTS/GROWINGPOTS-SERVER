@@ -536,10 +536,16 @@ public class GraduationService {
     // 같은 과목을 재수강하면 완료(COMPLETED) 행과 진행중(IN_PROGRESS) 행이 같이 나올 수 있는데, 영어/SW
     // 목록에서는 같은 과목을 두 번 보여주면 안 되므로 course 하나당 한 행만 남긴다. 완료 이력이 있으면
     // 그 행을 우선하고(이미 이수했다는 사실은 확정적), 없으면 진행중 행을 보여준다.
+    // course가 null인 행(과목 마스터와 매칭 안 된 직접 추가/미매칭 과목)은 dedupe 기준(course_id) 자체가
+    // 없어 재수강 여부를 판단할 수 없다 - 예전엔 통째로 걸러냈는데, 그 바람에 이수구분별 상세 목록에서
+    // 완전히 빠지고 졸업필수처럼 필수과목 목록이 있는 화면에선 "미이수"로 잘못 뜨는 문제가 있었다(#218).
+    // dedupe 없이 그대로 통과시킨다 - 아래 호출부들은 이미 course null을 안전하게 처리한다.
     private List<StudentCourse> dedupeByCourse(List<StudentCourse> courses) {
         Map<Long, StudentCourse> byCourseId = new LinkedHashMap<>();
+        List<StudentCourse> unmatched = new ArrayList<>();
         for (StudentCourse sc : courses) {
             if (sc.getCourse() == null) {
+                unmatched.add(sc);
                 continue;
             }
             Long courseId = sc.getCourse().getId();
@@ -549,7 +555,32 @@ public class GraduationService {
                 byCourseId.put(courseId, sc);
             }
         }
-        return new ArrayList<>(byCourseId.values());
+        List<StudentCourse> result = new ArrayList<>(byCourseId.values());
+        result.addAll(unmatched);
+        return result;
+    }
+
+    // RequirementCourseItem 목록에서 course_id 집합/코드→id 맵을 뽑는다. judgeGraduationRequired와
+    // buildGraduationRequiredMajorCourses가 같은 방식으로 "이 졸업요건 과목인지" 판정해야 해서
+    // resolveRequirementCourseId와 함께 공용으로 쓴다.
+    private Set<Long> courseIdSet(List<RequirementCourseItem> items) {
+        return items.stream().map(item -> item.getCourse().getId()).collect(Collectors.toSet());
+    }
+
+    private Map<String, Long> courseIdByCode(List<RequirementCourseItem> items) {
+        return items.stream().collect(Collectors.toMap(
+                item -> item.getCourse().getCourseCode(), item -> item.getCourse().getId(), (a, b) -> a));
+    }
+
+    // StudentCourse 한 행이 이 졸업요건의 어느 과목(course_id)에 해당하는지 판정한다. course_id가
+    // 있으면 그대로 쓰고, course가 null(미매칭/직접 추가)이면 rawCourseCode로 한 번 더 찾아본다(#218) -
+    // 매칭도 코드도 없으면(과목 마스터에 아예 없는 편입학점 등) 판정 불가라 null을 반환한다.
+    private Long resolveRequirementCourseId(
+            StudentCourse sc, Set<Long> requirementCourseIds, Map<String, Long> requirementCourseIdByCode) {
+        if (sc.getCourse() != null) {
+            return requirementCourseIds.contains(sc.getCourse().getId()) ? sc.getCourse().getId() : null;
+        }
+        return sc.getRawCourseCode() != null ? requirementCourseIdByCode.get(sc.getRawCourseCode()) : null;
     }
 
     // ENGLISH_COURSE/SW_CERT_COURSE + majorType=ALL 전용.
@@ -718,11 +749,20 @@ public class GraduationService {
         GraduationRequiredJudgement judgement = judgeGraduationRequired(profile, major.getDepartment(), List.of());
         boolean hasRequiredList = !judgement.items().isEmpty();
 
+        Set<Long> requirementCourseIds = courseIdSet(judgement.items());
+        Map<String, Long> requirementCourseIdByCode = courseIdByCode(judgement.items());
+
         Set<Long> takenCourseIds = new HashSet<>();
         List<CourseInfo> courses = new ArrayList<>();
         for (StudentCourse sc : judgement.takenCourses()) {
             courses.add(toTakenCourseInfo(sc));
-            takenCourseIds.add(sc.getCourse().getId());
+            // course_id 없이 rawCourseCode로만 매칭된 행(#218)도 놓치지 않도록 judgeGraduationRequired와
+            // 동일한 방식으로 다시 식별한다 - null이면(이론상 안 일어남, takenCourses는 이미 이 방식으로
+            // 필터링된 것들이라) 미이수 후보 목록에서 걸러지지 않게 될 뿐 NPE는 나지 않는다.
+            Long requirementCourseId = resolveRequirementCourseId(sc, requirementCourseIds, requirementCourseIdByCode);
+            if (requirementCourseId != null) {
+                takenCourseIds.add(requirementCourseId);
+            }
         }
 
         Set<Long> addedIds = new HashSet<>();
@@ -794,16 +834,20 @@ public class GraduationService {
                 .collect(Collectors.groupingBy(item -> item.getRequirementCourse().getId()));
 
         List<StudentCourse> studentCourses = studentCourseRepository.findWithCourseByStudentProfile(profile);
-        Set<Long> requirementCourseIds = allItems.stream()
-                .map(item -> item.getCourse().getId())
-                .collect(Collectors.toSet());
+        Set<Long> requirementCourseIds = courseIdSet(allItems);
+        // course_id 매칭이 없는(직접 추가/미매칭) 과목도 rawCourseCode로 식별되면 이 졸업요건 과목으로
+        // 인정한다(#218) - 과목 마스터에 아예 없는 편입학점 등은 rawCourseCode도 비어 있어 여전히
+        // 매칭 불가능하지만, PDF 파싱은 매칭 실패해도 원문 학수번호는 남기므로(예: 학점교류과목) 그
+        // 경우는 구제된다. resolveRequirementCourseId 참고.
+        Map<String, Long> requirementCourseIdByCode = courseIdByCode(allItems);
         List<StudentCourse> takenCourses = studentCourses.stream()
-                .filter(sc -> sc.getCourse() != null
-                        && sc.getStatus() == CourseStatus.COMPLETED
-                        && requirementCourseIds.contains(sc.getCourse().getId()))
+                .filter(sc -> sc.getStatus() == CourseStatus.COMPLETED
+                        && resolveRequirementCourseId(sc, requirementCourseIds, requirementCourseIdByCode) != null)
                 .toList();
         Map<Long, Integer> completedCreditByCourseId = takenCourses.stream()
-                .collect(Collectors.toMap(sc -> sc.getCourse().getId(), StudentCourse::getCredit, (a, b) -> a));
+                .collect(Collectors.toMap(
+                        sc -> resolveRequirementCourseId(sc, requirementCourseIds, requirementCourseIdByCode),
+                        StudentCourse::getCredit, (a, b) -> a));
 
         // PLANNED: 이 졸업요건 대상 과목만 걸러서 미이수 판정에 더한다. 재수강 과목(이미 completedCreditByCourseId에
         // 있는 과목)이 plannedItems에 포함될 수 있으며, 아래 판정 로직에서 completed 값을 우선 사용하므로

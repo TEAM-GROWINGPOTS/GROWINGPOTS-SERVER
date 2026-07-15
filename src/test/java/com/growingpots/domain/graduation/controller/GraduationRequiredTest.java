@@ -194,6 +194,58 @@ class GraduationRequiredTest {
                 .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='맨손체조')].required").value(1));
     }
 
+    // PDF 파싱이 과목 마스터 매칭에는 실패했지만(course=null) 원문 학수번호(rawCourseCode)는 남긴
+    // 경우(학점교류과목 등 흔한 케이스) - course_id로 판정하면 미이수로 잘못 뜨던 걸 rawCourseCode로도
+    // 구제하도록 고쳤다(#218).
+    @Test
+    void course_매칭은_안됐지만_rawCourseCode가_일치하면_졸업필수_이수로_인정된다() throws Exception {
+        StudentMajor sportsMajor = setUpSportsScienceStudent("9218");
+        StudentProfile profile = sportsMajor.getStudentProfile();
+        completeCourse(profile, "CPE201", 2);
+        completeCourse(profile, "CPE202", 2);
+        // 맨손체조(CPE103)를 과목 마스터 매칭 없이 rawCourseCode만 남은 상태로 이수 처리
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(null).rawCourseCode("CPE103").rawCourseName("맨손체조")
+                .credit(1).takenYear(2023).takenSemester(Semester.FIRST)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).isRetake(false).build());
+
+        mockMvc.perform(get("/api/v1/students/me/graduation/GRADUATION_REQUIRED/courses")
+                        .param("studentMajorId", String.valueOf(sportsMajor.getId()))
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.majors[0].satisfied").value(true))
+                .andExpect(jsonPath("$.data.majors[0].courses[?(@.name=='맨손체조')].taken").value(true));
+
+        mockMvc.perform(get("/api/v1/students/me/graduation")
+                        .param("studentMajorId", String.valueOf(sportsMajor.getId()))
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.graduationRequired.satisfied").value(true))
+                .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='맨손체조')].current").value(1))
+                .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='맨손체조')].satisfied").value(true));
+    }
+
+    // course_id도, rawCourseCode도 없는(과목 마스터에 아예 없는 편입학점 등을 직접 입력) 경우는
+    // 어떤 하위요건에 해당하는지 식별할 방법이 없어 여전히 미이수로 처리되는 게 맞는다 - 회귀 방지용.
+    @Test
+    void course와_rawCourseCode_둘다_없으면_졸업필수_이수로_인정되지_않는다() throws Exception {
+        StudentMajor sportsMajor = setUpSportsScienceStudent("9219");
+        StudentProfile profile = sportsMajor.getStudentProfile();
+        completeCourse(profile, "CPE201", 2);
+        completeCourse(profile, "CPE202", 2);
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(null).rawCourseCode(null).rawCourseName("편입인정과목")
+                .credit(1).takenYear(2023).takenSemester(Semester.FIRST)
+                .status(CourseStatus.COMPLETED).source(RecordSource.MANUAL).isRetake(false).build());
+
+        mockMvc.perform(get("/api/v1/students/me/graduation/GRADUATION_REQUIRED/courses")
+                        .param("studentMajorId", String.valueOf(sportsMajor.getId()))
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.majors[0].satisfied").value(false))
+                .andExpect(jsonPath("$.data.majors[0].courses[?(@.name=='맨손체조')].taken").value(false));
+    }
+
     @Test
     void 전문실기_1과목만_이수하고_맨손체조_미이수면_졸업필수를_만족하지_못한다() throws Exception {
         StudentMajor sportsMajor = setUpSportsScienceStudent("9202");
