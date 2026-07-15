@@ -101,16 +101,12 @@ public class GraduationService {
 
         List<StudentMajor> majors = studentMajorRepository.findWithDepartmentByStudentProfile(profile);
 
-        // PLANNED: 플래너 선택 버전의 계획 과목 중 이미 이수/수강 중인 과목을 제외한 신규 항목만 사용
-        // 플래너가 없거나 신규 항목이 없으면 COMPLETED와 동일한 응답
+        // PLANNED: 플래너 선택 버전의 모든 계획 과목을 사용.
+        // 이미 이수/수강 중인 과목(재수강)도 총학점·카테고리별 학점에 중복 합산한다.
+        // 플래너가 없으면 COMPLETED와 동일한 응답.
         List<PlannerVersionItem> allPlannedItems = List.of();
         if (source == GraduationSource.PLANNED) {
-            List<Long> alreadyCountedIds = studentCourseRepository.findCourseIdsByStudentProfileAndStatusIn(
-                    profile, List.of(CourseStatus.COMPLETED, CourseStatus.IN_PROGRESS));
-            Set<Long> alreadyCounted = new HashSet<>(alreadyCountedIds);
-            allPlannedItems = plannerVersionItemRepository.findSelectedByStudentProfile(profile).stream()
-                    .filter(i -> !alreadyCounted.contains(i.getCourse().getId()))
-                    .toList();
+            allPlannedItems = plannerVersionItemRepository.findSelectedByStudentProfile(profile);
         }
 
         // 전공별(본전공 + 복수전공 몇 개든 전부) 스냅샷/졸업필수 판정/PLANNED 반영을 한 번씩만 계산해
@@ -803,8 +799,9 @@ public class GraduationService {
         Map<Long, Integer> completedCreditByCourseId = takenCourses.stream()
                 .collect(Collectors.toMap(sc -> sc.getCourse().getId(), StudentCourse::getCredit, (a, b) -> a));
 
-        // PLANNED: 이 졸업요건 대상 과목만 걸러서 미이수 판정에 더한다. completedCreditByCourseId에
-        // 이미 있는 과목은 계획에도 잡혀있을 수 없다(getGraduation()에서 이미 걸러서 넘어옴).
+        // PLANNED: 이 졸업요건 대상 과목만 걸러서 미이수 판정에 더한다. 재수강 과목(이미 completedCreditByCourseId에
+        // 있는 과목)이 plannedItems에 포함될 수 있으며, 아래 판정 로직에서 completed 값을 우선 사용하므로
+        // 졸업요건 판정에서는 이중카운트가 발생하지 않는다.
         List<PlannerVersionItem> plannedInScope = plannedItems.stream()
                 .filter(i -> requirementCourseIds.contains(i.getCourse().getId()))
                 .toList();
