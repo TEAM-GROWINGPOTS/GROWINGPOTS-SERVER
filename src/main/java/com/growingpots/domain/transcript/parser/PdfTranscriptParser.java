@@ -438,6 +438,16 @@ public class PdfTranscriptParser {
                 .anyMatch(segment -> COURSE_CODE_PATTERN.matcher(segment.text()).find());
     }
 
+    // line.text()는 좌우 컬럼이 한 줄에 합쳐진 전체 텍스트라, 정규식 기반 폴백 파서가 그걸 그대로 쓰면
+    // 반대쪽 컬럼(주로 전공)의 과목까지 삼켜버릴 수 있다(#192). 해당 side의 세그먼트만 다시 이어붙여서
+    // 그 줄에서 그 컬럼에 해당하는 텍스트만 남긴다.
+    private String sideText(TextLine line, CourseSide side) {
+        return line.segments().stream()
+                .filter(segment -> side.contains(segment, line))
+                .map(TextSegment::text)
+                .collect(Collectors.joining(" "));
+    }
+
     private List<Map<String, String>> extractCurrentSemesterCourses(List<PageText> pageTexts) {
         List<Map<String, String>> currentSemesterCourses = new ArrayList<>();
         boolean inCurrentSemesterArea = false;
@@ -628,19 +638,26 @@ public class PdfTranscriptParser {
             return Optional.empty();
         }
 
+        // line.text()는 좌우 컬럼(교양/전공)이 한 줄에 나란히 합쳐진 전체 텍스트다. 이 메서드는 LEFT
+        // 컬럼 전용인데(위 side != LEFT 체크) 그걸 그대로 쓰면, 이 행의 LEFT 과목 파싱이 실패해서 여기로
+        // 빠졌을 때 오른쪽(전공) 과목의 코드/이름/학점까지 통째로 삼켜버릴 수 있다(#192) - 왼쪽 과목명
+        // 세그먼트가 슬래시/연도 형식이 깨져서 이 폴백을 타는 상황인데, 오른쪽 컬럼도 같은 줄에 실제
+        // 내용이 있으면 "/"나 연도 패턴을 찾을 때 오른쪽까지 넘어가 버린다. LEFT 세그먼트만 다시 이어
+        // 붙인 텍스트로 제한해서 오른쪽 과목을 건드리지 않게 한다.
+        String leftText = sideText(line, CourseSide.LEFT);
         String courseCode = firstMatch(codeSegment.text(), COURSE_CODE_PATTERN);
-        int codeIndex = line.text().indexOf(courseCode);
-        int slashIndex = line.text().indexOf("/", codeIndex);
+        int codeIndex = leftText.indexOf(courseCode);
+        int slashIndex = leftText.indexOf("/", codeIndex);
         if (codeIndex < 0 || slashIndex < 0) {
             return Optional.empty();
         }
 
-        Matcher semesterNumberMatcher = Pattern.compile("/\\D*([1-4])").matcher(line.text().substring(slashIndex));
+        Matcher semesterNumberMatcher = Pattern.compile("/\\D*([1-4])").matcher(leftText.substring(slashIndex));
         if (!semesterNumberMatcher.find()) {
             return Optional.empty();
         }
 
-        String rawCourseName = line.text().substring(codeIndex + courseCode.length(), slashIndex).trim();
+        String rawCourseName = leftText.substring(codeIndex + courseCode.length(), slashIndex).trim();
         String year = lastDigits(rawCourseName, 4);
         if (year == null) {
             return Optional.empty();
@@ -690,7 +707,13 @@ public class PdfTranscriptParser {
     }
 
     private Optional<Map<String, String>> parseCompletedCourseFromLine(TextLine line, String section) {
-        Matcher matcher = COMPLETED_COURSE_LINE_PATTERN.matcher(line.text());
+        // 항상 LEFT 컬럼(교양) 전용 폴백인데 line.text()는 좌우가 합쳐진 전체 텍스트다(#192). 이 행의
+        // LEFT 과목명이 슬래시(연도/학기)를 포함한 채로 하나의 세그먼트에 뭉쳐 나오면(예: 대학원/사이버
+        // 강의명에 괄호·슬래시가 들어간 경우), 좌측 과목 자체의 "년도/학기"를 못 찾은 걸로 보여서
+        // 비탐욕 매칭이 오른쪽(전공) 컬럼의 진짜 "년도/학기"까지 넘어가 버리고, 그 사이에 있는 오른쪽
+        // 과목의 코드·이름·학점을 통째로 왼쪽 과목명에 삼켜버린다. LEFT 세그먼트만 다시 이어붙인
+        // 텍스트로 제한해서 오른쪽 컬럼 내용이 애초에 안 보이게 한다.
+        Matcher matcher = COMPLETED_COURSE_LINE_PATTERN.matcher(sideText(line, CourseSide.LEFT));
         if (!matcher.find()) {
             return Optional.empty();
         }
