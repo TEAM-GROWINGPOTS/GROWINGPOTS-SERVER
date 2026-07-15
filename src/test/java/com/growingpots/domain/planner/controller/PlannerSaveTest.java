@@ -315,6 +315,89 @@ class PlannerSaveTest {
     }
 
     @Test
+    void semester_3과_4로_저장하면_성공한다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-6610").build());
+        Department cs = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과").build());
+        StudentProfile student = onboardedStudent("6610", cs);
+
+        String requestBody = """
+                {
+                  "plannerSimulationId": null,
+                  "terms": [
+                    {
+                      "yearLevel": 1,
+                      "semester": 3,
+                      "versions": [
+                        {
+                          "versionNo": 1,
+                          "name": "여름 계획",
+                          "isSelected": true,
+                          "versionOrder": 0,
+                          "items": []
+                        }
+                      ]
+                    },
+                    {
+                      "yearLevel": 1,
+                      "semester": 4,
+                      "versions": [
+                        {
+                          "versionNo": 1,
+                          "name": "겨울 계획",
+                          "isSelected": true,
+                          "versionOrder": 0,
+                          "items": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+                """;
+
+        mockMvc.perform(put("/api/v1/planner")
+                        .with(authentication(authenticationOf(student.getMember().getId())))
+                        .contentType("application/json")
+                        .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("PLAN_200_1"));
+    }
+
+    @Test
+    void semester가_4를_초과하면_400을_반환한다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-6611").build());
+        Department cs = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과").build());
+        StudentProfile student = onboardedStudent("6611", cs);
+
+        String requestBody = """
+                {
+                  "plannerSimulationId": null,
+                  "terms": [
+                    {
+                      "yearLevel": 1,
+                      "semester": 5,
+                      "versions": [
+                        {
+                          "versionNo": 1,
+                          "isSelected": true,
+                          "versionOrder": 0,
+                          "items": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+                """;
+
+        mockMvc.perform(put("/api/v1/planner")
+                        .with(authentication(authenticationOf(student.getMember().getId())))
+                        .contentType("application/json")
+                        .content(requestBody))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void 같은_학기_내_versionOrder가_중복되면_400을_반환한다() throws Exception {
         School school = schoolRepository.save(School.builder().name("경희대학교-6604").build());
         Department cs = departmentRepository.save(Department.builder()

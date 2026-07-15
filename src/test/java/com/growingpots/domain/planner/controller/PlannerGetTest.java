@@ -355,4 +355,125 @@ class PlannerGetTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("CMN_005"));
     }
+
+    @Test
+    void 여름학기_과목이_1학기에_합산되지_않고_semester_3_별도_카드로_분리된다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-7710").build());
+        Department cs = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과").build());
+        Division majorRequired = divisionRepository.save(Division.builder()
+                .school(school).code("04").category(DivisionCategory.MAJOR_REQUIRED).build());
+        StudentProfile profile = onboardedStudent("7710", cs, 2023);
+
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(null).appliedDivision(majorRequired)
+                .rawCourseCode(null).rawCourseName("자료구조").credit(3)
+                .takenYear(2023).takenSemester(Semester.FIRST)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).isRetake(false).build());
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(null).appliedDivision(majorRequired)
+                .rawCourseCode(null).rawCourseName("여름특강").credit(2)
+                .takenYear(2023).takenSemester(Semester.SUMMER)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).isRetake(false).build());
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(null).appliedDivision(majorRequired)
+                .rawCourseCode(null).rawCourseName("알고리즘").credit(3)
+                .takenYear(2023).takenSemester(Semester.SECOND)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).isRetake(false).build());
+
+        mockMvc.perform(get("/api/v1/planner")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                // 1학기, 여름학기, 2학기 — 3개 독립 카드
+                .andExpect(jsonPath("$.data.completedTerms.length()").value(3))
+                // 시간순: 1학기 → 여름 → 2학기
+                .andExpect(jsonPath("$.data.completedTerms[0].semester").value(1))
+                .andExpect(jsonPath("$.data.completedTerms[0].name").value("1학년 1학기"))
+                .andExpect(jsonPath("$.data.completedTerms[0].totalCredit").value(3))
+                .andExpect(jsonPath("$.data.completedTerms[1].semester").value(3))
+                .andExpect(jsonPath("$.data.completedTerms[1].name").value("1학년 여름학기"))
+                .andExpect(jsonPath("$.data.completedTerms[1].totalCredit").value(2))
+                // 여름학기는 정규학기 카운트에 포함되지 않아 2학기도 여전히 1학년
+                .andExpect(jsonPath("$.data.completedTerms[2].yearLevel").value(1))
+                .andExpect(jsonPath("$.data.completedTerms[2].semester").value(2))
+                .andExpect(jsonPath("$.data.completedTerms[2].name").value("1학년 2학기"));
+    }
+
+    @Test
+    void 겨울학기_과목이_2학기에_합산되지_않고_semester_4_별도_카드로_분리된다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-7711").build());
+        Department cs = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과").build());
+        Division majorRequired = divisionRepository.save(Division.builder()
+                .school(school).code("04").category(DivisionCategory.MAJOR_REQUIRED).build());
+        StudentProfile profile = onboardedStudent("7711", cs, 2023);
+
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(null).appliedDivision(majorRequired)
+                .rawCourseCode(null).rawCourseName("운영체제").credit(3)
+                .takenYear(2023).takenSemester(Semester.SECOND)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).isRetake(false).build());
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(null).appliedDivision(majorRequired)
+                .rawCourseCode(null).rawCourseName("겨울특강").credit(2)
+                .takenYear(2023).takenSemester(Semester.WINTER)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).isRetake(false).build());
+
+        mockMvc.perform(get("/api/v1/planner")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.completedTerms.length()").value(2))
+                .andExpect(jsonPath("$.data.completedTerms[0].semester").value(2))
+                .andExpect(jsonPath("$.data.completedTerms[0].name").value("1학년 2학기"))
+                .andExpect(jsonPath("$.data.completedTerms[1].semester").value(4))
+                .andExpect(jsonPath("$.data.completedTerms[1].name").value("1학년 겨울학기"))
+                .andExpect(jsonPath("$.data.completedTerms[1].totalCredit").value(2));
+    }
+
+    @Test
+    void 같은_연도에_네_학기_모두_있으면_시간순으로_정렬된다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-7712").build());
+        Department cs = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과").build());
+        Division majorRequired = divisionRepository.save(Division.builder()
+                .school(school).code("04").category(DivisionCategory.MAJOR_REQUIRED).build());
+        StudentProfile profile = onboardedStudent("7712", cs, 2023);
+
+        // 저장 순서를 의도적으로 섞어 정렬 로직을 검증
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(null).appliedDivision(majorRequired)
+                .rawCourseCode(null).rawCourseName("겨울과목").credit(1)
+                .takenYear(2023).takenSemester(Semester.WINTER)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).isRetake(false).build());
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(null).appliedDivision(majorRequired)
+                .rawCourseCode(null).rawCourseName("2학기과목").credit(3)
+                .takenYear(2023).takenSemester(Semester.SECOND)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).isRetake(false).build());
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(null).appliedDivision(majorRequired)
+                .rawCourseCode(null).rawCourseName("1학기과목").credit(3)
+                .takenYear(2023).takenSemester(Semester.FIRST)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).isRetake(false).build());
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(null).appliedDivision(majorRequired)
+                .rawCourseCode(null).rawCourseName("여름과목").credit(2)
+                .takenYear(2023).takenSemester(Semester.SUMMER)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).isRetake(false).build());
+
+        mockMvc.perform(get("/api/v1/planner")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.completedTerms.length()").value(4))
+                // 시간순: 1학기(1) → 여름(3) → 2학기(2) → 겨울(4)
+                .andExpect(jsonPath("$.data.completedTerms[0].semester").value(1))
+                .andExpect(jsonPath("$.data.completedTerms[1].semester").value(3))
+                .andExpect(jsonPath("$.data.completedTerms[2].semester").value(2))
+                .andExpect(jsonPath("$.data.completedTerms[3].semester").value(4))
+                // 계절학기는 정규학기 카운트에 미포함 → 4개 모두 1학년
+                .andExpect(jsonPath("$.data.completedTerms[0].yearLevel").value(1))
+                .andExpect(jsonPath("$.data.completedTerms[1].yearLevel").value(1))
+                .andExpect(jsonPath("$.data.completedTerms[2].yearLevel").value(1))
+                .andExpect(jsonPath("$.data.completedTerms[3].yearLevel").value(1));
+    }
 }
