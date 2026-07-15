@@ -194,6 +194,9 @@ public @interface StudentApi {
             description = "PDF 분석 결과로 저장된 이수 과목 목록과 이수구분 드롭다운 옵션을 함께 조회합니다. "
                     + "검수 화면 진입 시 이 API 한 번으로 필요한 데이터를 모두 받을 수 있습니다.\n\n"
                     + "**courses 필드 안내**\n"
+                    + "- courseId는 매칭된 COURSE 마스터의 PK입니다. courseId는 화면에 노출되는 값이 아니라서, "
+                    + "PUT 요청에 null을 그대로 보내도 기존 매칭이 지워지지 않습니다(서버가 null을 \"안 건드림\"으로 "
+                    + "처리). 매칭을 바꾸고 싶을 때(과목 검색 등으로 새로 고른 경우)만 새 courseId를 넣으면 됩니다.\n"
                     + "- departmentName은 COURSE 마스터와 매칭되었거나 학과가 직접 지정된 경우에만 값이 채워집니다. "
                     + "교양 과목인데 매칭된 학과가 없으면 학교에 지정된 대체 학과(예: 후마니타스칼리지)가 있을 때 그 이름으로, "
                     + "없으면 \"교양\"이라는 표시용 문자열로 채워집니다.\n"
@@ -226,6 +229,7 @@ public @interface StudentApi {
                                           {
                                             "studentCourseId": 7001,
                                             "courseCode": "THE2001",
+                                            "courseId": 501,
                                             "name": "연극문헌과연기",
                                             "departmentName": "연극영화학과",
                                             "departmentId": 101,
@@ -238,6 +242,7 @@ public @interface StudentApi {
                                           {
                                             "studentCourseId": 7002,
                                             "courseCode": "HUS1001",
+                                            "courseId": 502,
                                             "name": "인문학의이해",
                                             "departmentName": "후마니타스칼리지",
                                             "departmentId": 55,
@@ -250,6 +255,7 @@ public @interface StudentApi {
                                           {
                                             "studentCourseId": 7003,
                                             "courseCode": null,
+                                            "courseId": null,
                                             "name": "직접추가과목",
                                             "departmentName": null,
                                             "departmentId": null,

@@ -229,6 +229,7 @@ class StudentCourseListTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.courses[0].departmentName").value("연극영화학과"))
                 .andExpect(jsonPath("$.data.courses[0].departmentId").value(offeringDepartment.getId()))
+                .andExpect(jsonPath("$.data.courses[0].courseId").value(course.getId()))
                 .andExpect(jsonPath("$.data.courses[0].takenSemester").value("1학기"))
                 .andExpect(jsonPath("$.data.courses[0].appliedDivisionName").value("전공필수"))
                 .andExpect(jsonPath("$.data.courses[0].appliedDivisionId").value(majorRequired.getId()));

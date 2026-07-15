@@ -226,11 +226,11 @@ public class StudentProfileService {
         List<StudentCourse> newCourses = new ArrayList<>();
 
         for (CourseUpdateItem item : items) {
-            Course course = requireInMap(coursesById, item.courseId());
             Department department = requireInMap(departmentsById, item.departmentId());
             Division division = requireInMap(divisionsById, item.appliedDivisionId());
 
             if (item.studentCourseId() == null) {
+                Course course = requireInMap(coursesById, item.courseId());
                 newCourses.add(StudentCourse.builder()
                         .studentProfile(profile)
                         .course(course)
@@ -254,6 +254,14 @@ public class StudentProfileService {
             if (existing == null) {
                 throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
             }
+            // courseId가 null로 오면 기존 매칭을 그대로 보존한다(#214) - courseId는 departmentId/
+            // appliedDivisionId와 달리 화면에 노출되는 값이 아니라(검수 테이블에 courseId 컬럼 자체가
+            // 없음) 유저가 "명시적으로 매칭 해제"할 UI가 없다. 그러니 null은 "안 건드림"으로 해석해도
+            // 안전하고, 프론트가 GET의 courseId를 아직 못 돌려주는 과도기(또는 다른 클라이언트의 실수)에도
+            // 기존 매칭이 깨지지 않도록 방어한다.
+            Course course = item.courseId() != null
+                    ? requireInMap(coursesById, item.courseId())
+                    : existing.getCourse();
             existing.applyEdit(course, item.rawCourseName(), department, item.credit(), division,
                     item.takenYear() != null ? item.takenYear() : existing.getTakenYear(),
                     item.takenSemester() != null ? item.takenSemester() : existing.getTakenSemester());
@@ -291,6 +299,7 @@ public class StudentProfileService {
         boolean departmentUnknown = departmentName == null;
         return StudentCourseListResponse.CourseInfo.builder()
                 .studentCourseId(course.getId())
+                .courseId(course.getCourse() != null ? course.getCourse().getId() : null)
                 .courseCode(course.getRawCourseCode())
                 .name(course.getRawCourseName())
                 .departmentName(departmentName)

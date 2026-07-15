@@ -42,6 +42,12 @@ public class StudentCourseListResponse {
         @Schema(description = "학수번호", example = "THE2001")
         private final String courseCode;
 
+        @Schema(description = "매칭된 과목 마스터(COURSE) PK. 과목 마스터와 매칭된 경우에만 값이 있고, 매칭 안 "
+                + "된 과목(직접 추가했거나 마스터에 없는 학수번호)은 null. 수정 PUT 요청의 courseId에 null을 "
+                + "그대로 넣어도 기존 매칭은 유지됨(서버가 null을 \"매칭 해제\"가 아니라 \"안 건드림\"으로 "
+                + "처리) — 매칭을 바꾸고 싶을 때만 새 courseId를 넣으면 됨", example = "12", nullable = true)
+        private final Long courseId;
+
         @Schema(description = "과목명", example = "연극문헌과연기")
         private final String name;
 

@@ -13,10 +13,12 @@ import com.growingpots.domain.transcript.entity.enums.CourseStatus;
 import com.growingpots.domain.transcript.entity.enums.RecordSource;
 import com.growingpots.domain.transcript.entity.enums.Semester;
 import com.growingpots.domain.transcript.repository.StudentCourseRepository;
+import com.growingpots.domain.university.entity.Course;
 import com.growingpots.domain.university.entity.Department;
 import com.growingpots.domain.university.entity.Division;
 import com.growingpots.domain.university.entity.School;
 import com.growingpots.domain.university.entity.enums.DivisionCategory;
+import com.growingpots.domain.university.repository.CourseRepository;
 import com.growingpots.domain.university.repository.DepartmentRepository;
 import com.growingpots.domain.university.repository.DivisionRepository;
 import com.growingpots.domain.university.repository.SchoolRepository;
@@ -64,6 +66,9 @@ class StudentCourseUpdateTest {
 
     @Autowired
     private StudentCourseRepository studentCourseRepository;
+
+    @Autowired
+    private CourseRepository courseRepository;
 
     private StudentProfile onboardedStudent(String oauthId) {
         Member member = memberRepository.save(Member.builder()
@@ -321,6 +326,147 @@ class StudentCourseUpdateTest {
                 .andExpect(jsonPath("$.code").value("CMN_005"));
     }
 
+    // GET 응답의 courseId를 그대로 echo해서 PUT을 보내면 기존 과목 마스터 매칭이 유지돼야 한다(#214).
+    // 예전엔 GET 응답에 courseId가 아예 없어서 프론트가 항상 null을 보낼 수밖에 없었고, 그 결과
+    // PDF 업로드로 정상 매칭된 과목도 검수 화면에서 저장(PUT)만 하면 매칭이 통째로 풀리는 버그가 있었다.
+    @Test
+    void 응답의_courseId를_그대로_echo하면_기존_과목매칭이_유지된다() throws Exception {
+        StudentProfile studentProfile = onboardedStudent("3608");
+        School school = studentProfile.getSchool();
+        Department offeringDepartment = departmentRepository.save(Department.builder()
+                .school(school)
+                .college("공과대학")
+                .name("컴퓨터공학과-3608")
+                .build());
+        Course course = courseRepository.save(Course.builder()
+                .school(school)
+                .courseCode("CS101")
+                .name("컴퓨터개론")
+                .credit(3)
+                .offeringDepartment(offeringDepartment)
+                .build());
+        StudentCourse existing = studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(studentProfile)
+                .course(course)
+                .rawCourseCode("CS101")
+                .rawCourseName("컴퓨터개론")
+                .credit(3)
+                .status(CourseStatus.COMPLETED)
+                .source(RecordSource.PDF)
+                .build());
+
+        // 1) GET으로 courseId를 확인한다 - 매칭된 과목이라 값이 있어야 한다.
+        String getResponseBody = mockMvc.perform(get("/api/v1/students/me/courses")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.courses[0].courseId").value(course.getId()))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(objectMapper.readTree(getResponseBody).path("data").path("courses").get(0).path("courseId").asLong())
+                .isEqualTo(course.getId());
+
+        // 2) 검수 화면 저장하기와 동일하게, GET에서 받은 courseId를 그대로 넣어서 PUT을 보낸다
+        //    (rawCourseName만 바꾸는 흔한 편집 시나리오 - courseId는 그대로 echo).
+        String requestBody = """
+                {
+                  "courses": [
+                    {
+                      "studentCourseId": %d,
+                      "courseId": %d,
+                      "rawCourseName": "컴퓨터개론(수정)",
+                      "departmentId": %d,
+                      "credit": 3,
+                      "appliedDivisionId": null,
+                      "takenYear": null,
+                      "takenSemester": null
+                    }
+                  ]
+                }
+                """.formatted(existing.getId(), course.getId(), offeringDepartment.getId());
+
+        mockMvc.perform(put("/api/v1/students/me/courses")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId())))
+                        .contentType("application/json")
+                        .content(requestBody))
+                .andExpect(status().isOk());
+
+        // 3) 저장 후에도 매칭(courseId)이 그대로 유지돼야 한다.
+        StudentCourse afterUpdate = studentCourseRepository.findById(existing.getId()).orElseThrow();
+        assertThat(afterUpdate.getCourse()).isNotNull();
+        assertThat(afterUpdate.getCourse().getId()).isEqualTo(course.getId());
+
+        mockMvc.perform(get("/api/v1/students/me/courses")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.courses[0].courseId").value(course.getId()))
+                .andExpect(jsonPath("$.data.courses[0].name").value("컴퓨터개론(수정)"));
+    }
+
+    // courseId를 null로 보내도(프론트가 아직 못 돌려주는 과도기 등) 기존 매칭이 지워지면 안 된다(#214).
+    // courseId는 화면에 노출되는 값이 아니라 유저가 "명시적으로 매칭 해제"할 UI가 없어서, null은
+    // "안 건드림"으로 해석하는 방어 로직이 서버에 있다 - departmentId/appliedDivisionId(null이면 진짜로
+    // 지움)와는 의도적으로 다른 동작.
+    @Test
+    void courseId를_null로_보내도_기존_과목매칭이_보존된다() throws Exception {
+        StudentProfile studentProfile = onboardedStudent("3610");
+        School school = studentProfile.getSchool();
+        Department offeringDepartment = departmentRepository.save(Department.builder()
+                .school(school)
+                .college("공과대학")
+                .name("컴퓨터공학과-3610")
+                .build());
+        Course course = courseRepository.save(Course.builder()
+                .school(school)
+                .courseCode("CS102")
+                .name("자료구조")
+                .credit(3)
+                .offeringDepartment(offeringDepartment)
+                .build());
+        StudentCourse existing = studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(studentProfile)
+                .course(course)
+                .rawCourseCode("CS102")
+                .rawCourseName("자료구조")
+                .credit(3)
+                .status(CourseStatus.COMPLETED)
+                .source(RecordSource.PDF)
+                .build());
+
+        // 옛날 프론트처럼 courseId를 항상 null로 보내는 PUT (departmentId는 정상 echo).
+        String requestBody = """
+                {
+                  "courses": [
+                    {
+                      "studentCourseId": %d,
+                      "courseId": null,
+                      "rawCourseName": "자료구조(수정)",
+                      "departmentId": %d,
+                      "credit": 3,
+                      "appliedDivisionId": null,
+                      "takenYear": null,
+                      "takenSemester": null
+                    }
+                  ]
+                }
+                """.formatted(existing.getId(), offeringDepartment.getId());
+
+        mockMvc.perform(put("/api/v1/students/me/courses")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId())))
+                        .contentType("application/json")
+                        .content(requestBody))
+                .andExpect(status().isOk());
+
+        StudentCourse afterUpdate = studentCourseRepository.findById(existing.getId()).orElseThrow();
+        assertThat(afterUpdate.getCourse()).isNotNull();
+        assertThat(afterUpdate.getCourse().getId()).isEqualTo(course.getId());
+        assertThat(afterUpdate.getRawCourseName()).isEqualTo("자료구조(수정)");
+
+        mockMvc.perform(get("/api/v1/students/me/courses")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.courses[0].courseId").value(course.getId()))
+                .andExpect(jsonPath("$.data.courses[0].departmentName").value("컴퓨터공학과-3610"));
+    }
+
     // 검수 화면에서 새로 추가한 과목(studentCourseId 없음)은 기존 과목들보다 먼저(위에) 노출돼야 한다(#194).
     @Test
     void 새로_추가한_과목은_기존_과목보다_displayOrder가_작아서_맨_위에_온다() throws Exception {
@@ -397,7 +543,7 @@ class StudentCourseUpdateTest {
     // 과목들에 밀려 새 과목이 오히려 맨 아래로 가는 회귀가 생길 수 있어 이를 방지하는 테스트.
     @Test
     void 기존_과목에_이수구분이_있어도_이수구분_없는_새_과목이_맨_위에_온다() throws Exception {
-        StudentProfile studentProfile = onboardedStudent("3608");
+        StudentProfile studentProfile = onboardedStudent("3609");
         School school = studentProfile.getSchool();
         Division majorRequired = divisionRepository.save(Division.builder()
                 .school(school)
