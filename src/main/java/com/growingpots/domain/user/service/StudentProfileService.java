@@ -122,12 +122,13 @@ public class StudentProfileService {
         profile.updateOnboardingInfo(school, department, admissionYear);
 
         // create()가 항상 MAIN StudentMajor를 하나만 만들고, PDF 분석 전(=여기 온 시점)엔 복수전공이
-        // 추가될 일이 없으므로 정확히 하나가 있어야 한다.
+        // 추가될 일이 없으므로 정확히 하나가 있어야 한다 - 없으면 데이터 정합성이 깨진 상태라 500으로
+        // 처리하되, 원인 파악이 쉽도록 전용 에러코드를 쓴다(코드리뷰 반영, 범용 CMN_001 대신).
         StudentMajor mainMajor = studentMajorRepository.findWithDepartmentByStudentProfile(profile).stream()
                 .filter(sm -> sm.getMajorType() == MajorType.MAIN)
                 .findFirst()
-                .orElseThrow(() -> new IllegalStateException(
-                        "StudentProfile(id=" + profile.getId() + ")에 본전공 StudentMajor가 없습니다."));
+                .orElseThrow(() -> new BaseException(ErrorCode.MAIN_MAJOR_NOT_FOUND,
+                        "studentProfileId=" + profile.getId()));
         mainMajor.updateDepartment(department);
 
         return StudentProfileCreateResponse.builder()
