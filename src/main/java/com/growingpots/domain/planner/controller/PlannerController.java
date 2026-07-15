@@ -8,6 +8,7 @@ import com.growingpots.domain.planner.dto.request.PlannerSaveRequest;
 import com.growingpots.domain.planner.dto.request.PrerequisiteCheckRequest;
 import com.growingpots.domain.planner.dto.request.SelectVersionRequest;
 import com.growingpots.domain.planner.dto.response.PlannerResponse;
+import com.growingpots.domain.planner.dto.response.PlannerSaveResponse;
 import com.growingpots.domain.planner.dto.response.PrerequisiteCheckResponse;
 import com.growingpots.domain.planner.dto.response.SelectVersionResponse;
 import com.growingpots.domain.planner.service.PlannerService;
@@ -57,9 +58,13 @@ public class PlannerController {
     ) {
         Long memberId = Long.parseLong(authentication.getName());
         try {
-            plannerService.savePlanner(memberId, request);
+            boolean hasDuplicateCourse = plannerService.savePlanner(memberId, request);
             GraduationResponse graduation = computeGraduationQuietly(memberId);
-            return ResponseEntity.ok(BaseResponse.success(SuccessCode.PLANNER_SAVED, graduation));
+            PlannerSaveResponse saveResponse = PlannerSaveResponse.builder()
+                    .graduation(graduation)
+                    .hasDuplicateCourse(hasDuplicateCourse)
+                    .build();
+            return ResponseEntity.ok(BaseResponse.success(SuccessCode.PLANNER_SAVED, saveResponse));
         } catch (BaseException e) {
             ErrorType errorType = e.getErrorType();
             // 인증·프로필 오류는 이전 상태를 계산할 수 없거나 데이터 누출 위험이 있으므로 GlobalExceptionHandler로 위임

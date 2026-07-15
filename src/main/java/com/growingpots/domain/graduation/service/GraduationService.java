@@ -101,12 +101,19 @@ public class GraduationService {
 
         List<StudentMajor> majors = studentMajorRepository.findWithDepartmentByStudentProfile(profile);
 
-        // PLANNED: 플래너 선택 버전의 모든 계획 과목을 사용.
-        // 이미 이수/수강 중인 과목(재수강)도 총학점·카테고리별 학점에 중복 합산한다.
+        // PLANNED: 플래너 선택 버전의 과목 중 아직 이수/수강 중이지 않은 과목만 delta로 반영한다.
+        // original.totalCreditCurrent는 PDF 스냅샷으로 COMPLETED + IN_PROGRESS 학점을 이미 포함하므로
+        // 해당 courseId를 delta에서 제외하지 않으면 중복 합산된다.
         // 플래너가 없으면 COMPLETED와 동일한 응답.
         List<PlannerVersionItem> allPlannedItems = List.of();
         if (source == GraduationSource.PLANNED) {
-            allPlannedItems = plannerVersionItemRepository.findSelectedByStudentProfile(profile);
+            List<PlannerVersionItem> raw = plannerVersionItemRepository.findSelectedByStudentProfile(profile);
+            Set<Long> alreadyCounted = new HashSet<>(
+                    studentCourseRepository.findCourseIdsByStudentProfileAndStatusIn(
+                            profile, List.of(CourseStatus.COMPLETED, CourseStatus.IN_PROGRESS)));
+            allPlannedItems = raw.stream()
+                    .filter(i -> !alreadyCounted.contains(i.getCourse().getId()))
+                    .toList();
         }
 
         // 전공별(본전공 + 복수전공 몇 개든 전부) 스냅샷/졸업필수 판정/PLANNED 반영을 한 번씩만 계산해
