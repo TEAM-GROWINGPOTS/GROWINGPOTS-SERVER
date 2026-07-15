@@ -300,6 +300,7 @@ class GraduationCreditTest {
     // 테스트 4: 카테고리별 학점 합 = 총학점
     // ────────────────────────────────────────────────────────────────────────
 
+
     // 각 탭(MAJOR/GE/OTHERS)에서 노출되는 카테고리별 학점 current의 합이 summary.totalCredits.current와
     // 일치하는지 확인한다. COMPLETED·PLANNED 양쪽 모두 검증한다.
     //
@@ -418,5 +419,100 @@ class GraduationCreditTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.summary.totalCredits.current").value(65))
                 .andExpect(jsonPath("$.data.conditions[?(@.code=='GENERAL_ELECTIVE')].current").value(5));
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // 테스트 5: 무관 학과 과목을 플래너에 추가하면 기타(일반선택)에 합산된다
+    // ────────────────────────────────────────────────────────────────────────
+
+    // 버그 재현: 연극영화학과 학생이 디지털콘텐츠학과 전공 과목을 플래너에 담으면
+    // 총학점에는 더해지지만 어느 카테고리에도 합산되지 않던 문제.
+    //
+    // 세팅:
+    //   - 학생 학과: DeptA (연극영화), 전공필수 스냅샷 = 0, 기타 스냅샷 = 0, 총학점 = 60
+    //   - 플래너에 추가한 과목: DeptB(디지털콘텐츠)의 전공필수 과목 3학점
+    //   - CrossMajorRecognizedCourse 없음 (학생 학과와 무관한 과목)
+    //
+    // 기대 (PLANNED):
+    //   - 총학점: 60 → 63
+    //   - MAJOR_REQUIRED (DeptA): 0 (변화 없음)
+    //   - GENERAL_ELECTIVE (기타): 0 → 3 (무관 학과 과목이므로 기타로 분류)
+    @Test
+    void 무관_학과_과목을_플래너에_추가하면_기타에_합산된다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-8005").build());
+        Department deptA = departmentRepository.save(Department.builder()
+                .school(school).college("예술대학").name("연극영화학과-8005").build());
+        Department deptB = departmentRepository.save(Department.builder()
+                .school(school).college("소프트웨어융합대학").name("디지털콘텐츠학과-8005").build());
+
+        Division deptAMajorRequired = divisionRepository.save(Division.builder()
+                .school(school).code("04A-8005").category(DivisionCategory.MAJOR_REQUIRED).build());
+        Division deptBMajorRequired = divisionRepository.save(Division.builder()
+                .school(school).code("04B-8005").category(DivisionCategory.MAJOR_REQUIRED).build());
+
+        Member member = memberRepository.save(Member.builder()
+                .nickname("테스트").oauthProvider(OauthProvider.KAKAO).oauthId("8005").email(null).build());
+        StudentProfile profile = studentProfileRepository.save(StudentProfile.builder()
+                .member(member).school(school).department(deptA).admissionYear(2023).build());
+        StudentMajor major = studentMajorRepository.save(StudentMajor.builder()
+                .studentProfile(profile).department(deptA).majorType(MajorType.MAIN).build());
+
+        // 스냅샷: DeptA 기준 전공필수=0, 기타=0, 총학점=60
+        graduationAnalysisSummaryRepository.save(GraduationAnalysisSummary.builder()
+                .studentMajor(major)
+                .majorRequiredCurrent(0).majorRequiredRequired(12)
+                .generalElectiveCurrent(0)
+                .totalCreditCurrent(60).totalCreditRequired(130)
+                .build());
+
+        // DeptB의 전공필수 과목 3학점 — 학생(DeptA)과 무관한 학과 과목
+        Course deptBCourse = courseRepository.save(Course.builder()
+                .school(school).courseCode("DC201-8005").name("디지털콘텐츠제작").credit(3)
+                .offeringDepartment(deptB).defaultDivision(deptBMajorRequired)
+                .openedSemester(OpenedSemester.BOTH).isEnglish(false).isSw(false).build());
+
+        // 플래너에 DeptB 과목 추가 (plannedDivision = DeptB의 전공필수 — CrossMajorRecognizedCourse 없으므로 defaultDivision 그대로)
+        PlannerSimulation simulation = plannerSimulationRepository.save(PlannerSimulation.builder()
+                .studentProfile(profile).name("플래너-8005").build());
+        PlannerTerm term = plannerTermRepository.save(PlannerTerm.builder()
+                .plannerSimulation(simulation).yearLevel(2).semester(1).build());
+        PlannerTermVersion version = plannerTermVersionRepository.save(PlannerTermVersion.builder()
+                .plannerTerm(term).versionNo(1).name("폴더1").isSelected(true).versionOrder(0).build());
+        plannerVersionItemRepository.save(PlannerVersionItem.builder()
+                .plannerTermVersion(version).course(deptBCourse).plannedDivision(deptBMajorRequired)
+                .credit(3).coursePositionOrder(0).build());
+
+        // COMPLETED: 스냅샷 그대로 (플래너 delta 없음)
+        mockMvc.perform(get("/api/v1/students/me/graduation")
+                        .param("studentMajorId", String.valueOf(major.getId()))
+                        .param("source", "COMPLETED")
+                        .with(authentication(authOf(member.getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.summary.totalCredits.current").value(60))
+                .andExpect(jsonPath("$.data.conditions[?(@.code=='MAJOR_REQUIRED')].current").value(0));
+
+        mockMvc.perform(get("/api/v1/students/me/graduation")
+                        .param("majorType", "OTHERS")
+                        .param("source", "COMPLETED")
+                        .with(authentication(authOf(member.getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.conditions[?(@.code=='GENERAL_ELECTIVE')].current").value(0));
+
+        // PLANNED: DeptB 전공필수 과목은 DeptA 학생에게 기타로 분류 → generalElective +3, majorRequired 변화 없음
+        mockMvc.perform(get("/api/v1/students/me/graduation")
+                        .param("studentMajorId", String.valueOf(major.getId()))
+                        .param("source", "PLANNED")
+                        .with(authentication(authOf(member.getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.summary.totalCredits.current").value(63))
+                .andExpect(jsonPath("$.data.conditions[?(@.code=='MAJOR_REQUIRED')].current").value(0));
+
+        mockMvc.perform(get("/api/v1/students/me/graduation")
+                        .param("majorType", "OTHERS")
+                        .param("source", "PLANNED")
+                        .with(authentication(authOf(member.getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.summary.totalCredits.current").value(63))
+                .andExpect(jsonPath("$.data.conditions[?(@.code=='GENERAL_ELECTIVE')].current").value(3));
     }
 }

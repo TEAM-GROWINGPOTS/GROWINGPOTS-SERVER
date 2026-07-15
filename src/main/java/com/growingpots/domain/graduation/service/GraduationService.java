@@ -38,6 +38,7 @@ import com.growingpots.domain.university.entity.RequirementCourse;
 import com.growingpots.domain.university.entity.RequirementCourseItem;
 import com.growingpots.domain.university.entity.enums.OpenedSemester;
 import com.growingpots.domain.university.repository.CourseRepository;
+import com.growingpots.domain.university.repository.CrossMajorRecognizedCourseRepository;
 import com.growingpots.domain.university.repository.DivisionRepository;
 import com.growingpots.domain.university.repository.GeAreaRepository;
 import com.growingpots.domain.university.repository.RequirementCourseItemRepository;
@@ -77,6 +78,7 @@ public class GraduationService {
     private final RequirementCourseItemRepository requirementCourseItemRepository;
     private final PlannerVersionItemRepository plannerVersionItemRepository;
     private final GeAreaRepository geAreaRepository;
+    private final CrossMajorRecognizedCourseRepository crossMajorRecognizedCourseRepository;
 
     private static final List<DivisionCategory> MAJOR_CATEGORIES = List.of(
             DivisionCategory.MAJOR_BASIC, DivisionCategory.MAJOR_REQUIRED, DivisionCategory.MAJOR_ELECTIVE);
@@ -120,13 +122,19 @@ public class GraduationService {
         // 재사용한다. 예전엔 본전공+복수전공 1개로 고정돼 있었지만, 복수전공을 여러 개 가진 학생도 있어
         // 리스트로 다룬다.
         List<PlannerVersionItem> plannedItemsForJudgement = allPlannedItems;
+        Set<Long> allMajorDeptIds = majors.stream()
+                .map(m -> m.getDepartment().getId())
+                .collect(Collectors.toSet());
         List<StudentMajorContext> majorContexts = majors.stream()
                 .map(major -> {
                     GraduationAnalysisSummary summary = requireSummary(major);
                     GraduationRequiredJudgement judgement =
                             judgeGraduationRequired(profile, major.getDepartment(), plannedItemsForJudgement);
+                    Set<Long> recognizedCourseIds = plannedItemsForJudgement.isEmpty()
+                            ? Set.of() : loadRecognizedCourseIds(major.getDepartment());
                     GraduationAnalysisSummary effectiveSummary = plannedItemsForJudgement.isEmpty() ? summary
-                            : buildAdjustedSummary(summary, plannedItemsForJudgement, major.getDepartment());
+                            : buildAdjustedSummary(summary, plannedItemsForJudgement, major.getDepartment(),
+                                    allMajorDeptIds, recognizedCourseIds);
                     List<CertResult> certs = certResultRepository.findByStudentMajor(major);
                     return new StudentMajorContext(major, effectiveSummary, judgement, certs);
                 })
@@ -383,29 +391,34 @@ public class GraduationService {
     }
 
     // PLANNED 모드용: 스냅샷 기반 summary에 신규 계획 과목의 학점 delta를 더해 새 in-memory summary를 반환한다.
-    // majorDept: 전공 학점 귀속 판단 기준 (본전공 또는 복수전공). null이면 전공 delta는 0.
+    // majorDept: 전공 학점 귀속 판단 기준 (본전공 또는 복수전공).
+    // allMajorDeptIds: 학생의 모든 전공 학과 ID 집합 (일반선택 판단에 사용).
+    // recognizedCourseIds: 이 전공 기준 타전공 인정 과목 ID 집합.
     // GPA는 미래 예측 불가이므로 원본 값 유지.
     private GraduationAnalysisSummary buildAdjustedSummary(
             GraduationAnalysisSummary original,
             List<PlannerVersionItem> newPlannedItems,
-            Department majorDept
+            Department majorDept,
+            Set<Long> allMajorDeptIds,
+            Set<Long> recognizedCourseIds
     ) {
-        int majorBasicDelta = creditSum(newPlannedItems, DivisionCategory.MAJOR_BASIC, majorDept);
-        int majorRequiredDelta = creditSum(newPlannedItems, DivisionCategory.MAJOR_REQUIRED, majorDept);
-        int majorElectiveDelta = creditSum(newPlannedItems, DivisionCategory.MAJOR_ELECTIVE, majorDept);
-        int requiredGeDelta = creditSum(newPlannedItems, DivisionCategory.REQUIRED_GE, null);
-        int distributedGeDelta = creditSum(newPlannedItems, DivisionCategory.DISTRIBUTED_GE, null);
-        int freeGeDelta = creditSum(newPlannedItems, DivisionCategory.FREE_GE, null);
-        int generalElectiveDelta = newPlannedItems.stream()
-                .filter(i -> i.getPlannedDivision() == null
-                        || i.getPlannedDivision().getCategory() == DivisionCategory.GENERAL_ELECTIVE)
-                .mapToInt(PlannerVersionItem::getCredit).sum();
+        int majorBasicDelta = creditSum(newPlannedItems, DivisionCategory.MAJOR_BASIC, majorDept, recognizedCourseIds);
+        int majorRequiredDelta = creditSum(newPlannedItems, DivisionCategory.MAJOR_REQUIRED, majorDept, recognizedCourseIds);
+        int majorElectiveDelta = creditSum(newPlannedItems, DivisionCategory.MAJOR_ELECTIVE, majorDept, recognizedCourseIds);
+        int requiredGeDelta = creditSum(newPlannedItems, DivisionCategory.REQUIRED_GE, null, Set.of());
+        int distributedGeDelta = creditSum(newPlannedItems, DivisionCategory.DISTRIBUTED_GE, null, Set.of());
+        int freeGeDelta = creditSum(newPlannedItems, DivisionCategory.FREE_GE, null, Set.of());
         int englishDelta = (int) newPlannedItems.stream()
                 .filter(i -> i.getCourse().isEnglish()).count();
         int swDelta = newPlannedItems.stream()
                 .filter(i -> i.getCourse().isSw())
                 .mapToInt(PlannerVersionItem::getCredit).sum();
         int totalCreditDelta = newPlannedItems.stream().mapToInt(PlannerVersionItem::getCredit).sum();
+        // 어떤 전공 영역에도 귀속되지 않는 과목의 학점을 일반선택으로 처리한다.
+        // 다른 전공 학과 과목(복수전공 등)은 학생 학과 목록에 포함되므로 기타에서 제외된다.
+        int generalElectiveDelta = newPlannedItems.stream()
+                .filter(i -> isGeneralElective(i, allMajorDeptIds, recognizedCourseIds))
+                .mapToInt(PlannerVersionItem::getCredit).sum();
 
         Integer swCertCurrent = original.getSwCertCurrent();
 
@@ -438,16 +451,50 @@ public class GraduationService {
                 .build();
     }
 
-    // 계획 항목 중 특정 이수구분 카테고리 + 개설학과 조건을 만족하는 항목의 학점 합산
-    // dept=null이면 학과 필터 없음 (GE/기타 공통 이수구분용)
-    private int creditSum(List<PlannerVersionItem> items, DivisionCategory category, Department dept) {
+    // 계획 항목 중 특정 이수구분 카테고리 + (개설학과 일치 또는 타전공 인정) 조건을 만족하는 항목의 학점 합산.
+    // dept=null이면 학과 필터 없음 (GE 공통 이수구분용).
+    // recognizedCourseIds: 이 전공 기준 타전공 인정 과목 ID. 개설학과가 달라도 이 전공에 귀속된다.
+    private int creditSum(List<PlannerVersionItem> items, DivisionCategory category,
+            Department dept, Set<Long> recognizedCourseIds) {
         return items.stream()
                 .filter(i -> i.getPlannedDivision() != null
                         && i.getPlannedDivision().getCategory() == category)
                 .filter(i -> dept == null
+                        || recognizedCourseIds.contains(i.getCourse().getId())
                         || (i.getCourse().getOfferingDepartment() != null
                         && dept.getId().equals(i.getCourse().getOfferingDepartment().getId())))
                 .mapToInt(PlannerVersionItem::getCredit).sum();
+    }
+
+    // 계획 항목이 일반선택(기타)으로 처리되어야 하는지 판단한다.
+    // 타전공 인정 과목은 해당 전공 영역에서 처리되므로 기타 아님.
+    // 학생의 어느 전공 학과에도 속하지 않는 과목만 기타로 분류한다.
+    private boolean isGeneralElective(PlannerVersionItem item,
+            Set<Long> allMajorDeptIds, Set<Long> recognizedCourseIds) {
+        if (recognizedCourseIds.contains(item.getCourse().getId())) {
+            return false;
+        }
+        DivisionCategory cat = item.getPlannedDivision() == null
+                ? null : item.getPlannedDivision().getCategory();
+        if (cat == null || cat == DivisionCategory.GENERAL_ELECTIVE) {
+            return true;
+        }
+        if (cat == DivisionCategory.REQUIRED_GE
+                || cat == DivisionCategory.DISTRIBUTED_GE
+                || cat == DivisionCategory.FREE_GE) {
+            return false;
+        }
+        // MAJOR_* 계열: 개설학과가 학생의 어떤 전공에도 해당하지 않으면 기타
+        Long offeringDeptId = item.getCourse().getOfferingDepartment() == null
+                ? null : item.getCourse().getOfferingDepartment().getId();
+        return offeringDeptId == null || !allMajorDeptIds.contains(offeringDeptId);
+    }
+
+    // 특정 학과 기준 타전공 인정 과목 ID 집합을 로드한다.
+    private Set<Long> loadRecognizedCourseIds(Department department) {
+        return crossMajorRecognizedCourseRepository.findByTargetDepartment(department).stream()
+                .map(r -> r.getCourse().getId())
+                .collect(Collectors.toSet());
     }
 
     private Summary buildSummary(StudentProfile profile, GraduationAnalysisSummary summary) {
