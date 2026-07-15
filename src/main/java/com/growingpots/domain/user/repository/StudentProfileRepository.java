@@ -18,10 +18,11 @@ public interface StudentProfileRepository extends JpaRepository<StudentProfile, 
     @Query("SELECT sp FROM StudentProfile sp JOIN FETCH sp.member JOIN FETCH sp.school JOIN FETCH sp.department WHERE sp.member.id = :memberId")
     Optional<StudentProfile> findWithDetailsByMemberId(@Param("memberId") Long memberId);
 
-    // JOIN FETCH 없이 student_profile 단일 행만 잠근다. 컬렉션 join이 포함된 findWithDetailsByMemberId에
-    // FOR UPDATE를 붙이면 조인된 행까지 모두 잠기므로, 락 전용 경량 쿼리를 별도로 둔다.
+    // student_profile 단일 행만 잠그는 경량 락 전용 쿼리.
+    // 스칼라 프로젝션(sp.id)으로 반환해 엔티티를 1차 캐시에 올리지 않는다 — 엔티티를 올리면 이후
+    // findWithDetailsByMemberId의 JOIN FETCH가 캐시 히트로 무시돼 associations이 미초기화된 채로 남는다.
     // member_id 컬럼은 @OneToOne unique=true 제약으로 unique 인덱스가 자동 생성돼 단건 조회에 인덱스를 쓴다.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT sp FROM StudentProfile sp WHERE sp.member.id = :memberId")
-    Optional<StudentProfile> lockByMemberId(@Param("memberId") Long memberId);
+    @Query("SELECT sp.id FROM StudentProfile sp WHERE sp.member.id = :memberId")
+    Optional<Long> lockByMemberId(@Param("memberId") Long memberId);
 }
