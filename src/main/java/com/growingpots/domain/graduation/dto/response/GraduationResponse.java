@@ -42,7 +42,7 @@ public class GraduationResponse {
         @Schema(description = "평점 현황")
         private final GpaInfo gpa;
 
-        @Schema(description = "재학 상태 (PDF 원문 그대로, 예: 재학, 휴학)")
+        @Schema(description = "재학 상태 (예: 재학 중, 휴학 중). PDF 미업로드 시 null", nullable = true)
         private final String enrollmentStatus;
     }
 

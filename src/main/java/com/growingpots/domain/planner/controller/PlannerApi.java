@@ -304,7 +304,7 @@ public @interface PlannerApi {
                                         "summary": {
                                           "totalCredits": { "current": 98, "required": 130 },
                                           "gpa": { "current": 3.85, "min": 2.0 },
-                                          "enrollmentStatus": "재학"
+                                          "enrollmentStatus": "재학 중"
                                         },
                                         "graduatable": false,
                                         "conditions": null,
