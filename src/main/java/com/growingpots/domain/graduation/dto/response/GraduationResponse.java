@@ -18,6 +18,10 @@ public class GraduationResponse {
     @Schema(description = "졸업 가능 여부. 학점·평점·비학점 인증 요건을 모두 충족한 경우 true")
     private final boolean graduatable;
 
+    @Schema(description = "학점·과목 이수 기반 요건 충족 여부. "
+            + "평점·비학점 인증 요건을 제외하고, 전공필수·전공기초·필수교과 개별 과목 이수 포함 확인 시 true")
+    private final boolean curriculumSatisfied;
+
     @Schema(description = "조건 목록. studentMajorId로 조회하거나 GE/OTHERS 탭 조회 시 채워짐. ALL 탭이면 null")
     private final List<ConditionInfo> conditions;
 

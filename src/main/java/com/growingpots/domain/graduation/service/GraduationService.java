@@ -101,16 +101,12 @@ public class GraduationService {
 
         List<StudentMajor> majors = studentMajorRepository.findWithDepartmentByStudentProfile(profile);
 
-        // PLANNED: 플래너 선택 버전의 계획 과목 중 이미 이수/수강 중인 과목을 제외한 신규 항목만 사용
-        // 플래너가 없거나 신규 항목이 없으면 COMPLETED와 동일한 응답
+        // PLANNED: 플래너 선택 버전의 모든 계획 과목을 사용.
+        // 이미 이수/수강 중인 과목(재수강)도 총학점·카테고리별 학점에 중복 합산한다.
+        // 플래너가 없으면 COMPLETED와 동일한 응답.
         List<PlannerVersionItem> allPlannedItems = List.of();
         if (source == GraduationSource.PLANNED) {
-            List<Long> alreadyCountedIds = studentCourseRepository.findCourseIdsByStudentProfileAndStatusIn(
-                    profile, List.of(CourseStatus.COMPLETED, CourseStatus.IN_PROGRESS));
-            Set<Long> alreadyCounted = new HashSet<>(alreadyCountedIds);
-            allPlannedItems = plannerVersionItemRepository.findSelectedByStudentProfile(profile).stream()
-                    .filter(i -> !alreadyCounted.contains(i.getCourse().getId()))
-                    .toList();
+            allPlannedItems = plannerVersionItemRepository.findSelectedByStudentProfile(profile);
         }
 
         // 전공별(본전공 + 복수전공 몇 개든 전부) 스냅샷/졸업필수 판정/PLANNED 반영을 한 번씩만 계산해
@@ -137,11 +133,13 @@ public class GraduationService {
 
         List<CertResult> allCerts = majorContexts.stream().flatMap(c -> c.certs().stream()).toList();
         boolean graduatable = computeGraduatable(majorContexts, allCerts, geAreaResult);
+        boolean curriculumSatisfied = computeAcademicRequirementMet(
+                profile, majorContexts, geAreaResult, allPlannedItems);
 
         if (studentMajorId != null) {
             StudentMajorContext target = findMajorContextByStudentMajorId(majorContexts, studentMajorId);
             return buildSingleTabResponse(profile, target.effectiveSummary(), ConditionsTab.MAJOR,
-                    target.judgement(), graduatable, target.certs(), null,
+                    target.judgement(), graduatable, curriculumSatisfied, target.certs(), null,
                     target.major().getMajorType() == MajorType.MAIN);
         }
 
@@ -149,8 +147,8 @@ public class GraduationService {
         return switch (majorTypeFilter) {
             case GE, OTHERS -> buildSingleTabResponse(profile, mainContext.effectiveSummary(),
                     majorTypeFilter == MajorTypeFilter.GE ? ConditionsTab.GE : ConditionsTab.OTHERS,
-                    null, graduatable, mainContext.certs(), geAreaResult, false);
-            case ALL -> buildAllTabResponse(profile, majorContexts, graduatable, geAreaResult);
+                    null, graduatable, curriculumSatisfied, mainContext.certs(), geAreaResult, false);
+            case ALL -> buildAllTabResponse(profile, majorContexts, graduatable, curriculumSatisfied, geAreaResult);
         };
     }
 
@@ -161,6 +159,7 @@ public class GraduationService {
             ConditionsTab tab,
             GraduationRequiredJudgement judgement,  // 전공 탭만 값 있음, GE/OTHERS는 null
             boolean graduatable,
+            boolean curriculumSatisfied,
             List<CertResult> certs,
             DistributedGeAreaResult geAreaResult,  // GE/OTHERS 탭만 전달, 전공 탭은 null
             boolean isMainMajor  // 영어/SW 실제값 노출 여부(본전공만). GE/OTHERS 탭은 항상 false
@@ -168,6 +167,7 @@ public class GraduationService {
         return GraduationResponse.builder()
                 .summary(buildSummary(profile, summary))
                 .graduatable(graduatable)
+                .curriculumSatisfied(curriculumSatisfied)
                 .conditions(buildConditionsForTab(summary, tab, geAreaResult, isMainMajor))
                 .graduationRequired(toGraduationRequiredSummary(judgement))
                 .sections(null)
@@ -180,6 +180,7 @@ public class GraduationService {
             StudentProfile profile,
             List<StudentMajorContext> majorContexts,
             boolean graduatable,
+            boolean curriculumSatisfied,
             DistributedGeAreaResult geAreaResult
     ) {
         List<TabSection> majorSections = majorContexts.stream()
@@ -208,6 +209,7 @@ public class GraduationService {
         return GraduationResponse.builder()
                 .summary(buildSummary(profile, mainContext.effectiveSummary()))
                 .graduatable(graduatable)
+                .curriculumSatisfied(curriculumSatisfied)
                 .conditions(null)
                 .sections(AllSections.builder()
                         .majors(majorSections)
@@ -373,7 +375,7 @@ public class GraduationService {
                 .build();
     }
 
-    // PLANNED 모드용: 스냅샷 기반 summary에 계획 과목의 학점 delta를 더해 새 in-memory summary를 반환한다.
+    // PLANNED 모드용: 스냅샷 기반 summary에 신규 계획 과목의 학점 delta를 더해 새 in-memory summary를 반환한다.
     // majorDept: 전공 학점 귀속 판단 기준 (본전공 또는 복수전공). null이면 전공 delta는 0.
     // GPA는 미래 예측 불가이므로 원본 값 유지.
     private GraduationAnalysisSummary buildAdjustedSummary(
@@ -803,8 +805,9 @@ public class GraduationService {
         Map<Long, Integer> completedCreditByCourseId = takenCourses.stream()
                 .collect(Collectors.toMap(sc -> sc.getCourse().getId(), StudentCourse::getCredit, (a, b) -> a));
 
-        // PLANNED: 이 졸업요건 대상 과목만 걸러서 미이수 판정에 더한다. completedCreditByCourseId에
-        // 이미 있는 과목은 계획에도 잡혀있을 수 없다(getGraduation()에서 이미 걸러서 넘어옴).
+        // PLANNED: 이 졸업요건 대상 과목만 걸러서 미이수 판정에 더한다. 재수강 과목(이미 completedCreditByCourseId에
+        // 있는 과목)이 plannedItems에 포함될 수 있으며, 아래 판정 로직에서 completed 값을 우선 사용하므로
+        // 졸업요건 판정에서는 이중카운트가 발생하지 않는다.
         List<PlannerVersionItem> plannedInScope = plannedItems.stream()
                 .filter(i -> requirementCourseIds.contains(i.getCourse().getId()))
                 .toList();
@@ -1047,6 +1050,8 @@ public class GraduationService {
 
         GraduationAnalysisSummary mainSummary = mainContext(majorContexts).effectiveSummary();
 
+        if (mainSummary.getTotalCreditCurrent() < mainSummary.getTotalCreditRequired()) return false;
+
         if (mainSummary.getRequiredGeCurrent() < mainSummary.getRequiredGeRequired()) return false;
         if (mainSummary.getDistributedGeCurrent() < mainSummary.getDistributedGeRequired()) return false;
         if (geAreaResult != null && !geAreaResult.satisfied()) return false;
@@ -1068,6 +1073,70 @@ public class GraduationService {
         // PASS·EXEMPT·NONE(해당없음)은 통과로 간주
         for (CertResult cert : allCerts) {
             if (cert.getResult() == CertJudgement.FAIL) return false;
+        }
+
+        return true;
+    }
+
+    // 학점·과목 이수 기반 졸업요건 충족 여부. GPA·비학점 인증 요건을 제외하고, 전공필수·전공기초·
+    // 필수교과 개별 과목 이수까지 포함해 확인한다. graduatable과 달리 평점·인증 외 요소만으로 "사실상
+    // 이수 완료"인지 빠르게 판단할 때 사용한다.
+    // - 전공 요건(학점 + 졸업필수 + 개별 과목)은 보유 전공 전부 독립적으로 확인
+    // - 교양·영어·SW는 공통 기준(본전공)
+    private boolean computeAcademicRequirementMet(
+            StudentProfile profile,
+            List<StudentMajorContext> majorContexts,
+            DistributedGeAreaResult geAreaResult,
+            List<PlannerVersionItem> allPlannedItems
+    ) {
+        // 이수 완료 과목 ID + 계획 과목 ID를 하나의 집합으로 관리 (개별 과목 이수 판정용)
+        Set<Long> takenIds = new HashSet<>(studentCourseRepository
+                .findCourseIdsByStudentProfileAndStatusIn(profile, List.of(CourseStatus.COMPLETED)));
+        allPlannedItems.forEach(i -> takenIds.add(i.getCourse().getId()));
+
+        for (StudentMajorContext ctx : majorContexts) {
+            // 카테고리별 학점 기준 충족 (전공기초/전공필수/전공선택 각각 독립 확인)
+            if (!isMajorRequirementMet(ctx.effectiveSummary())) return false;
+            // 학과 독립 졸업필수 요건 (스포츠의학과 등 해당 학과에만 존재)
+            if (!ctx.judgement().satisfied()) return false;
+
+            Department dept = ctx.major().getDepartment();
+            // 전공필수 개별 과목 모두 이수 여부
+            List<Course> majorRequired = courseRepository.findActiveByDepartmentAndDivisionCategory(
+                    dept, DivisionCategory.MAJOR_REQUIRED);
+            if (majorRequired.stream().anyMatch(c -> !takenIds.contains(c.getId()))) return false;
+            // 전공기초 개별 과목 모두 이수 여부
+            List<Course> majorBasic = courseRepository.findActiveByDepartmentAndDivisionCategory(
+                    dept, DivisionCategory.MAJOR_BASIC);
+            if (majorBasic.stream().anyMatch(c -> !takenIds.contains(c.getId()))) return false;
+        }
+
+        GraduationAnalysisSummary mainSummary = mainContext(majorContexts).effectiveSummary();
+
+        if (mainSummary.getTotalCreditCurrent() < mainSummary.getTotalCreditRequired()) return false;
+
+        // 교양 학점 기준 (필수교과/배분이수/자유이수 각각 독립 확인)
+        if (mainSummary.getRequiredGeCurrent() < mainSummary.getRequiredGeRequired()) return false;
+        if (mainSummary.getDistributedGeCurrent() < mainSummary.getDistributedGeRequired()) return false;
+        if (geAreaResult != null && !geAreaResult.satisfied()) return false;
+        if (mainSummary.getFreeGeCurrent() < mainSummary.getFreeGeRequired()) return false;
+
+        // 필수교과 개별 과목 모두 이수 여부 (학교 공통 교양 - Division 기준 조회)
+        Optional<Division> requiredGeDivision = divisionRepository.findBySchoolAndCategory(
+                profile.getSchool(), DivisionCategory.REQUIRED_GE);
+        if (requiredGeDivision.isPresent()) {
+            List<Course> requiredGeCourses = courseRepository.findActiveByDefaultDivision(requiredGeDivision.get());
+            if (requiredGeCourses.stream().anyMatch(c -> !takenIds.contains(c.getId()))) return false;
+        }
+
+        // 영어 강의 수 기준 (과목 수, 비학점 인증 아님)
+        if (mainSummary.getEnglishCurrent() < mainSummary.getEnglishRequired()) return false;
+
+        // SW 인증 강의 수 기준 (과목 수, 비학점 인증 아님)
+        Integer swRequired = mainSummary.getSwCertRequired();
+        if (swRequired != null) {
+            int swCurrent = mainSummary.getSwCertCurrent() != null ? mainSummary.getSwCertCurrent() : 0;
+            if (swCurrent < swRequired) return false;
         }
 
         return true;
