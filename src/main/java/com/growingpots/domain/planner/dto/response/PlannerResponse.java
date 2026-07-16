@@ -96,6 +96,23 @@ public class PlannerResponse {
         @Schema(description = "SW 인증 강의 여부. course 매칭 안 된 과목은 false")
         @Getter(onMethod_ = @__(@JsonProperty("isSw")))
         private final boolean isSw;
+
+        @Schema(description = "배분이수 영역 정보 (과목카드 영역 칩용). "
+                + "divisionCategory가 DISTRIBUTED_GE이고 Course 매칭 및 영역 정보가 있을 때만 채워짐, 그 외 null",
+                nullable = true)
+        private final AreaInfo area;
+    }
+
+    @Schema(description = "교양 영역 기본 정보 (과목카드 영역 칩 표시용)")
+    @Getter
+    @Builder
+    public static class AreaInfo {
+
+        @Schema(description = "영역 코드", example = "AREA_1")
+        private final String code;
+
+        @Schema(description = "영역명", example = "생명, 우주, 인간")
+        private final String name;
     }
 
     @Schema(description = "계획 학기")
@@ -197,5 +214,10 @@ public class PlannerResponse {
         @Schema(description = "SW 인증 강의 여부")
         @Getter(onMethod_ = @__(@JsonProperty("isSw")))
         private final boolean isSw;
+
+        @Schema(description = "배분이수 영역 정보 (과목카드 영역 칩용). "
+                + "divisionCategory가 DISTRIBUTED_GE이고 Course 매칭 및 영역 정보가 있을 때만 채워짐, 그 외 null",
+                nullable = true)
+        private final AreaInfo area;
     }
 }

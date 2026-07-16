@@ -21,12 +21,14 @@ import com.growingpots.domain.transcript.repository.StudentCourseRepository;
 import com.growingpots.domain.university.entity.Course;
 import com.growingpots.domain.university.entity.Department;
 import com.growingpots.domain.university.entity.Division;
+import com.growingpots.domain.university.entity.GeArea;
 import com.growingpots.domain.university.entity.School;
 import com.growingpots.domain.university.entity.enums.DivisionCategory;
 import com.growingpots.domain.university.entity.enums.OpenedSemester;
 import com.growingpots.domain.university.repository.CourseRepository;
 import com.growingpots.domain.university.repository.DepartmentRepository;
 import com.growingpots.domain.university.repository.DivisionRepository;
+import com.growingpots.domain.university.repository.GeAreaRepository;
 import com.growingpots.domain.university.repository.SchoolRepository;
 import com.growingpots.domain.user.entity.Member;
 import com.growingpots.domain.user.entity.StudentProfile;
@@ -68,6 +70,9 @@ class PlannerGetTest {
 
     @Autowired
     private CourseRepository courseRepository;
+
+    @Autowired
+    private GeAreaRepository geAreaRepository;
 
     @Autowired
     private StudentCourseRepository studentCourseRepository;
@@ -475,5 +480,82 @@ class PlannerGetTest {
                 .andExpect(jsonPath("$.data.completedTerms[1].yearLevel").value(1))
                 .andExpect(jsonPath("$.data.completedTerms[2].yearLevel").value(1))
                 .andExpect(jsonPath("$.data.completedTerms[3].yearLevel").value(1));
+    }
+
+    // 배분이수교과(DISTRIBUTED_GE) 과목은 이수완료 카드에도 영역 정보(area)가 채워져야 한다(#256,
+    // "이수구분별 과목 조회"의 area와 동일 규칙). 그 외 이수구분은 area가 null이어야 한다.
+    @Test
+    void 배분이수교과_이수완료_과목은_area_정보가_채워지고_그외_이수구분은_null이다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-7713").build());
+        Department cs = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과").build());
+        Division distributedGe = divisionRepository.save(Division.builder()
+                .school(school).code("05").category(DivisionCategory.DISTRIBUTED_GE).build());
+        Division majorRequired = divisionRepository.save(Division.builder()
+                .school(school).code("04").category(DivisionCategory.MAJOR_REQUIRED).build());
+        GeArea area = geAreaRepository.save(GeArea.builder()
+                .school(school).code("AREA_3").name("상징, 문화, 소통").build());
+        Course geCourse = courseRepository.save(Course.builder()
+                .school(school).courseCode("GE301").name("미디어아트와문화").credit(3).geArea(area)
+                .openedSemester(OpenedSemester.BOTH).isEnglish(false).isSw(false).build());
+        Course majorCourse = courseRepository.save(Course.builder()
+                .school(school).courseCode("CS301").name("운영체제").credit(3)
+                .offeringDepartment(cs)
+                .openedSemester(OpenedSemester.FIRST).isEnglish(false).isSw(false).build());
+        StudentProfile profile = onboardedStudent("7713", cs, 2023);
+
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(geCourse).appliedDivision(distributedGe)
+                .rawCourseCode("GE301").rawCourseName("미디어아트와문화").credit(3)
+                .takenYear(2023).takenSemester(Semester.FIRST)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).isRetake(false).build());
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(majorCourse).appliedDivision(majorRequired)
+                .rawCourseCode("CS301").rawCourseName("운영체제").credit(3)
+                .takenYear(2023).takenSemester(Semester.FIRST)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).isRetake(false).build());
+
+        mockMvc.perform(get("/api/v1/planner")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.completedTerms[0].courses[?(@.name=='미디어아트와문화')].area.code")
+                        .value("AREA_3"))
+                .andExpect(jsonPath("$.data.completedTerms[0].courses[?(@.name=='미디어아트와문화')].area.name")
+                        .value("상징, 문화, 소통"))
+                .andExpect(jsonPath("$.data.completedTerms[0].courses[?(@.name=='운영체제')].area").value(
+                        org.hamcrest.Matchers.contains(org.hamcrest.Matchers.nullValue())));
+    }
+
+    // 계획 과목 쪽도 이수완료와 동일하게 배분이수교과일 때만 area가 채워져야 한다(#256).
+    @Test
+    void 배분이수교과_계획_과목도_area_정보가_채워진다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-7714").build());
+        Department cs = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과").build());
+        Division distributedGe = divisionRepository.save(Division.builder()
+                .school(school).code("05").category(DivisionCategory.DISTRIBUTED_GE).build());
+        GeArea area = geAreaRepository.save(GeArea.builder()
+                .school(school).code("AREA_1").name("생명, 우주, 인간").build());
+        Course geCourse = courseRepository.save(Course.builder()
+                .school(school).courseCode("GE401").name("우주의이해").credit(3).geArea(area)
+                .defaultDivision(distributedGe)
+                .openedSemester(OpenedSemester.BOTH).isEnglish(false).isSw(false).build());
+        StudentProfile profile = onboardedStudent("7714", cs, 2023);
+
+        PlannerSimulation simulation = plannerSimulationRepository.save(PlannerSimulation.builder()
+                .studentProfile(profile).name("내 플래너").build());
+        PlannerTerm term = plannerTermRepository.save(PlannerTerm.builder()
+                .plannerSimulation(simulation).yearLevel(2).semester(1).build());
+        PlannerTermVersion version = plannerTermVersionRepository.save(PlannerTermVersion.builder()
+                .plannerTerm(term).versionNo(1).name("폴더 1").isSelected(true).versionOrder(0).build());
+        plannerVersionItemRepository.save(PlannerVersionItem.builder()
+                .plannerTermVersion(version).course(geCourse).plannedDivision(distributedGe)
+                .credit(3).coursePositionOrder(0).build());
+
+        mockMvc.perform(get("/api/v1/planner")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].courses[0].area.code").value("AREA_1"))
+                .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].courses[0].area.name").value("생명, 우주, 인간"));
     }
 }

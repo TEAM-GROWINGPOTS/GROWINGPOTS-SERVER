@@ -15,6 +15,7 @@ public interface PlannerVersionItemRepository extends JpaRepository<PlannerVersi
 
     @Query("SELECT pvi FROM PlannerVersionItem pvi "
             + "JOIN FETCH pvi.course c LEFT JOIN FETCH c.offeringDepartment "
+            + "LEFT JOIN FETCH c.geArea "
             + "LEFT JOIN FETCH pvi.plannedDivision "
             + "WHERE pvi.plannerTermVersion IN :versions "
             + "ORDER BY pvi.plannerTermVersion.id, pvi.coursePositionOrder")
