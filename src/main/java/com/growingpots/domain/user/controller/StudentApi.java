@@ -388,4 +388,78 @@ public @interface StudentApi {
             )
     })
     @interface UpdateMyCourses {}
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @Operation(
+            summary = "온보딩 완료 확인",
+            description = "분석 확인 화면에서 사용자가 \"확인\" 버튼을 눌렀을 때 호출합니다. "
+                    + "이 API 호출 이후부터 로그인 응답의 onboardingCompleted가 true가 됩니다 - "
+                    + "PDF 분석까지만 끝나고 이 화면에서 이탈했다가 재로그인하면 다시 false로 내려가서 "
+                    + "분석 확인 화면부터 다시 진입하게 됩니다. PDF를 한 번도 분석한 적이 없으면(분석 결과 없음) "
+                    + "400으로 막습니다. 이미 확인한 상태에서 다시 호출해도 에러 없이 확인 시각만 갱신됩니다(멱등)."
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "온보딩 완료 확인 성공",
+                    content = @Content(
+                            mediaType = "application/json",
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "success": true,
+                                      "code": "USER_200_5",
+                                      "message": "온보딩이 완료되었습니다.",
+                                      "data": null
+                                    }
+                                    """)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "PDF 분석 결과가 없음 (분석 확인 화면에 아직 도달할 수 없는 상태)",
+                    content = @Content(
+                            mediaType = "application/json",
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "success": false,
+                                      "code": "USER_005",
+                                      "message": "PDF 분석 결과가 없어 온보딩을 확인할 수 없습니다.",
+                                      "data": null
+                                    }
+                                    """)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "인증 실패",
+                    content = @Content(
+                            mediaType = "application/json",
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "success": false,
+                                      "code": "CMN_005",
+                                      "message": "인증이 필요합니다.",
+                                      "data": null
+                                    }
+                                    """)
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "온보딩 미완료 (학적 프로필 없음)",
+                    content = @Content(
+                            mediaType = "application/json",
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "success": false,
+                                      "code": "USER_003",
+                                      "message": "온보딩이 완료되지 않은 사용자입니다.",
+                                      "data": null
+                                    }
+                                    """)
+                    )
+            )
+    })
+    @interface ConfirmOnboarding {}
 }

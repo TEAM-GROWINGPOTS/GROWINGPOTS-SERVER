@@ -12,6 +12,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToOne;
+import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -50,6 +51,11 @@ public class StudentProfile extends BaseTimeEntity {
 
     private Integer currentTerm;
 
+    // null이면 아직 분석확인 화면에서 "확인"을 누르지 않은 상태. onboardingCompleted는
+    // PDF 분석 여부가 아니라 이 값으로 판단한다 - 분석확인 화면 진입 전에 재로그인하면 그 화면부터
+    // 다시 보여줘야 하기 때문이다.
+    private LocalDateTime onboardingConfirmedAt;
+
     @Builder
     private StudentProfile(Member member, School school, Department department, int admissionYear) {
         this.member = member;
@@ -78,5 +84,11 @@ public class StudentProfile extends BaseTimeEntity {
             this.admissionYear = admissionYearFromStudentNo;
         }
         this.currentTerm = currentTerm;
+    }
+
+    // 분석확인 화면에서 "확인"을 누른 시점. 이미 확인한 뒤 재호출돼도(중복 클릭 등) 에러 없이
+    // 시각만 갱신한다 - 온보딩 완료 여부(non-null)에는 영향 없는 멱등 동작.
+    public void confirmOnboarding() {
+        this.onboardingConfirmedAt = LocalDateTime.now();
     }
 }

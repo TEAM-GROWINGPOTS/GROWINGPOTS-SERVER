@@ -140,6 +140,20 @@ public class StudentProfileService {
                 .build();
     }
 
+    // 분석확인 화면의 "확인" 버튼이 호출한다. 이 시점부터 onboardingCompleted가 true가 된다.
+    // PDF를 한 번도 분석한 적 없으면(GraduationAnalysisSummary 없음) 확인할 분석 결과 자체가 없으므로 막는다.
+    @Transactional
+    public void confirmOnboarding(Long memberId) {
+        StudentProfile profile = studentProfileRepository.findWithDetailsByMemberId(memberId)
+                .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
+
+        if (!graduationAnalysisSummaryRepository.existsByStudentMajor_StudentProfile(profile)) {
+            throw new BaseException(ErrorCode.ANALYSIS_NOT_FOUND);
+        }
+
+        profile.confirmOnboarding();
+    }
+
     @Transactional(readOnly = true)
     public StudentProfileResponse getMyProfile(Long memberId) {
         StudentProfile profile = studentProfileRepository.findWithDetailsByMemberId(memberId)

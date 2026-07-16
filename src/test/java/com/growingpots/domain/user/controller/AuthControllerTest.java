@@ -143,9 +143,10 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.data.onboardingCompleted").value(false));
     }
 
-    // PDF 분석까지 끝난(GraduationAnalysisSummary 있음) 회원만 진짜 온보딩 완료다(#221).
+    // PDF 분석까지만 끝나고 분석확인 화면에서 "확인"을 아직 안 눌렀으면 아직 온보딩 완료가 아니다
+    // (기존 기준은 PDF 분석 완료 시점이었으나 분석확인 화면에서 이탈하는 케이스를 못 잡아서 변경).
     @Test
-    void PDF_분석까지_끝난_회원은_onboardingCompleted가_true다() throws Exception {
+    void PDF_분석까지만_끝나고_확인을_안_눌렀으면_onboardingCompleted가_false다() throws Exception {
         School school = schoolRepository.save(School.builder().name("경희대학교 국제캠퍼스-2003").build());
         Department department = departmentRepository.save(Department.builder()
                 .school(school)
@@ -178,6 +179,53 @@ class AuthControllerTest {
         when(kakaoOAuthClient.getUserInfo(anyString())).thenReturn(
                 new KakaoUserInfoResponse(2003L,
                         new KakaoUserInfoResponse.Properties("PDF분석완료회원"),
+                        null));
+
+        mockMvc.perform(post("/api/v1/auth/oauth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new LoginRequestFixture("KAKAO", "kakao_access_token_xxx"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.onboardingCompleted").value(false));
+    }
+
+    // 분석확인 화면에서 "확인"까지 누른(onboardingConfirmedAt 있음) 회원만 진짜 온보딩 완료다.
+    @Test
+    void 분석확인까지_완료한_회원은_onboardingCompleted가_true다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교 국제캠퍼스-2004").build());
+        Department department = departmentRepository.save(Department.builder()
+                .school(school)
+                .college("공과대학")
+                .name("컴퓨터공학과")
+                .build());
+
+        Member member = memberRepository.save(Member.builder()
+                .nickname("온보딩완료회원")
+                .oauthProvider(OauthProvider.KAKAO)
+                .oauthId("2004")
+                .email(null)
+                .build());
+        StudentProfile profile = studentProfileRepository.save(StudentProfile.builder()
+                .member(member)
+                .school(school)
+                .department(department)
+                .admissionYear(2022)
+                .build());
+        StudentMajor mainMajor = studentMajorRepository.save(StudentMajor.builder()
+                .studentProfile(profile)
+                .department(department)
+                .majorType(StudentMajor.MajorType.MAIN)
+                .track(null)
+                .build());
+        graduationAnalysisSummaryRepository.save(GraduationAnalysisSummary.builder()
+                .studentMajor(mainMajor)
+                .build());
+        profile.confirmOnboarding();
+        studentProfileRepository.save(profile);
+
+        when(kakaoOAuthClient.getUserInfo(anyString())).thenReturn(
+                new KakaoUserInfoResponse(2004L,
+                        new KakaoUserInfoResponse.Properties("온보딩완료회원"),
                         null));
 
         mockMvc.perform(post("/api/v1/auth/oauth/login")
