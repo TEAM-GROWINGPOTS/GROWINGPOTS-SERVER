@@ -41,6 +41,9 @@ public @interface CourseApi {
                     - `credits`에 4가 포함되면 "4학점 이상"(>=4)으로 처리하고, 나머지 값은 정확히 일치하는 값만 매칭합니다.
                     - `recommendedYearLow`/`recommendedYearHigh`가 다르면 권장 학년이 범위(예: 1~2학년)라는 뜻입니다.
                     - `inPlanner`는 학생의 현재 선택된 플래너 버전에 이 과목이 담겨 있으면 true입니다.
+                    - `area`: 배분이수 영역 정보(과목카드 영역 칩용). 표시 중인 이수구분(defaultDivisionName의
+                      근거, CROSS_MAJOR 조회 시 인정 이수구분 포함)이 배분이수교과이고 영역 정보가 있을 때만
+                      채워짐, 그 외 null.
                     """
     )
     @ApiResponses({
@@ -70,7 +73,27 @@ public @interface CourseApi {
                                             "isEnglish": false,
                                             "isSw": false,
                                             "alreadyCompleted": false,
-                                            "inPlanner": false
+                                            "inPlanner": false,
+                                            "area": null
+                                          },
+                                          {
+                                            "courseId": 419,
+                                            "courseCode": "HUS2033",
+                                            "name": "미디어아트와문화",
+                                            "credit": 3,
+                                            "departmentName": null,
+                                            "defaultDivisionName": "배분이수교과",
+                                            "recommendedYearLow": 1,
+                                            "recommendedYearHigh": 4,
+                                            "openedSemester": "BOTH",
+                                            "isEnglish": false,
+                                            "isSw": false,
+                                            "alreadyCompleted": false,
+                                            "inPlanner": false,
+                                            "area": {
+                                              "code": "AREA_3",
+                                              "name": "상징, 문화, 소통"
+                                            }
                                           }
                                         ],
                                         "page": { "page": 0, "size": 20, "totalElements": 137, "hasNext": true }

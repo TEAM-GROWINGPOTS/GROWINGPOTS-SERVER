@@ -22,6 +22,7 @@ import com.growingpots.domain.university.entity.Course;
 import com.growingpots.domain.university.entity.CrossMajorRecognizedCourse;
 import com.growingpots.domain.university.entity.Department;
 import com.growingpots.domain.university.entity.Division;
+import com.growingpots.domain.university.entity.GeArea;
 import com.growingpots.domain.university.entity.School;
 import com.growingpots.domain.university.entity.enums.DivisionCategory;
 import com.growingpots.domain.university.entity.enums.OpenedSemester;
@@ -29,6 +30,7 @@ import com.growingpots.domain.university.repository.CourseRepository;
 import com.growingpots.domain.university.repository.CrossMajorRecognizedCourseRepository;
 import com.growingpots.domain.university.repository.DepartmentRepository;
 import com.growingpots.domain.university.repository.DivisionRepository;
+import com.growingpots.domain.university.repository.GeAreaRepository;
 import com.growingpots.domain.university.repository.SchoolRepository;
 import com.growingpots.domain.user.entity.Member;
 import com.growingpots.domain.user.entity.StudentProfile;
@@ -70,6 +72,9 @@ class CourseSearchTest {
 
     @Autowired
     private CourseRepository courseRepository;
+
+    @Autowired
+    private GeAreaRepository geAreaRepository;
 
     @Autowired
     private CrossMajorRecognizedCourseRepository crossMajorRecognizedCourseRepository;
@@ -567,5 +572,74 @@ class CourseSearchTest {
         mockMvc.perform(get("/api/v1/courses"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("CMN_005"));
+    }
+
+    // 배분이수교과(DISTRIBUTED_GE) 과목은 area 정보가 채워지고, 그 외 이수구분은 area가 null이어야 한다
+    // ("이수구분별 과목 조회"/플래너 응답의 area와 동일 규칙).
+    @Test
+    void 배분이수교과_과목은_area_정보가_채워지고_그외_이수구분은_null이다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-9115").build());
+        Department cs = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과").build());
+        Division distributedGe = divisionRepository.save(Division.builder()
+                .school(school).code("05").category(DivisionCategory.DISTRIBUTED_GE).build());
+        Division majorRequired = divisionRepository.save(Division.builder()
+                .school(school).code("04").category(DivisionCategory.MAJOR_REQUIRED).build());
+        GeArea area = geAreaRepository.save(GeArea.builder()
+                .school(school).code("AREA_3").name("상징, 문화, 소통").build());
+        courseRepository.save(Course.builder()
+                .school(school).courseCode("HUS2033").name("미디어아트와문화").credit(3)
+                .defaultDivision(distributedGe).geArea(area)
+                .openedSemester(OpenedSemester.BOTH).isEnglish(false).isSw(false).isActive(true).build());
+        courseRepository.save(Course.builder()
+                .school(school).courseCode("CS101").name("컴퓨터구조론").credit(3)
+                .offeringDepartment(cs).defaultDivision(majorRequired)
+                .recommendedYearLow(2).recommendedYearHigh(2).openedSemester(OpenedSemester.FIRST)
+                .isEnglish(false).isSw(false).isActive(true).build());
+        StudentProfile studentProfile = onboardedStudent("9115", cs);
+
+        mockMvc.perform(get("/api/v1/courses")
+                        .with(authentication(authenticationOf(studentProfile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.courses[?(@.courseCode == 'HUS2033')].area.code").value("AREA_3"))
+                .andExpect(jsonPath("$.data.courses[?(@.courseCode == 'HUS2033')].area.name").value("상징, 문화, 소통"))
+                .andExpect(jsonPath("$.data.courses[?(@.courseCode == 'CS101')].area")
+                        .value(org.hamcrest.Matchers.contains(org.hamcrest.Matchers.nullValue())));
+    }
+
+    // CROSS_MAJOR로 조회 시 area는 과목의 원래 기본 이수구분이 아니라 "인정 이수구분" 기준으로 판단해야
+    // 한다 - 원래는 배분이수가 아니어도 인정 이수구분이 배분이수면 area가 채워져야 한다.
+    @Test
+    void CROSS_MAJOR_조회시_area는_인정_이수구분_기준으로_판단된다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-9116").build());
+        Department chem = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("화학공학과").build());
+        Department newMat = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("신소재공학과").build());
+        Division newMatMajorRequired = divisionRepository.save(Division.builder()
+                .school(school).code("04").category(DivisionCategory.MAJOR_REQUIRED).build());
+        Division recognizedAsDistributedGe = divisionRepository.save(Division.builder()
+                .school(school).code("05").category(DivisionCategory.DISTRIBUTED_GE).build());
+        GeArea area = geAreaRepository.save(GeArea.builder()
+                .school(school).code("AREA_1").name("생명, 우주, 인간").build());
+
+        // 원래 기본 이수구분은 전공필수(신소재공학과 기준)지만, 화학공학과에는 배분이수로 인정됨
+        Course crossMajorCourse = courseRepository.save(Course.builder()
+                .school(school).courseCode("MAT201").name("신소재공학개론").credit(3).geArea(area)
+                .offeringDepartment(newMat).defaultDivision(newMatMajorRequired)
+                .recommendedYearLow(2).recommendedYearHigh(2).openedSemester(OpenedSemester.FIRST)
+                .isEnglish(false).isSw(false).isActive(true).build());
+        crossMajorRecognizedCourseRepository.save(CrossMajorRecognizedCourse.builder()
+                .targetDepartment(chem).course(crossMajorCourse).recognizedDivision(recognizedAsDistributedGe).build());
+
+        StudentProfile chemStudent = onboardedStudent("9116", chem);
+
+        mockMvc.perform(get("/api/v1/courses")
+                        .param("divisionCategory", "CROSS_MAJOR")
+                        .with(authentication(authenticationOf(chemStudent.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.courses[0].defaultDivisionName").value("배분이수교과"))
+                .andExpect(jsonPath("$.data.courses[0].area.code").value("AREA_1"))
+                .andExpect(jsonPath("$.data.courses[0].area.name").value("생명, 우주, 인간"));
     }
 }

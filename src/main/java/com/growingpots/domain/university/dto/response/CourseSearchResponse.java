@@ -65,6 +65,24 @@ public class CourseSearchResponse {
 
         @Schema(description = "플래너에 담긴 과목 여부. 현재 항상 false")
         private final boolean inPlanner;
+
+        @Schema(description = "배분이수 영역 정보 (과목카드 영역 칩용). "
+                + "표시 중인 이수구분(defaultDivisionName의 근거)이 DISTRIBUTED_GE이고 영역 정보가 있을 때만 채워짐, "
+                + "그 외 null",
+                nullable = true)
+        private final AreaInfo area;
+    }
+
+    @Schema(description = "교양 영역 기본 정보 (과목카드 영역 칩 표시용)")
+    @Getter
+    @Builder
+    public static class AreaInfo {
+
+        @Schema(description = "영역 코드", example = "AREA_3")
+        private final String code;
+
+        @Schema(description = "영역명", example = "상징, 문화, 소통")
+        private final String name;
     }
 
     @Schema(description = "페이지 정보")
