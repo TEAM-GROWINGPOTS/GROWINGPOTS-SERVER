@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -62,5 +63,13 @@ public class StudentController {
         Long memberId = Long.parseLong(authentication.getName());
         studentProfileService.updateMyCourses(memberId, request);
         return ResponseEntity.ok(BaseResponse.success(SuccessCode.STUDENT_COURSE_BULK_SAVED));
+    }
+
+    @StudentApi.ConfirmOnboarding
+    @PatchMapping("/me/onboarding-confirm")
+    public ResponseEntity<BaseResponse<Void>> confirmOnboarding(Authentication authentication) {
+        Long memberId = Long.parseLong(authentication.getName());
+        studentProfileService.confirmOnboarding(memberId);
+        return ResponseEntity.ok(BaseResponse.success(SuccessCode.ONBOARDING_CONFIRMED));
     }
 }
