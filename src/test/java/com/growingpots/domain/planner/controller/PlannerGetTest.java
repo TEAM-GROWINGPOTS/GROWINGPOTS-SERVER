@@ -1,10 +1,13 @@
 package com.growingpots.domain.planner.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.growingpots.domain.planner.entity.PlannerSimulation;
 import com.growingpots.domain.planner.entity.PlannerTerm;
 import com.growingpots.domain.planner.entity.PlannerTermVersion;
@@ -33,7 +36,9 @@ import com.growingpots.domain.user.entity.StudentProfile;
 import com.growingpots.domain.user.entity.enums.OauthProvider;
 import com.growingpots.domain.user.repository.MemberRepository;
 import com.growingpots.domain.user.repository.StudentProfileRepository;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -50,6 +55,9 @@ class PlannerGetTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @Autowired
     private MemberRepository memberRepository;
@@ -475,5 +483,64 @@ class PlannerGetTest {
                 .andExpect(jsonPath("$.data.completedTerms[1].yearLevel").value(1))
                 .andExpect(jsonPath("$.data.completedTerms[2].yearLevel").value(1))
                 .andExpect(jsonPath("$.data.completedTerms[3].yearLevel").value(1));
+    }
+
+    // 정규학기(1학기/2학기) 없이 여름학기만 서로 다른 두 해(2024, 2025)에 걸쳐 반복되면, 정규학기 카운트
+    // 기반 학년 산정 로직상 두 학기 모두 같은 (yearLevel, semester)로 계산돼 plannerTermVersionId가
+    // 겹치는 문제가 있었다. 이제는 순번 기반이라 항상 유일해야 한다.
+    @Test
+    void 같은_학년학기_조합이_반복돼도_plannerTermVersionId는_모두_유일하다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-7715").build());
+        Department cs = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과").build());
+        Division majorRequired = divisionRepository.save(Division.builder()
+                .school(school).code("04").category(DivisionCategory.MAJOR_REQUIRED).build());
+        StudentProfile profile = onboardedStudent("7715", cs, 2022);
+
+        // 2022 1학기, 2022 2학기, 2023 1학기(정규 3개) → 이 시점 currentYearLevel=2
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(null).appliedDivision(majorRequired)
+                .rawCourseCode(null).rawCourseName("2022_1학기과목").credit(3)
+                .takenYear(2022).takenSemester(Semester.FIRST)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).isRetake(false).build());
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(null).appliedDivision(majorRequired)
+                .rawCourseCode(null).rawCourseName("2022_2학기과목").credit(3)
+                .takenYear(2022).takenSemester(Semester.SECOND)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).isRetake(false).build());
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(null).appliedDivision(majorRequired)
+                .rawCourseCode(null).rawCourseName("2023_1학기과목").credit(3)
+                .takenYear(2023).takenSemester(Semester.FIRST)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).isRetake(false).build());
+        // 이후 정규학기 없이 여름학기만 2024, 2025 두 해에 걸쳐 반복 - 둘 다 currentYearLevel=2로 계산됨
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(null).appliedDivision(majorRequired)
+                .rawCourseCode(null).rawCourseName("2024_여름학기과목").credit(3)
+                .takenYear(2024).takenSemester(Semester.SUMMER)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).isRetake(false).build());
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(null).appliedDivision(majorRequired)
+                .rawCourseCode(null).rawCourseName("2025_여름학기과목").credit(3)
+                .takenYear(2025).takenSemester(Semester.SUMMER)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).isRetake(false).build());
+
+        mockMvc.perform(get("/api/v1/planner")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                // 5개 학기 카드 모두 응답에 존재해야 한다(하나로 합쳐지면 안 됨)
+                .andExpect(jsonPath("$.data.completedTerms.length()").value(5))
+                .andExpect(jsonPath("$.data.completedTerms[3].name").value("2학년 여름학기"))
+                .andExpect(jsonPath("$.data.completedTerms[3].courses[0].name").value("2024_여름학기과목"))
+                .andExpect(jsonPath("$.data.completedTerms[4].name").value("2학년 여름학기"))
+                .andExpect(jsonPath("$.data.completedTerms[4].courses[0].name").value("2025_여름학기과목"))
+                .andExpect(result -> {
+                    JsonNode root = objectMapper.readTree(result.getResponse().getContentAsString());
+                    List<Long> ids = new ArrayList<>();
+                    root.path("data").path("completedTerms")
+                            .forEach(term -> ids.add(term.path("plannerTermVersionId").asLong()));
+                    assertThat(ids).doesNotHaveDuplicates();
+                    assertThat(ids).allMatch(id -> id < 0);
+                });
     }
 }

@@ -35,7 +35,8 @@ public @interface PlannerApi {
                       없어 만든 합성 값이다. 진짜 PK는 AUTO_INCREMENT라 항상 양수이므로 절대 안 겹치도록
                       항상 음수로 만든다 - 실수로 이 값을 진짜 PK인 것처럼 다른 API(예: 버전 선택)에 넘기더라도
                       DB에 존재할 수 없는 값이라 엉뚱한 데 매칭되지 않고 즉시 404로 실패하게 하기 위한
-                      안전장치다. 다른 API에 절대 전달하면 안 된다.
+                      안전장치다. 다른 API에 절대 전달하면 안 된다. 응답 내에서 매번 순서대로 매긴 값이라
+                      매 요청마다 같은 학기가 항상 같은 값을 받는다는 보장은 없다.
                     - status: IN_PROGRESS(이수중) | COMPLETED(이수완료).
                     - courses[].studentCourseId: 이수 기록 PK.
                     - courses[].divisionCategory / divisionName: 이수구분 코드·표시명. 항상 존재.
@@ -87,7 +88,7 @@ public @interface PlannerApi {
                                           {
                                             "yearLevel": 1,
                                             "semester": 1,
-                                            "plannerTermVersionId": -11,
+                                            "plannerTermVersionId": -1,
                                             "name": "1학년 1학기",
                                             "status": "COMPLETED",
                                             "totalCredit": 3,

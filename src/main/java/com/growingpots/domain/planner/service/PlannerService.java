@@ -287,7 +287,11 @@ public class PlannerService {
                 case SUMMER -> 3;
                 case WINTER -> 4;
             };
-            result.add(toCompletedTerm(currentYearLevel, apiSemester, entry.getValue(), plannedRetakeCourseIds));
+            // 순번을 그대로 합성 ID로 쓴다(음수) - yearLevel*10+semester 조합 공식은 정규학기 없이
+            // 계절학기만 여러 해에 걸쳐 반복되는 학생의 경우 같은 (yearLevel, semester) 조합이
+            // 중복돼 ID가 겹치는 문제가 있었다. 순번은 항상 유일하므로 이런 충돌이 구조적으로 없다.
+            result.add(toCompletedTerm(currentYearLevel, apiSemester, entry.getValue(), plannedRetakeCourseIds,
+                    -(result.size() + 1L)));
         }
         return result;
     }
@@ -302,7 +306,7 @@ public class PlannerService {
     }
 
     private PlannerResponse.CompletedTerm toCompletedTerm(int yearLevel, int semester,
-            List<StudentCourse> courses, Set<Long> plannedRetakeCourseIds) {
+            List<StudentCourse> courses, Set<Long> plannedRetakeCourseIds, long syntheticId) {
         boolean inProgress = courses.stream().anyMatch(c -> c.getStatus() == CourseStatus.IN_PROGRESS);
         // 플래너에서 재수강 계획된 과목은 해당 학기 totalCredit에서 제외한다.
         // 재수강 시 기존 학기 학점이 대체되므로 그 학기의 유효 학점에서 빠져야 한다.
@@ -317,7 +321,7 @@ public class PlannerService {
                 // completedTerms엔 실제 PLANNER_TERM_VERSION row가 없어 합성 ID를 만들어 넣는다.
                 // AUTO_INCREMENT PK(항상 양수)와 절대 안 겹치도록 음수로 둔다 — 실수로 진짜 PK처럼
                 // 다른 API에 넘겨져도(예: 저장/삭제) DB에 없는 값이라 즉시 실패하도록 하기 위함.
-                .plannerTermVersionId(-(yearLevel * 10L + semester))
+                .plannerTermVersionId(syntheticId)
                 .name(yearLevel + "학년 " + semesterDisplayName(semester))
                 .status(inProgress ? "IN_PROGRESS" : "COMPLETED")
                 .totalCredit(totalCredit)
