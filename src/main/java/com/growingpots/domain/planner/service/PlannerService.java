@@ -64,10 +64,41 @@ public class PlannerService {
         StudentProfile profile = studentProfileRepository.findWithDetailsByMemberId(memberId)
                 .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
 
+        // 재수강 과목 ID: 이수완료/수강중이면서 플래너에도 담긴 과목.
+        // completedTerms totalCredit에서 제외해 해당 학기에서 유효하게 인정되는 학점만 표시한다.
+        Set<Long> plannedRetakeCourseIds = computePlannedRetakeCourseIds(profile);
+
         return PlannerResponse.builder()
-                .completedTerms(buildCompletedTerms(profile))
+                .completedTerms(buildCompletedTerms(profile, plannedRetakeCourseIds))
                 .plannedTerms(buildPlannedTerms(profile))
                 .build();
+    }
+
+    // 플래너에 담긴 과목 중 이미 COMPLETED·IN_PROGRESS인 과목 ID 집합(재수강 대상).
+    // buildPlannedTerms의 computeRetakeDisplay와 동일한 기준이며, completedTerms 집계에도
+    // 필요해 별도 메서드로 분리한다.
+    private Set<Long> computePlannedRetakeCourseIds(StudentProfile profile) {
+        PlannerSimulation simulation = plannerSimulationRepository.findByStudentProfile(profile).orElse(null);
+        if (simulation == null) return Set.of();
+
+        List<PlannerTerm> terms = plannerTermRepository.findByPlannerSimulation(simulation);
+        if (terms.isEmpty()) return Set.of();
+
+        List<PlannerTermVersion> versions = plannerTermVersionRepository.findByPlannerTermIn(terms);
+        if (versions.isEmpty()) return Set.of();
+
+        List<PlannerVersionItem> items = plannerVersionItemRepository
+                .findWithDetailsByPlannerTermVersionIn(versions);
+        if (items.isEmpty()) return Set.of();
+
+        Set<Long> completedOrInProgress = new HashSet<>(
+                studentCourseRepository.findCourseIdsByStudentProfileAndStatusIn(
+                        profile, List.of(CourseStatus.COMPLETED, CourseStatus.IN_PROGRESS)));
+
+        return items.stream()
+                .map(i -> i.getCourse().getId())
+                .filter(completedOrInProgress::contains)
+                .collect(Collectors.toSet());
     }
 
     // 아직 한 번도 저장 안 한 학생은 PLANNER_SIMULATION 자체가 없어서 빈 배열을 반환한다.
@@ -227,7 +258,8 @@ public class PlannerService {
     // 학년/학기를 매긴다. "입학년도 - 수강년도" 같은 달력 계산은 휴학/유급 등으로 공백이 생기면
     // 틀어지지만(예: 1년 휴학하면 실제 3학년 2학기가 4학년 1학기로 밀림), 이 방식은 휴학한 학기엔
     // 애초에 STUDENT_COURSE 기록 자체가 없어서 순서에서 자동으로 빠지므로 안전하다.
-    private List<PlannerResponse.CompletedTerm> buildCompletedTerms(StudentProfile profile) {
+    private List<PlannerResponse.CompletedTerm> buildCompletedTerms(
+            StudentProfile profile, Set<Long> plannedRetakeCourseIds) {
         List<StudentCourse> courses = studentCourseRepository.findWithCourseAndDivisionByStudentProfile(profile);
 
         Map<RawTermKey, List<StudentCourse>> grouped = new TreeMap<>();
@@ -255,7 +287,7 @@ public class PlannerService {
                 case SUMMER -> 3;
                 case WINTER -> 4;
             };
-            result.add(toCompletedTerm(currentYearLevel, apiSemester, entry.getValue()));
+            result.add(toCompletedTerm(currentYearLevel, apiSemester, entry.getValue(), plannedRetakeCourseIds));
         }
         return result;
     }
@@ -269,9 +301,15 @@ public class PlannerService {
         return new RawTermKey(takenYear, takenSemester);
     }
 
-    private PlannerResponse.CompletedTerm toCompletedTerm(int yearLevel, int semester, List<StudentCourse> courses) {
+    private PlannerResponse.CompletedTerm toCompletedTerm(int yearLevel, int semester,
+            List<StudentCourse> courses, Set<Long> plannedRetakeCourseIds) {
         boolean inProgress = courses.stream().anyMatch(c -> c.getStatus() == CourseStatus.IN_PROGRESS);
-        int totalCredit = courses.stream().mapToInt(StudentCourse::getCredit).sum();
+        // 플래너에서 재수강 계획된 과목은 해당 학기 totalCredit에서 제외한다.
+        // 재수강 시 기존 학기 학점이 대체되므로 그 학기의 유효 학점에서 빠져야 한다.
+        int totalCredit = courses.stream()
+                .filter(c -> c.getCourse() == null
+                        || !plannedRetakeCourseIds.contains(c.getCourse().getId()))
+                .mapToInt(StudentCourse::getCredit).sum();
 
         return PlannerResponse.CompletedTerm.builder()
                 .yearLevel(yearLevel)
