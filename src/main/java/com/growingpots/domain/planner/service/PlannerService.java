@@ -427,41 +427,48 @@ public class PlannerService {
 
         Map<Long, Course> courseMap = loadCourseMap(request, profile);
 
-        Set<Long> beforeCourseIds = plannerVersionItemRepository.findSelectedByStudentProfile(profile)
+        // courseId → 저장 전 선택 버전에서 과목이 담긴 학기 수.
+        // Set 대신 Map으로 수집해야 "같은 과목을 새 학기에 또 추가"한 경우를 감지할 수 있다.
+        Map<Long, Long> beforeCourseTermCounts = plannerVersionItemRepository.findSelectedByStudentProfile(profile)
                 .stream()
-                .map(i -> i.getCourse().getId())
-                .collect(Collectors.toSet());
+                .collect(Collectors.groupingBy(i -> i.getCourse().getId(), Collectors.counting()));
 
         deleteExistingData(simulation.getId());
 
         buildAndSave(simulation, request, courseMap, profile);
 
-        return computeHasDuplicateCourse(profile, request, beforeCourseIds);
+        return computeHasDuplicateCourse(profile, request, beforeCourseTermCounts);
     }
 
     private boolean computeHasDuplicateCourse(
             StudentProfile profile,
             PlannerSaveRequest request,
-            Set<Long> beforeCourseIds
+            Map<Long, Long> beforeCourseTermCounts
     ) {
-        Set<Long> requestSelectedCourseIds = request.terms().stream()
-                .flatMap(t -> t.versions().stream())
-                .filter(v -> Boolean.TRUE.equals(v.isSelected()))
-                .filter(v -> v.items() != null)
-                .flatMap(v -> v.items().stream())
-                .map(PlannerSaveRequest.ItemRequest::courseId)
-                .collect(Collectors.toSet());
+        // 요청 선택 버전에서 courseId별 등장 학기 수 (4-1+4-2에 같은 과목이면 count=2)
+        Map<Long, Long> requestCourseTermCounts = request.terms().stream()
+                .flatMap(t -> t.versions().stream()
+                        .filter(v -> Boolean.TRUE.equals(v.isSelected()))
+                        .filter(v -> v.items() != null)
+                        .flatMap(v -> v.items().stream())
+                        .map(PlannerSaveRequest.ItemRequest::courseId))
+                .collect(Collectors.groupingBy(id -> id, Collectors.counting()));
 
-        Set<Long> newlyAdded = new HashSet<>(requestSelectedCourseIds);
-        newlyAdded.removeAll(beforeCourseIds);
-
-        if (newlyAdded.isEmpty()) return false;
+        if (requestCourseTermCounts.isEmpty()) return false;
 
         Set<Long> alreadyTaken = new HashSet<>(
                 studentCourseRepository.findCourseIdsByStudentProfileAndStatusIn(
                         profile, List.of(CourseStatus.COMPLETED, CourseStatus.IN_PROGRESS)));
 
-        return newlyAdded.stream().anyMatch(alreadyTaken::contains);
+        return requestCourseTermCounts.entrySet().stream()
+                .anyMatch(e -> {
+                    long requestCount = e.getValue();
+                    long beforeCount = beforeCourseTermCounts.getOrDefault(e.getKey(), 0L);
+                    if (requestCount <= beforeCount) return false;
+                    // 이수완료/이수중: 이수예정에 처음 담기만 해도 재수강이므로 true
+                    // 미이수: 이미 다른 이수예정 학기에 있는데 또 추가하는 경우만 true
+                    return alreadyTaken.contains(e.getKey()) || beforeCount >= 1;
+                });
     }
 
     // 학생당 시뮬레이션은 1개뿐이라, id 없이 저장 요청이 오면 새로 만들기 전에 기존 걸 먼저 찾는다
