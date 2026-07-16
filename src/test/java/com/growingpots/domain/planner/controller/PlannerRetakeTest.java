@@ -406,6 +406,121 @@ class PlannerRetakeTest {
                 .andExpect(jsonPath("$.data.hasDuplicateCourse").value(false));
     }
 
+    // 이미 이수완료 과목이 4-1 이수예정에 있는 상태에서 4-2 이수예정에 또 추가하면
+    // hasDuplicateCourse = true 이어야 한다.
+    // (버그: requestSelectedCourseIds를 Set으로 수집해 4-1+4-2 중복이 1개로 합쳐지고,
+    //  beforeCourseIds에 이미 있어 newlyAdded가 비어버려 false가 반환됐던 문제)
+    @Test
+    void 이미_다른_학기에_있는_재수강과목을_새_학기에_추가하면_hasDuplicateCourse가_true이다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-8810").build());
+        Department cs = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과").build());
+        Division majorRequired = divisionRepository.save(Division.builder()
+                .school(school).code("04").category(DivisionCategory.MAJOR_REQUIRED).build());
+        Course completedCourse = courseRepository.save(Course.builder()
+                .school(school).courseCode("CS-DUP01").name("컴공개론").credit(3)
+                .offeringDepartment(cs).defaultDivision(majorRequired)
+                .openedSemester(OpenedSemester.BOTH).isEnglish(false).isSw(false).build());
+
+        StudentProfile profile = onboardedStudent("8810", cs);
+
+        // 이수완료 상태
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(completedCourse).appliedDivision(majorRequired)
+                .rawCourseCode("CS-DUP01").rawCourseName("컴공개론").credit(3)
+                .takenYear(2022).takenSemester(Semester.SECOND)
+                .status(CourseStatus.COMPLETED).source(RecordSource.PDF).isRetake(false).build());
+
+        Authentication auth = authOf(profile.getMember().getId());
+
+        // 1차 저장: 4-1에 completedCourse 추가 → hasDuplicateCourse = true
+        String term41Body = """
+                {
+                  "plannerSimulationId": null,
+                  "terms": [
+                    {
+                      "yearLevel": 4,
+                      "semester": 1,
+                      "versions": [
+                        {
+                          "versionNo": 1,
+                          "name": "폴더 1",
+                          "isSelected": true,
+                          "versionOrder": 0,
+                          "items": [
+                            { "courseId": %d, "coursePositionOrder": 0 }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+                """.formatted(completedCourse.getId());
+
+        mockMvc.perform(put("/api/v1/planner")
+                        .with(authentication(auth))
+                        .contentType("application/json")
+                        .content(term41Body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.hasDuplicateCourse").value(true));
+
+        // 2차 저장: 4-1 유지하면서 4-2에도 completedCourse 추가 → hasDuplicateCourse = true
+        // (이전 버그: requestSelectedCourseIds가 Set이라 4-1+4-2 중복이 1개로 줄어
+        //  beforeCourseIds와 동일해져서 false가 반환됐음)
+        String term41And42Body = """
+                {
+                  "plannerSimulationId": null,
+                  "terms": [
+                    {
+                      "yearLevel": 4,
+                      "semester": 1,
+                      "versions": [
+                        {
+                          "versionNo": 1,
+                          "name": "폴더 1",
+                          "isSelected": true,
+                          "versionOrder": 0,
+                          "items": [
+                            { "courseId": %d, "coursePositionOrder": 0 }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "yearLevel": 4,
+                      "semester": 2,
+                      "versions": [
+                        {
+                          "versionNo": 1,
+                          "name": "폴더 1",
+                          "isSelected": true,
+                          "versionOrder": 0,
+                          "items": [
+                            { "courseId": %d, "coursePositionOrder": 0 }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+                """.formatted(completedCourse.getId(), completedCourse.getId());
+
+        mockMvc.perform(put("/api/v1/planner")
+                        .with(authentication(auth))
+                        .contentType("application/json")
+                        .content(term41And42Body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.hasDuplicateCourse").value(true));
+
+        // 3차 저장: 4-1+4-2 그대로 유지 (새로 추가 없음) → hasDuplicateCourse = false
+        mockMvc.perform(put("/api/v1/planner")
+                        .with(authentication(auth))
+                        .contentType("application/json")
+                        .content(term41And42Body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.hasDuplicateCourse").value(false));
+    }
+
     // ─── GET /api/v1/planner — 버전 전환(PATCH) 연동 ─────────────────────────
 
     // 1-1(V1 선택·재수강A+일반B), 1-2(V1 선택·재수강A) 상태에서
@@ -549,6 +664,110 @@ class PlannerRetakeTest {
     }
 
     // ─── PUT /api/v1/planner — hasDuplicateCourse ───────────────────────────
+
+    // 미이수 과목을 이수예정 4-1에 추가하면 toast 없음(정상),
+    // 이후 같은 과목을 4-2에도 추가하면 이미 다른 학기에 있으므로 hasDuplicateCourse = true
+    @Test
+    void 미이수_과목을_이미_이수예정에_있는데_다른_학기에_또_추가하면_hasDuplicateCourse가_true이다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-8811").build());
+        Department cs = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과").build());
+        Division majorRequired = divisionRepository.save(Division.builder()
+                .school(school).code("04").category(DivisionCategory.MAJOR_REQUIRED).build());
+        Course newCourse = courseRepository.save(Course.builder()
+                .school(school).courseCode("CS-NEW01").name("컴공개론").credit(3)
+                .offeringDepartment(cs).defaultDivision(majorRequired)
+                .openedSemester(OpenedSemester.BOTH).isEnglish(false).isSw(false).build());
+
+        // 이수 이력 없음 (미이수)
+        StudentProfile profile = onboardedStudent("8811", cs);
+        Authentication auth = authOf(profile.getMember().getId());
+
+        // 1차 저장: 4-1에 미이수 과목 추가 → 처음 담는 것이므로 hasDuplicateCourse = false
+        String term41Body = """
+                {
+                  "plannerSimulationId": null,
+                  "terms": [
+                    {
+                      "yearLevel": 4,
+                      "semester": 1,
+                      "versions": [
+                        {
+                          "versionNo": 1,
+                          "name": "폴더 1",
+                          "isSelected": true,
+                          "versionOrder": 0,
+                          "items": [
+                            { "courseId": %d, "coursePositionOrder": 0 }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+                """.formatted(newCourse.getId());
+
+        mockMvc.perform(put("/api/v1/planner")
+                        .with(authentication(auth))
+                        .contentType("application/json")
+                        .content(term41Body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.hasDuplicateCourse").value(false));
+
+        // 2차 저장: 4-1 유지하면서 4-2에도 같은 미이수 과목 추가 → 다른 학기에 이미 있으므로 true
+        String term41And42Body = """
+                {
+                  "plannerSimulationId": null,
+                  "terms": [
+                    {
+                      "yearLevel": 4,
+                      "semester": 1,
+                      "versions": [
+                        {
+                          "versionNo": 1,
+                          "name": "폴더 1",
+                          "isSelected": true,
+                          "versionOrder": 0,
+                          "items": [
+                            { "courseId": %d, "coursePositionOrder": 0 }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "yearLevel": 4,
+                      "semester": 2,
+                      "versions": [
+                        {
+                          "versionNo": 1,
+                          "name": "폴더 1",
+                          "isSelected": true,
+                          "versionOrder": 0,
+                          "items": [
+                            { "courseId": %d, "coursePositionOrder": 0 }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+                """.formatted(newCourse.getId(), newCourse.getId());
+
+        mockMvc.perform(put("/api/v1/planner")
+                        .with(authentication(auth))
+                        .contentType("application/json")
+                        .content(term41And42Body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.hasDuplicateCourse").value(true));
+
+        // 3차 저장: 4-1+4-2 그대로 유지 → hasDuplicateCourse = false
+        mockMvc.perform(put("/api/v1/planner")
+                        .with(authentication(auth))
+                        .contentType("application/json")
+                        .content(term41And42Body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.hasDuplicateCourse").value(false));
+    }
 
     // 이수 이력이 없는 순수 신규 과목만 추가하면 hasDuplicateCourse = false
     @Test
