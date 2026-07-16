@@ -1,5 +1,6 @@
 package com.growingpots.domain.planner.repository;
 
+import com.growingpots.domain.planner.entity.PlannerSimulation;
 import com.growingpots.domain.planner.entity.PlannerTermVersion;
 import com.growingpots.domain.planner.entity.PlannerVersionItem;
 import com.growingpots.domain.user.entity.StudentProfile;
@@ -28,6 +29,16 @@ public interface PlannerVersionItemRepository extends JpaRepository<PlannerVersi
             + "WHERE pvi.plannerTermVersion.isSelected = true "
             + "AND pvi.plannerTermVersion.plannerTerm.plannerSimulation.studentProfile = :profile")
     List<PlannerVersionItem> findSelectedByStudentProfile(@Param("profile") StudentProfile profile);
+
+    @Query("SELECT DISTINCT pvi.course.id FROM PlannerVersionItem pvi "
+            + "WHERE pvi.plannerTermVersion.isSelected = true "
+            + "AND pvi.plannerTermVersion.plannerTerm.plannerSimulation = :simulation "
+            + "AND (pvi.plannerTermVersion.plannerTerm.yearLevel * 10 + pvi.plannerTermVersion.plannerTerm.semester) "
+            + "< (:yearLevel * 10 + :semester)")
+    List<Long> findCourseIdsInEarlierTerms(
+            @Param("simulation") PlannerSimulation simulation,
+            @Param("yearLevel") int yearLevel,
+            @Param("semester") int semester);
 
     @Transactional
     @Modifying(clearAutomatically = true, flushAutomatically = true)

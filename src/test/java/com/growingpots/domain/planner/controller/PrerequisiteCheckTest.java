@@ -5,6 +5,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.growingpots.domain.planner.entity.PlannerSimulation;
+import com.growingpots.domain.planner.entity.PlannerTerm;
+import com.growingpots.domain.planner.entity.PlannerTermVersion;
+import com.growingpots.domain.planner.entity.PlannerVersionItem;
+import com.growingpots.domain.planner.repository.PlannerSimulationRepository;
+import com.growingpots.domain.planner.repository.PlannerTermRepository;
+import com.growingpots.domain.planner.repository.PlannerTermVersionRepository;
+import com.growingpots.domain.planner.repository.PlannerVersionItemRepository;
 import com.growingpots.domain.transcript.entity.StudentCourse;
 import com.growingpots.domain.transcript.entity.enums.CourseStatus;
 import com.growingpots.domain.transcript.entity.enums.RecordSource;
@@ -47,6 +55,10 @@ class PrerequisiteCheckTest {
     @Autowired CourseRepository courseRepository;
     @Autowired CoursePrerequisiteRepository coursePrerequisiteRepository;
     @Autowired StudentCourseRepository studentCourseRepository;
+    @Autowired PlannerSimulationRepository plannerSimulationRepository;
+    @Autowired PlannerTermRepository plannerTermRepository;
+    @Autowired PlannerTermVersionRepository plannerTermVersionRepository;
+    @Autowired PlannerVersionItemRepository plannerVersionItemRepository;
 
     private static final String URL = "/api/v1/planner/prerequisite-check";
 
@@ -97,6 +109,42 @@ class PrerequisiteCheckTest {
         }
         sb.append("]}");
         return sb.toString();
+    }
+
+    private String bodyWithTerm(Long plannerTermId, Long... courseIds) {
+        StringBuilder sb = new StringBuilder("{\"courseIds\":[");
+        for (int i = 0; i < courseIds.length; i++) {
+            if (i > 0) sb.append(",");
+            sb.append(courseIds[i]);
+        }
+        sb.append("],\"plannerTermId\":").append(plannerTermId).append("}");
+        return sb.toString();
+    }
+
+    private PlannerSimulation createSimulation(StudentProfile profile) {
+        return plannerSimulationRepository.save(
+                PlannerSimulation.builder().studentProfile(profile).name("내 플래너").build());
+    }
+
+    private PlannerTerm createTerm(PlannerSimulation simulation, int yearLevel, int semester) {
+        return plannerTermRepository.save(
+                PlannerTerm.builder().plannerSimulation(simulation).yearLevel(yearLevel).semester(semester).build());
+    }
+
+    private PlannerTermVersion createSelectedVersion(PlannerTerm term) {
+        return plannerTermVersionRepository.save(PlannerTermVersion.builder()
+                .plannerTerm(term).versionNo(1).name("버전1").isSelected(true).versionOrder(1).build());
+    }
+
+    private PlannerTermVersion createUnselectedVersion(PlannerTerm term) {
+        return plannerTermVersionRepository.save(PlannerTermVersion.builder()
+                .plannerTerm(term).versionNo(2).name("버전2").isSelected(false).versionOrder(2).build());
+    }
+
+    private void planCourse(PlannerTermVersion version, Course course) {
+        plannerVersionItemRepository.save(PlannerVersionItem.builder()
+                .plannerTermVersion(version).course(course).plannedDivision(null)
+                .credit(course.getCredit()).coursePositionOrder(1).build());
     }
 
     @Test
@@ -336,5 +384,154 @@ class PrerequisiteCheckTest {
                         .with(authentication(authOf(member.getId()))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("USER_003"));
+    }
+
+    // ── plannerTermId 관련 테스트 ──────────────────────────────────────────────
+
+    @Test
+    void 이전_학기_플래너_전과목은_선수과목_충족으로_간주() throws Exception {
+        // 4-1에 전과목(prereq) 플래너 추가, 4-2 후과목(course) 추가 시 → prereq는 충족
+        School school = createSchool("PC013");
+        Department dept = createDept(school, "PC013");
+        StudentProfile student = createStudent("PC013", school, dept);
+        Course course = createCourse(school, "CS301", "운영체제");
+        Course prereq = createCourse(school, "CS101", "자료구조");
+        createPrerequisite(course, prereq, PrerequisiteType.REQUIRED, null);
+
+        PlannerSimulation sim = createSimulation(student);
+        PlannerTerm term41 = createTerm(sim, 4, 1);
+        PlannerTerm term42 = createTerm(sim, 4, 2);
+        planCourse(createSelectedVersion(term41), prereq);
+
+        mockMvc.perform(post(URL)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(bodyWithTerm(term42.getId(), course.getId()))
+                        .with(authentication(authOf(student.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.results").isEmpty());
+    }
+
+    @Test
+    void 같은_학기_플래너_전과목은_선수과목_충족으로_간주_안함() throws Exception {
+        // 4-2에 전과목·후과목 모두 → 같은 학기라서 미이수로 판단
+        School school = createSchool("PC014");
+        Department dept = createDept(school, "PC014");
+        StudentProfile student = createStudent("PC014", school, dept);
+        Course course = createCourse(school, "CS301", "운영체제");
+        Course prereq = createCourse(school, "CS101", "자료구조");
+        createPrerequisite(course, prereq, PrerequisiteType.REQUIRED, null);
+
+        PlannerSimulation sim = createSimulation(student);
+        PlannerTerm term42 = createTerm(sim, 4, 2);
+        planCourse(createSelectedVersion(term42), prereq);
+
+        mockMvc.perform(post(URL)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(bodyWithTerm(term42.getId(), course.getId()))
+                        .with(authentication(authOf(student.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.results[0].missingPrerequisites[0].courseId").value(prereq.getId()));
+    }
+
+    @Test
+    void 이후_학기_플래너_전과목은_선수과목_충족으로_간주_안함() throws Exception {
+        // 4-2에 전과목, 4-1에 후과목 추가 시 → 전과목이 더 늦으므로 미이수
+        School school = createSchool("PC015");
+        Department dept = createDept(school, "PC015");
+        StudentProfile student = createStudent("PC015", school, dept);
+        Course course = createCourse(school, "CS301", "운영체제");
+        Course prereq = createCourse(school, "CS101", "자료구조");
+        createPrerequisite(course, prereq, PrerequisiteType.REQUIRED, null);
+
+        PlannerSimulation sim = createSimulation(student);
+        PlannerTerm term41 = createTerm(sim, 4, 1);
+        PlannerTerm term42 = createTerm(sim, 4, 2);
+        planCourse(createSelectedVersion(term42), prereq);
+
+        mockMvc.perform(post(URL)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(bodyWithTerm(term41.getId(), course.getId()))
+                        .with(authentication(authOf(student.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.results[0].missingPrerequisites[0].courseId").value(prereq.getId()));
+    }
+
+    @Test
+    void plannerTermId_없이_호출하면_플래너_과목_무시() throws Exception {
+        // 4-1에 전과목 플래너에 있어도 plannerTermId 없이 호출하면 성적표만 체크 → 미이수
+        School school = createSchool("PC016");
+        Department dept = createDept(school, "PC016");
+        StudentProfile student = createStudent("PC016", school, dept);
+        Course course = createCourse(school, "CS301", "운영체제");
+        Course prereq = createCourse(school, "CS101", "자료구조");
+        createPrerequisite(course, prereq, PrerequisiteType.REQUIRED, null);
+
+        PlannerSimulation sim = createSimulation(student);
+        PlannerTerm term41 = createTerm(sim, 4, 1);
+        planCourse(createSelectedVersion(term41), prereq);
+
+        mockMvc.perform(post(URL)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body(course.getId()))
+                        .with(authentication(authOf(student.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.results[0].missingPrerequisites[0].courseId").value(prereq.getId()));
+    }
+
+    @Test
+    void 타인의_plannerTermId로_호출시_403_PLAN_003() throws Exception {
+        School school = createSchool("PC017");
+        Department dept = createDept(school, "PC017");
+        StudentProfile owner = createStudent("PC017-owner", school, dept);
+        StudentProfile attacker = createStudent("PC017-attacker", school, dept);
+        Course course = createCourse(school, "CS301", "운영체제");
+
+        PlannerSimulation ownerSim = createSimulation(owner);
+        PlannerTerm ownerTerm = createTerm(ownerSim, 4, 2);
+
+        mockMvc.perform(post(URL)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(bodyWithTerm(ownerTerm.getId(), course.getId()))
+                        .with(authentication(authOf(attacker.getMember().getId()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PLAN_003"));
+    }
+
+    @Test
+    void 존재하지_않는_plannerTermId로_호출시_404_PLAN_005() throws Exception {
+        School school = createSchool("PC018");
+        Department dept = createDept(school, "PC018");
+        StudentProfile student = createStudent("PC018", school, dept);
+        Course course = createCourse(school, "CS301", "운영체제");
+
+        mockMvc.perform(post(URL)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(bodyWithTerm(999999L, course.getId()))
+                        .with(authentication(authOf(student.getMember().getId()))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PLAN_005"));
+    }
+
+    @Test
+    void 선택되지_않은_버전의_플래너_과목은_무시() throws Exception {
+        // isSelected=false 버전에만 전과목이 있으면 충족으로 간주하지 않음
+        School school = createSchool("PC019");
+        Department dept = createDept(school, "PC019");
+        StudentProfile student = createStudent("PC019", school, dept);
+        Course course = createCourse(school, "CS301", "운영체제");
+        Course prereq = createCourse(school, "CS101", "자료구조");
+        createPrerequisite(course, prereq, PrerequisiteType.REQUIRED, null);
+
+        PlannerSimulation sim = createSimulation(student);
+        PlannerTerm term41 = createTerm(sim, 4, 1);
+        PlannerTerm term42 = createTerm(sim, 4, 2);
+        planCourse(createUnselectedVersion(term41), prereq);
+
+        mockMvc.perform(post(URL)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(bodyWithTerm(term42.getId(), course.getId()))
+                        .with(authentication(authOf(student.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.results[0].missingPrerequisites[0].courseId").value(prereq.getId()));
     }
 }
