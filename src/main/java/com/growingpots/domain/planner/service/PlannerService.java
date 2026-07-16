@@ -670,6 +670,19 @@ public class PlannerService {
                 .findCourseIdsByStudentProfileAndStatusIn(
                         profile, List.of(CourseStatus.COMPLETED, CourseStatus.IN_PROGRESS)));
 
+        // plannerTermId가 제공된 경우: 해당 학기보다 이전 학기의 플래너 과목도 이수 예정으로 간주
+        if (request.plannerTermId() != null) {
+            PlannerTerm targetTerm = plannerTermRepository.findWithOwnerById(request.plannerTermId())
+                    .orElseThrow(() -> new BaseException(ErrorCode.PLANNER_TERM_NOT_FOUND));
+            if (!targetTerm.getPlannerSimulation().getStudentProfile().getId().equals(profile.getId())) {
+                throw new BaseException(ErrorCode.PLANNER_ACCESS_DENIED);
+            }
+            List<Long> plannedCourseIds = plannerVersionItemRepository.findCourseIdsInEarlierTerms(
+                    targetTerm.getPlannerSimulation(),
+                    targetTerm.getYearLevel() * 10 + semesterOrder(targetTerm.getSemester()));
+            takenCourseIds.addAll(plannedCourseIds);
+        }
+
         // 미이수 선수과목만 필터링 후 과목별 그룹핑
         Map<Long, List<CoursePrerequisite>> missingByCourseId = bestByPair.values().stream()
                 .filter(cp -> !takenCourseIds.contains(cp.getRequiredCourse().getId()))
