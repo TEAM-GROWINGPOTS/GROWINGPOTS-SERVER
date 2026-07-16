@@ -4,6 +4,7 @@ import com.growingpots.domain.transcript.entity.StudentCourse;
 import com.growingpots.domain.transcript.entity.enums.CourseStatus;
 import com.growingpots.domain.transcript.entity.enums.RecordSource;
 import com.growingpots.domain.transcript.entity.enums.Semester;
+import com.growingpots.domain.transcript.repository.CertResultRepository;
 import com.growingpots.domain.transcript.repository.GraduationAnalysisSummaryRepository;
 import com.growingpots.domain.transcript.repository.StudentCourseRepository;
 import com.growingpots.domain.university.entity.Course;
@@ -61,11 +62,13 @@ public class StudentProfileService {
     private final CourseRepository courseRepository;
     private final DivisionRepository divisionRepository;
     private final GraduationAnalysisSummaryRepository graduationAnalysisSummaryRepository;
+    private final CertResultRepository certResultRepository;
 
-    // 기본정보입력 화면의 "다음"은 이 메서드를 호출한다. 온보딩 완료 = PDF 분석까지 끝난 시점(#221)이라,
-    // PDF를 아직 안 올린 상태(GraduationAnalysisSummary 없음)에서 유저가 검수 화면에서 뒤로 가서
-    // 기본정보를 다시 제출하면(학교/학과를 잘못 골랐다거나) 새 값으로 덮어쓴다 - 이 시점엔 StudentCourse가
-    // 아예 없어서 학과가 바뀌어도 붕 뜨는 이수 데이터가 없다. PDF를 이미 분석한 뒤에는 기존처럼 막는다.
+    // 기본정보입력 화면의 "다음"은 이 메서드를 호출한다. 온보딩 완료 = 분석확인 화면에서 "확인"까지
+    // 누른 시점이라, 그 전까지는(onboardingConfirmedAt 없음) 유저가 검수/분석확인 화면에서 뒤로 가서
+    // 기본정보를 다시 제출하면(학교/학과를 잘못 골랐다거나) 새 값으로 덮어쓴다. 이미 PDF 분석이 끝나
+    // 있었다면 그 분석 데이터는 이제 새 학과/학교 기준과 어긋날 수 있어 함께 지운다(재분석 유도).
+    // 확인까지 끝난 뒤에는 기존처럼 막는다.
     @Transactional
     public StudentProfileCreateResponse create(Long memberId, StudentProfileCreateRequest request) {
         Member member = memberRepository.findById(memberId)
@@ -115,20 +118,23 @@ public class StudentProfileService {
 
     private StudentProfileCreateResponse updateOnboardingInfo(
             StudentProfile profile, School school, Department department, int admissionYear) {
-        if (graduationAnalysisSummaryRepository.existsByStudentMajor_StudentProfile(profile)) {
+        if (profile.getOnboardingConfirmedAt() != null) {
             throw new BaseException(ErrorCode.STUDENT_PROFILE_ALREADY_EXISTS);
         }
 
-        profile.updateOnboardingInfo(school, department, admissionYear);
-
-        // create()가 항상 MAIN StudentMajor를 하나만 만들고, PDF 분석 전(=여기 온 시점)엔 복수전공이
-        // 추가될 일이 없으므로 정확히 하나가 있어야 한다 - 없으면 데이터 정합성이 깨진 상태라 500으로
-        // 처리하되, 원인 파악이 쉽도록 전용 에러코드를 쓴다(코드리뷰 반영, 범용 CMN_001 대신).
-        StudentMajor mainMajor = studentMajorRepository.findWithDepartmentByStudentProfile(profile).stream()
+        // create()가 항상 MAIN StudentMajor를 하나만 만들고, 여기서 지우는 건 복수전공(DOUBLE)뿐이라
+        // 정확히 하나가 있어야 한다 - 없으면 데이터 정합성이 깨진 상태라 500으로 처리하되, 원인 파악이
+        // 쉽도록 전용 에러코드를 쓴다(코드리뷰 반영, 범용 CMN_001 대신).
+        List<StudentMajor> existingMajors = studentMajorRepository.findWithDepartmentByStudentProfile(profile);
+        StudentMajor mainMajor = existingMajors.stream()
                 .filter(sm -> sm.getMajorType() == MajorType.MAIN)
                 .findFirst()
                 .orElseThrow(() -> new BaseException(ErrorCode.MAIN_MAJOR_NOT_FOUND,
                         "studentProfileId=" + profile.getId()));
+
+        clearAnalyzedPdfData(profile, existingMajors);
+
+        profile.updateOnboardingInfo(school, department, admissionYear);
         mainMajor.updateDepartment(department);
 
         return StudentProfileCreateResponse.builder()
@@ -138,6 +144,24 @@ public class StudentProfileService {
                         .departmentName(department.getName())
                         .build())
                 .build();
+    }
+
+    // 확인 전(#264) 기본정보 재제출을 허용하면서, 이미 PDF 분석이 끝나 있었을 경우(분석 전이면 전부
+    // no-op) 새 학교/학과 기준과 어긋날 수 있는 기존 분석 데이터를 지운다 - 이후 PDF를 다시 올려야
+    // 재분석된다. TranscriptPersister.persist()와 동일하게, cert_result/graduation_analysis_summary가
+    // student_major를 참조하므로 복수전공(StudentMajor) 삭제보다 먼저 지운다.
+    private void clearAnalyzedPdfData(StudentProfile profile, List<StudentMajor> existingMajors) {
+        certResultRepository.deleteByStudentProfileAndSource(profile, RecordSource.PDF);
+        graduationAnalysisSummaryRepository.deleteByStudentMajorIn(existingMajors);
+
+        List<StudentMajor> doubleMajors = existingMajors.stream()
+                .filter(sm -> sm.getMajorType() != MajorType.MAIN)
+                .toList();
+        if (!doubleMajors.isEmpty()) {
+            studentMajorRepository.deleteAll(doubleMajors);
+        }
+
+        studentCourseRepository.deleteByStudentProfileAndSource(profile, RecordSource.PDF);
     }
 
     // 분석확인 화면의 "확인" 버튼이 호출한다. 이 시점부터 onboardingCompleted가 true가 된다.

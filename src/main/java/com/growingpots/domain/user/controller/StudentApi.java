@@ -26,9 +26,11 @@ public @interface StudentApi {
     @Operation(
             summary = "학생 프로필 생성/수정",
             description = "학교, 학과, 입학연도를 기반으로 학생 프로필을 생성합니다. 이미 생성된 프로필이 있어도 "
-                    + "아직 PDF를 분석한 적이 없으면(온보딩 완료 전) 그 값으로 덮어씁니다 - 기본정보입력 화면에서 "
-                    + "뒤로 갔다가 다시 제출하는 경우를 지원하기 위함입니다(#221). PDF를 이미 한 번이라도 "
-                    + "분석했으면(온보딩 완료) 409로 막습니다."
+                    + "분석확인 화면에서 아직 \"확인\"을 누르지 않았으면(온보딩 완료 전) 그 값으로 덮어씁니다 - "
+                    + "기본정보입력/분석확인 화면에서 뒤로 갔다가 다시 제출하는 경우를 지원하기 위함입니다. "
+                    + "이때 이미 PDF 분석이 끝나 있었다면(GraduationAnalysisSummary 등) 새 학과/학교 기준과 "
+                    + "어긋날 수 있어 그 분석 데이터를 전부 지웁니다 - PDF를 다시 올려야 재분석됩니다. "
+                    + "\"확인\"까지 눌렀으면(온보딩 완료) 409로 막습니다."
     )
     @ApiResponses({
             @ApiResponse(
@@ -85,8 +87,8 @@ public @interface StudentApi {
             ),
             @ApiResponse(
                     responseCode = "409",
-                    description = "이미 온보딩 완료된 사용자(PDF 분석까지 끝난 상태) - PDF 분석 전이면 이 응답 "
-                            + "대신 201로 프로필이 갱신됨",
+                    description = "이미 온보딩 완료된 사용자(분석확인 화면에서 확인까지 누른 상태) - 확인 전이면 "
+                            + "이 응답 대신 201로 프로필이 갱신됨",
                     content = @Content(
                             mediaType = "application/json",
                             examples = @ExampleObject(value = """
