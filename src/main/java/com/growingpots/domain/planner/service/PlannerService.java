@@ -679,8 +679,7 @@ public class PlannerService {
             }
             List<Long> plannedCourseIds = plannerVersionItemRepository.findCourseIdsInEarlierTerms(
                     targetTerm.getPlannerSimulation(),
-                    targetTerm.getYearLevel(),
-                    targetTerm.getSemester());
+                    targetTerm.getYearLevel() * 10 + semesterOrder(targetTerm.getSemester()));
             takenCourseIds.addAll(plannedCourseIds);
         }
 
