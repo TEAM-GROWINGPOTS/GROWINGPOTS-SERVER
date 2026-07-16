@@ -77,27 +77,18 @@ public class PlannerService {
     }
 
     // 플래너에 담긴 과목 중 이미 COMPLETED·IN_PROGRESS인 과목 ID 집합(재수강 대상).
-    // buildPlannedTerms의 computeRetakeDisplay와 동일한 기준이며, completedTerms 집계에도
-    // 필요해 별도 메서드로 분리한다.
+    // isSelected=true인 버전의 과목만 대상으로 재수강 여부를 판정한다.
+    // 버전이 바뀌면 findSelectedByStudentProfile 결과가 달라지므로 버전 전환이 즉시 반영된다.
     private Set<Long> computePlannedRetakeCourseIds(StudentProfile profile) {
-        PlannerSimulation simulation = plannerSimulationRepository.findByStudentProfile(profile).orElse(null);
-        if (simulation == null) return Set.of();
-
-        List<PlannerTerm> terms = plannerTermRepository.findByPlannerSimulation(simulation);
-        if (terms.isEmpty()) return Set.of();
-
-        List<PlannerTermVersion> versions = plannerTermVersionRepository.findByPlannerTermIn(terms);
-        if (versions.isEmpty()) return Set.of();
-
-        List<PlannerVersionItem> items = plannerVersionItemRepository
-                .findWithDetailsByPlannerTermVersionIn(versions);
-        if (items.isEmpty()) return Set.of();
+        List<PlannerVersionItem> selectedItems =
+                plannerVersionItemRepository.findSelectedByStudentProfile(profile);
+        if (selectedItems.isEmpty()) return Set.of();
 
         Set<Long> completedOrInProgress = new HashSet<>(
                 studentCourseRepository.findCourseIdsByStudentProfileAndStatusIn(
                         profile, List.of(CourseStatus.COMPLETED, CourseStatus.IN_PROGRESS)));
 
-        return items.stream()
+        return selectedItems.stream()
                 .map(i -> i.getCourse().getId())
                 .filter(completedOrInProgress::contains)
                 .collect(Collectors.toSet());
@@ -139,7 +130,9 @@ public class PlannerService {
 
     // 플래너 항목별 재수강 표시 유형 계산.
     // COMPLETED·IN_PROGRESS 과목이 플래너에 담겨 있으면 재수강이고,
-    // 동일 과목의 인스턴스 중 max(yearLevel, semester) 학기만 BADGE, 나머지는 DIMMED.
+    // isSelected=true 버전 중 가장 늦은 학기의 항목만 BADGE, 나머지는 DIMMED.
+    // latestTerm 기준을 선택된 버전으로 한정하지 않으면, 버전을 전환해 비선택 상태가 된
+    // 항목이 latestTerm 판정에 영향을 미쳐 선택된 항목이 잘못 DIMMED될 수 있다.
     private Map<Long, RetakeDisplay> computeRetakeDisplay(
             StudentProfile profile,
             List<PlannerTerm> terms,
@@ -173,20 +166,26 @@ public class PlannerService {
 
         Map<Long, RetakeDisplay> result = new HashMap<>();
         for (List<PlannerVersionItem> courseItems : retakeItemsByCourseId.values()) {
-            PlannerTerm latestTerm = courseItems.stream()
+            // BADGE 기준이 되는 latestTerm: isSelected=true 버전에 속한 항목만으로 결정한다.
+            // 비선택 버전 항목까지 포함하면, 버전 전환 후 비선택 상태가 된 늦은 학기 항목이
+            // latestTerm을 선점해 선택된 항목이 잘못 DIMMED된다.
+            PlannerTerm latestSelectedTerm = courseItems.stream()
+                    .filter(i -> i.getPlannerTermVersion().isSelected())
                     .map(i -> termByVersionId.get(i.getPlannerTermVersion().getId()))
                     .filter(Objects::nonNull)
                     .max(Comparator.comparingInt(PlannerTerm::getYearLevel)
                                    .thenComparingInt(t -> semesterOrder(t.getSemester())))
                     .orElse(null);
-            if (latestTerm == null) continue;
 
             for (PlannerVersionItem item : courseItems) {
                 PlannerTerm term = termByVersionId.get(item.getPlannerTermVersion().getId());
                 if (term == null) continue;
-                boolean isLatest = term.getYearLevel() == latestTerm.getYearLevel()
-                                && term.getSemester() == latestTerm.getSemester();
-                result.put(item.getId(), isLatest ? RetakeDisplay.BADGE : RetakeDisplay.DIMMED);
+                // BADGE: isSelected=true이면서 latestSelectedTerm과 동일한 학기
+                boolean isBadge = latestSelectedTerm != null
+                        && item.getPlannerTermVersion().isSelected()
+                        && term.getYearLevel() == latestSelectedTerm.getYearLevel()
+                        && term.getSemester() == latestSelectedTerm.getSemester();
+                result.put(item.getId(), isBadge ? RetakeDisplay.BADGE : RetakeDisplay.DIMMED);
             }
         }
         return result;
