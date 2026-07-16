@@ -122,12 +122,16 @@ public class CourseService {
         // 즉 이 과목이 "타전공 인정 대상"으로 조회된 경우에만, 과목 자체의 기본 이수구분보다 인정받은
         // 이수구분(학과마다 다를 수 있음)을 우선해서 보여준다. CROSS_MAJOR 없이 검색하면 이 분기는 타지 않는다.
         Division recognizedDivision = recognizedDivisionByCourseId.get(course.getId());
+        DivisionCategory displayedCategory;
         String defaultDivisionName;
         if (recognizedDivision != null) {
-            defaultDivisionName = recognizedDivision.getCategory().getDisplayName();
+            displayedCategory = recognizedDivision.getCategory();
+            defaultDivisionName = displayedCategory.getDisplayName();
         } else if (course.getDefaultDivision() != null) {
-            defaultDivisionName = course.getDefaultDivision().getCategory().getDisplayName();
+            displayedCategory = course.getDefaultDivision().getCategory();
+            defaultDivisionName = displayedCategory.getDisplayName();
         } else {
+            displayedCategory = null;
             defaultDivisionName = null;
         }
 
@@ -145,6 +149,19 @@ public class CourseService {
                 .isSw(course.isSw())
                 .alreadyCompleted(completedCourseIds.contains(course.getId()))
                 .inPlanner(plannerCourseIds.contains(course.getId()))
+                .area(extractAreaInfo(course, displayedCategory))
+                .build();
+    }
+
+    // "이수구분별 과목 조회"(GraduationService.extractAreaInfo), 플래너 응답(PlannerService)과 동일 규칙:
+    // 화면에 표시 중인 이수구분이 배분이수교과이고 Course에 영역이 매칭돼 있을 때만 채운다.
+    private CourseSearchResponse.AreaInfo extractAreaInfo(Course course, DivisionCategory displayedCategory) {
+        if (displayedCategory != DivisionCategory.DISTRIBUTED_GE || course.getGeArea() == null) {
+            return null;
+        }
+        return CourseSearchResponse.AreaInfo.builder()
+                .code(course.getGeArea().getCode())
+                .name(course.getGeArea().getName())
                 .build();
     }
 }
