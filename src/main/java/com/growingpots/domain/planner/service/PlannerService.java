@@ -23,6 +23,8 @@ import com.growingpots.domain.university.entity.Course;
 import com.growingpots.domain.university.entity.CoursePrerequisite;
 import com.growingpots.domain.university.entity.CrossMajorRecognizedCourse;
 import com.growingpots.domain.university.entity.Division;
+import com.growingpots.domain.university.entity.GeArea;
+import com.growingpots.domain.university.entity.enums.DivisionCategory;
 import com.growingpots.domain.university.repository.CoursePrerequisiteRepository;
 import com.growingpots.domain.university.repository.CourseRepository;
 import com.growingpots.domain.university.repository.CrossMajorRecognizedCourseRepository;
@@ -251,6 +253,21 @@ public class PlannerService {
                 .coursePositionOrder(item.getCoursePositionOrder())
                 .isEnglish(course.isEnglish())
                 .isSw(course.isSw())
+                .area(extractAreaInfo(course, division))
+                .build();
+    }
+
+    // "이수구분별 과목 조회"(GraduationService.extractAreaInfo)와 동일 규칙: 배분이수교과 과목이고
+    // Course 매칭 및 영역 정보가 있을 때만 채운다(#256).
+    private PlannerResponse.AreaInfo extractAreaInfo(Course course, Division division) {
+        if (division == null || division.getCategory() != DivisionCategory.DISTRIBUTED_GE
+                || course == null || course.getGeArea() == null) {
+            return null;
+        }
+        GeArea geArea = course.getGeArea();
+        return PlannerResponse.AreaInfo.builder()
+                .code(geArea.getCode())
+                .name(geArea.getName())
                 .build();
     }
 
@@ -349,6 +366,7 @@ public class PlannerService {
                 .credit(studentCourse.getCredit())
                 .isEnglish(course != null && course.isEnglish())
                 .isSw(course != null && course.isSw())
+                .area(extractAreaInfo(course, division))
                 .build();
     }
 

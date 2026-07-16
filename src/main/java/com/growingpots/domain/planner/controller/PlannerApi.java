@@ -41,6 +41,8 @@ public @interface PlannerApi {
                     - courses[].studentCourseId: 이수 기록 PK.
                     - courses[].divisionCategory / divisionName: 이수구분 코드·표시명. 항상 존재.
                     - courses[].isEnglish / isSw: 영어강의·SW인증강의 여부. course 매칭 안 된 과목은 false.
+                    - courses[].area: 배분이수 영역 정보(과목카드 영역 칩용). divisionCategory가 DISTRIBUTED_GE이고
+                      Course 매칭 및 영역 정보가 있을 때만 채워짐, 그 외 null.
 
                     **completedTerms 구성 방식**
                     STUDENT_COURSE를 (수강년도, 수강학기)로 그룹핑한다.
@@ -58,6 +60,8 @@ public @interface PlannerApi {
                     - versions[].courses[].divisionCategory / divisionName: 기본 이수구분이 없는 과목은 null.
                     - versions[].courses[].courseId: 직접추가를 지원하지 않아 항상 존재.
                     - versions[].courses[].isEnglish / isSw: 영어강의·SW인증강의 여부.
+                    - versions[].courses[].area: 배분이수 영역 정보(과목카드 영역 칩용). divisionCategory가
+                      DISTRIBUTED_GE이고 Course 매칭 및 영역 정보가 있을 때만 채워짐, 그 외 null.
                     - versions[].totalCredit: 재수강 과목이 여러 학기에 걸쳐 담긴 경우, 가장 최신 학기가 아닌
                       항목의 학점은 제외하고 합산한다(중복 학점 방지). 다만 이 판정 결과 자체는 응답에
                       노출하지 않는다(#238).
@@ -105,7 +109,8 @@ public @interface PlannerApi {
                                                 "openedSemester": "FIRST",
                                                 "credit": 3,
                                                 "isEnglish": false,
-                                                "isSw": false
+                                                "isSw": false,
+                                                "area": null
                                               }
                                             ]
                                           }
@@ -137,22 +142,27 @@ public @interface PlannerApi {
                                                     "credit": 3,
                                                     "coursePositionOrder": 0,
                                                     "isEnglish": false,
-                                                    "isSw": false
+                                                    "isSw": false,
+                                                    "area": null
                                                   },
                                                   {
                                                     "plannerVersionItemId": 5003,
-                                                    "courseId": 78,
-                                                    "name": "경영정보시스템",
-                                                    "departmentName": "산업경영공학과",
-                                                    "divisionCategory": "MAJOR_REQUIRED",
-                                                    "divisionName": "전공필수",
-                                                    "recommendedYearLow": 2,
-                                                    "recommendedYearHigh": 2,
-                                                    "openedSemester": "FIRST",
+                                                    "courseId": 419,
+                                                    "name": "미디어아트와문화",
+                                                    "departmentName": null,
+                                                    "divisionCategory": "DISTRIBUTED_GE",
+                                                    "divisionName": "배분이수교과",
+                                                    "recommendedYearLow": 1,
+                                                    "recommendedYearHigh": 4,
+                                                    "openedSemester": "BOTH",
                                                     "credit": 3,
                                                     "coursePositionOrder": 1,
                                                     "isEnglish": false,
-                                                    "isSw": false
+                                                    "isSw": false,
+                                                    "area": {
+                                                      "code": "AREA_3",
+                                                      "name": "상징, 문화, 소통"
+                                                    }
                                                   }
                                                 ]
                                               }
@@ -184,7 +194,8 @@ public @interface PlannerApi {
                                                     "credit": 3,
                                                     "coursePositionOrder": 0,
                                                     "isEnglish": false,
-                                                    "isSw": false
+                                                    "isSw": false,
+                                                    "area": null
                                                   }
                                                 ]
                                               }
