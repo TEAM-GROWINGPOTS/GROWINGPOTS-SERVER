@@ -23,12 +23,17 @@ public interface PlannerVersionItemRepository extends JpaRepository<PlannerVersi
 
     // 학생의 플래너에서 현재 선택된 버전의 계획 과목 전체 조회 (source=PLANNED 졸업현황 계산용)
     // geArea까지 JOIN FETCH: DISTRIBUTED_GE 영역 판정 시 N+1 방지
+    // ORDER BY 최신 학기 우선: 졸업현황에서 동일 과목 중복 시 최신 학기 인스턴스를 유지하기 위함
     @Query("SELECT pvi FROM PlannerVersionItem pvi "
             + "JOIN FETCH pvi.course c LEFT JOIN FETCH c.offeringDepartment "
             + "LEFT JOIN FETCH c.geArea "
             + "LEFT JOIN FETCH pvi.plannedDivision "
             + "WHERE pvi.plannerTermVersion.isSelected = true "
-            + "AND pvi.plannerTermVersion.plannerTerm.plannerSimulation.studentProfile = :profile")
+            + "AND pvi.plannerTermVersion.plannerTerm.plannerSimulation.studentProfile = :profile "
+            + "ORDER BY pvi.plannerTermVersion.plannerTerm.yearLevel DESC, "
+            + "CASE pvi.plannerTermVersion.plannerTerm.semester "
+            + "WHEN 1 THEN 0 WHEN 3 THEN 1 WHEN 2 THEN 2 WHEN 4 THEN 3 "
+            + "ELSE pvi.plannerTermVersion.plannerTerm.semester END DESC")
     List<PlannerVersionItem> findSelectedByStudentProfile(@Param("profile") StudentProfile profile);
 
     @Query("SELECT DISTINCT pvi.course.id FROM PlannerVersionItem pvi "
