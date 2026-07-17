@@ -113,9 +113,16 @@ public class GraduationService {
             Set<Long> alreadyCounted = new HashSet<>(
                     studentCourseRepository.findCourseIdsByStudentProfileAndStatusIn(
                             profile, List.of(CourseStatus.COMPLETED, CourseStatus.IN_PROGRESS)));
-            allPlannedItems = raw.stream()
+            // 이수완료/이수중 과목 제외 + 동일 과목이 여러 이수예정 학기에 있으면 과목당 하나만 반영
+            // (미이수 과목을 두 학기에 담은 경우 delta 중복 합산 방지)
+            allPlannedItems = new ArrayList<>(raw.stream()
                     .filter(i -> !alreadyCounted.contains(i.getCourse().getId()))
-                    .toList();
+                    .collect(Collectors.toMap(
+                            i -> i.getCourse().getId(),
+                            i -> i,
+                            (a, b) -> a
+                    ))
+                    .values());
         }
 
         // 전공별(본전공 + 복수전공 몇 개든 전부) 스냅샷/졸업필수 판정/PLANNED 반영을 한 번씩만 계산해
