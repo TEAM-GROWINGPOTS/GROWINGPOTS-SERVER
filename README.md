@@ -1,18 +1,19 @@
 # 🥔 GROWINGPOTS
 
-**학점과 이수 요건에 치이는 대학생을 위한 비주얼 학사 플래너**
+<div align="center">
 
-복잡한 학점 계산은 이제 그만!  
-졸업까지 남은 이수 영역과 학점을 한 화면에서 확인하고,  
-앞으로의 수강 계획까지 미리 시뮬레이션해볼 수 있어요.
 
-### 🥔 무엇을 할 수 있나요?
+**대학 졸업까지의 모든 가능성을 한눈에, Growing Pots.**
+<br/>
+**복잡한 계산은 그로잉팟에게 맡기고, 확실한 졸업을 위한 선택에만 집중하세요!**
+</div>
 
-| 기능                    | 설명                                                     |
-| ----------------------- | -------------------------------------------------------- |
-| 🎯 이수 현황 대시보드   | 졸업까지 남은 이수 영역·학점 현황을 한 화면에서 확인해요 |
-| 🔮 수강 계획 시뮬레이션 | 앞으로 들을 과목을 미리 넣어보며 예상 학점을 계산해요    |
-| 📄 PDF 온보딩           | 성적표(PDF) 업로드만으로 이수 현황을 빠르게 불러와요     |
+<img width="100%"  alt="BG3" src="https://github.com/user-attachments/assets/3fdef681-2683-428d-af70-0b4aa5b5ee3c" />
+
+
+
+
+
 
 ---
 
@@ -21,11 +22,13 @@
 <table width="100%">
   <tr>
     <td align="center" width="50%" style="padding:10px">
-      <img src="https://github.com/5eoyng.png" width="180"/><br/>
+      <img width="1950" height="1080" alt="Frame 2087332502" src="https://github.com/user-attachments/assets/1d78e053-b7d9-4cd0-868b-d22b5b936ead" />
+<br/>
       <a href="https://github.com/5eoyng" target="_blank" rel="noopener noreferrer"><strong>김서영</strong></a>
     </td>
     <td align="center" width="50%" style="padding:10px">
-      <img src="https://github.com/turegold.png" width="180"/><br/>
+      <img width="1950" height="1080" alt="Frame 2087332502-1" src="https://github.com/user-attachments/assets/dbbe579f-3777-4727-b77e-222b11ce5ea0" />
+<br/>
       <a href="https://github.com/turegold" target="_blank" rel="noopener noreferrer"><strong>이용민</strong></a>
     </td>
   </tr>
