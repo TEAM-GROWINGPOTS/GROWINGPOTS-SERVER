@@ -45,6 +45,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -427,8 +428,15 @@ public class PlannerService {
         };
     }
 
-    @Transactional
+    // 락 순서: StudentProfile → (이후 자식 테이블). 이 순서를 역전하는 다른 write 경로가 없어야 데드락이 없다.
+    // 현재 write 경로 전수 확인 완료 — PlannerSimulation/Term 계열에 독립적인 FOR UPDATE를 거는 코드 없음.
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public boolean savePlanner(Long memberId, PlannerSaveRequest request) {
+        // 같은 학생의 동시 저장을 직렬화한다. StudentProfile은 항상 존재하므로 첫 저장/재저장 모두 동일하게 처리된다.
+        // findWithDetailsByMemberId는 컬렉션 JOIN FETCH 포함이라 FOR UPDATE를 붙이면 조인 행까지 잠기므로
+        // 락 전용 경량 쿼리(lockByMemberId)를 먼저 호출한다.
+        studentProfileRepository.lockByMemberId(memberId)
+                .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
         StudentProfile profile = studentProfileRepository.findWithDetailsByMemberId(memberId)
                 .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
 
@@ -484,6 +492,7 @@ public class PlannerService {
 
     // 학생당 시뮬레이션은 1개뿐이라, id 없이 저장 요청이 오면 새로 만들기 전에 기존 걸 먼저 찾는다
     // (안 그러면 두 번째 저장부터 studentProfile 유니크 제약에 걸린다).
+    // 호출 전에 StudentProfile FOR UPDATE 락이 잡혀 있어 동시 진입이 직렬화되므로 FOR UPDATE 없이 안전하다.
     private PlannerSimulation resolveSimulation(Long simulationId, StudentProfile profile) {
         if (simulationId == null) {
             return plannerSimulationRepository.findByStudentProfile(profile)
@@ -580,7 +589,7 @@ public class PlannerService {
             plannerVersionItemRepository.deleteAllByPlannerTermVersionIdIn(versionIds);
         }
         plannerTermVersionRepository.deleteAllByPlannerTermIdIn(termIds);
-        plannerTermRepository.deleteAllByPlannerSimulationId(simulationId);
+        plannerTermRepository.deleteAllByIdIn(termIds);
     }
 
     private void buildAndSave(

@@ -27,7 +27,14 @@ import com.growingpots.domain.user.entity.StudentProfile;
 import com.growingpots.domain.user.entity.enums.OauthProvider;
 import com.growingpots.domain.user.repository.MemberRepository;
 import com.growingpots.domain.user.repository.StudentProfileRepository;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -89,6 +96,31 @@ class PlannerSaveTest {
 
     private Authentication authenticationOf(Long memberId) {
         return new UsernamePasswordAuthenticationToken(memberId.toString(), null, Collections.emptyList());
+    }
+
+    private String singleCoursePlannerBody(Long simulationId, Long courseId) {
+        return """
+                {
+                  "plannerSimulationId": %s,
+                  "terms": [
+                    {
+                      "yearLevel": 2,
+                      "semester": 1,
+                      "versions": [
+                        {
+                          "versionNo": 1,
+                          "name": "폴더 1",
+                          "isSelected": true,
+                          "versionOrder": 0,
+                          "items": [
+                            { "courseId": %d, "coursePositionOrder": 0 }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+                """.formatted(simulationId == null ? "null" : simulationId, courseId);
     }
 
     @Test
@@ -312,6 +344,205 @@ class PlannerSaveTest {
                         .with(authentication(auth)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.plannedTerms.length()").value(0));
+    }
+
+    // 자동저장은 변경이 생길 때마다 전체 PUT을 보낸다. 연속 저장 시 이전 데이터가 완전히 삭제되고
+    // 마지막 저장 내용만 남아야 한다. 이전에는 deleteAllByPlannerSimulationId가 다른 트랜잭션이
+    // 커밋한 새 PlannerTerm까지 건드려 FK 위반(DataIntegrityViolationException)이 발생했다(#콘커런시픽스).
+    @Test
+    void 연속_저장_시_이전_데이터가_남지_않고_마지막_저장만_반영된다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-6610").build());
+        Department cs = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과").build());
+        Course courseA = courseRepository.save(Course.builder()
+                .school(school).courseCode("CS301").name("컴파일러").credit(3)
+                .offeringDepartment(cs).openedSemester(OpenedSemester.BOTH)
+                .isEnglish(false).isSw(false).build());
+        Course courseB = courseRepository.save(Course.builder()
+                .school(school).courseCode("CS302").name("컴퓨터네트워크").credit(3)
+                .offeringDepartment(cs).openedSemester(OpenedSemester.BOTH)
+                .isEnglish(false).isSw(false).build());
+        StudentProfile student = onboardedStudent("6610", cs);
+        Authentication auth = authenticationOf(student.getMember().getId());
+
+        // 1차 저장: courseA
+        mockMvc.perform(put("/api/v1/planner")
+                        .with(authentication(auth))
+                        .contentType("application/json")
+                        .content(singleCoursePlannerBody(null, courseA.getId())))
+                .andExpect(status().isOk());
+
+        Long simulationId = plannerSimulationRepository.findByStudentProfile(student)
+                .orElseThrow().getId();
+
+        // 2차 저장: courseB로 교체
+        mockMvc.perform(put("/api/v1/planner")
+                        .with(authentication(auth))
+                        .contentType("application/json")
+                        .content(singleCoursePlannerBody(simulationId, courseB.getId())))
+                .andExpect(status().isOk());
+
+        // courseB만 남아야 하고, courseA의 term/version/item이 잔존하면 안 됨
+        mockMvc.perform(get("/api/v1/planner").with(authentication(auth)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.plannedTerms.length()").value(1))
+                .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].courses.length()").value(1))
+                .andExpect(jsonPath("$.data.plannedTerms[0].versions[0].courses[0].courseId")
+                        .value(courseB.getId()));
+    }
+
+    // 자동저장 race condition: 사용자가 빠르게 변경을 연속으로 하면 두 PUT이 겹쳐 들어온다.
+    // 비관적 락 + READ_COMMITTED 로 직렬화해서 둘 다 200이고, 한 쪽의 상태만 최종 반영되어야 한다.
+    // 두 요청 데이터가 동시에 DB에 남으면(term이 2개) plannedTerms.length = 2 → 회귀 탐지.
+    @Test
+    void 동시_PUT_요청이_겹쳐도_FK_위반없이_하나의_최종_상태만_남는다() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-6611").build());
+        Department cs = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과").build());
+        Course courseA = courseRepository.save(Course.builder()
+                .school(school).courseCode("CS303").name("소프트웨어공학").credit(3)
+                .offeringDepartment(cs).openedSemester(OpenedSemester.BOTH)
+                .isEnglish(false).isSw(false).build());
+        Course courseB = courseRepository.save(Course.builder()
+                .school(school).courseCode("CS304").name("데이터베이스").credit(3)
+                .offeringDepartment(cs).openedSemester(OpenedSemester.BOTH)
+                .isEnglish(false).isSw(false).build());
+        StudentProfile student = onboardedStudent("6611", cs);
+        Authentication auth = authenticationOf(student.getMember().getId());
+
+        // 초기 저장: 동시 요청이 "삭제 후 재삽입"할 대상 데이터 생성
+        mockMvc.perform(put("/api/v1/planner")
+                        .with(authentication(auth))
+                        .contentType("application/json")
+                        .content(singleCoursePlannerBody(null, courseA.getId())))
+                .andExpect(status().isOk());
+
+        Long simulationId = plannerSimulationRepository.findByStudentProfile(student)
+                .orElseThrow().getId();
+
+        // 두 PUT을 동시에 발사 — startLatch로 두 스레드가 최대한 같은 시점에 요청을 보내도록 함
+        List<Integer> statuses = Collections.synchronizedList(new ArrayList<>());
+        CountDownLatch startLatch = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        Future<?> f1 = executor.submit(() -> {
+            try {
+                startLatch.await();
+                int status = mockMvc.perform(put("/api/v1/planner")
+                                .with(authentication(auth))
+                                .contentType("application/json")
+                                .content(singleCoursePlannerBody(simulationId, courseA.getId())))
+                        .andReturn().getResponse().getStatus();
+                statuses.add(status);
+            } catch (Exception e) {
+                statuses.add(500);
+            }
+        });
+
+        Future<?> f2 = executor.submit(() -> {
+            try {
+                startLatch.await();
+                int status = mockMvc.perform(put("/api/v1/planner")
+                                .with(authentication(auth))
+                                .contentType("application/json")
+                                .content(singleCoursePlannerBody(simulationId, courseB.getId())))
+                        .andReturn().getResponse().getStatus();
+                statuses.add(status);
+            } catch (Exception e) {
+                statuses.add(500);
+            }
+        });
+
+        startLatch.countDown();
+        f1.get(10, TimeUnit.SECONDS);
+        f2.get(10, TimeUnit.SECONDS);
+        executor.shutdown();
+
+        // 두 요청 모두 200 — FK 위반(500)이 없어야 함
+        assertThat(statuses).containsOnly(200);
+
+        // 한 학생에 시뮬레이션 1개
+        long simCount = plannerSimulationRepository.findAll().stream()
+                .filter(s -> s.getStudentProfile().getId().equals(student.getId()))
+                .count();
+        assertThat(simCount).isEqualTo(1);
+
+        // plannedTerms가 정확히 1개 — 두 요청 데이터가 중복으로 남지 않아야 함
+        mockMvc.perform(get("/api/v1/planner").with(authentication(auth)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.plannedTerms.length()").value(1));
+    }
+
+    // 자동저장 첫 번째 요청 race condition: plannerSimulationId=null인 "최초 저장" 두 건이 동시에 들어오면
+    // 한 쪽이 INSERT 후 unique 위반으로 500을 내뱉던 버그(#217 레이스).
+    // StudentProfile FOR UPDATE로 직렬화하면 둘 다 200이고 시뮬레이션은 1개만 남아야 한다.
+    @Test
+    void 첫_저장_동시_2건_중_시뮬레이션은_1개만_생성되고_500_없음() throws Exception {
+        School school = schoolRepository.save(School.builder().name("경희대학교-6612").build());
+        Department cs = departmentRepository.save(Department.builder()
+                .school(school).college("공과대학").name("컴퓨터공학과").build());
+        Course courseA = courseRepository.save(Course.builder()
+                .school(school).courseCode("CS401").name("인공지능").credit(3)
+                .offeringDepartment(cs).openedSemester(OpenedSemester.BOTH)
+                .isEnglish(false).isSw(false).build());
+        Course courseB = courseRepository.save(Course.builder()
+                .school(school).courseCode("CS402").name("딥러닝").credit(3)
+                .offeringDepartment(cs).openedSemester(OpenedSemester.BOTH)
+                .isEnglish(false).isSw(false).build());
+        StudentProfile student = onboardedStudent("6612", cs);
+        Authentication auth = authenticationOf(student.getMember().getId());
+
+        // PlannerSimulation이 없는 상태에서 두 PUT을 동시에 발사 — 둘 다 plannerSimulationId=null
+        List<Integer> statuses = Collections.synchronizedList(new ArrayList<>());
+        CountDownLatch startLatch = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        Future<?> f1 = executor.submit(() -> {
+            try {
+                startLatch.await();
+                int status = mockMvc.perform(put("/api/v1/planner")
+                                .with(authentication(auth))
+                                .contentType("application/json")
+                                .content(singleCoursePlannerBody(null, courseA.getId())))
+                        .andReturn().getResponse().getStatus();
+                statuses.add(status);
+            } catch (Exception e) {
+                statuses.add(500);
+            }
+        });
+
+        Future<?> f2 = executor.submit(() -> {
+            try {
+                startLatch.await();
+                int status = mockMvc.perform(put("/api/v1/planner")
+                                .with(authentication(auth))
+                                .contentType("application/json")
+                                .content(singleCoursePlannerBody(null, courseB.getId())))
+                        .andReturn().getResponse().getStatus();
+                statuses.add(status);
+            } catch (Exception e) {
+                statuses.add(500);
+            }
+        });
+
+        startLatch.countDown();
+        f1.get(10, TimeUnit.SECONDS);
+        f2.get(10, TimeUnit.SECONDS);
+        executor.shutdown();
+
+        // 500(DataIntegrityViolationException) 없이 둘 다 200
+        assertThat(statuses).containsOnly(200);
+
+        // 시뮬레이션은 정확히 1개
+        long simCount = plannerSimulationRepository.findAll().stream()
+                .filter(s -> s.getStudentProfile().getId().equals(student.getId()))
+                .count();
+        assertThat(simCount).isEqualTo(1);
+
+        // 두 저장 중 나중에 커밋된 한 건의 데이터만 남아 plannedTerms가 정확히 1개
+        mockMvc.perform(get("/api/v1/planner").with(authentication(auth)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.plannedTerms.length()").value(1));
     }
 
     @Test
