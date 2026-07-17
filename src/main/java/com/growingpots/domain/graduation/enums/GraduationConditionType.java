@@ -10,27 +10,27 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum GraduationConditionType {
 
-    MAJOR_BASIC("전공 기초", "CREDITS", true, true,
+    MAJOR_BASIC("전공기초", "CREDITS", true, true,
             GraduationAnalysisSummary::getMajorBasicCurrent,
             GraduationAnalysisSummary::getMajorBasicRequired),
 
-    MAJOR_REQUIRED("전공 필수", "CREDITS", true, true,
+    MAJOR_REQUIRED("전공필수", "CREDITS", true, true,
             GraduationAnalysisSummary::getMajorRequiredCurrent,
             GraduationAnalysisSummary::getMajorRequiredRequired),
 
-    MAJOR_ELECTIVE("전공 선택", "CREDITS", true, true,
+    MAJOR_ELECTIVE("전공선택", "CREDITS", true, true,
             GraduationAnalysisSummary::getMajorElectiveCurrent,
             GraduationAnalysisSummary::getMajorElectiveRequired),
 
-    REQUIRED_GE("필수 교과", "CREDITS", false, true,
+    REQUIRED_GE("필수교과", "CREDITS", false, true,
             GraduationAnalysisSummary::getRequiredGeCurrent,
             GraduationAnalysisSummary::getRequiredGeRequired),
 
-    DISTRIBUTED_GE("배분 이수 교과", "CREDITS", false, true,
+    DISTRIBUTED_GE("배분이수교과", "CREDITS", false, true,
             GraduationAnalysisSummary::getDistributedGeCurrent,
             GraduationAnalysisSummary::getDistributedGeRequired),
 
-    FREE_GE("자유 이수 교과", "CREDITS", false, true,
+    FREE_GE("자유이수교과", "CREDITS", false, true,
             GraduationAnalysisSummary::getFreeGeCurrent,
             GraduationAnalysisSummary::getFreeGeRequired),
 
@@ -41,11 +41,11 @@ public enum GraduationConditionType {
             null),
 
     // Division 기반이 아닌 Course.isEnglish/isSw 플래그로 조회
-    ENGLISH_COURSE("영어 강의", "COURSES", false, true,
+    ENGLISH_COURSE("영어강의", "COURSES", false, true,
             GraduationAnalysisSummary::getEnglishCurrent,
             GraduationAnalysisSummary::getEnglishRequired),
 
-    SW_CERT_COURSE("SW 인증 강의", "CREDITS", false, true,
+    SW_CERT_COURSE("SW인증강의", "CREDITS", false, true,
             s -> s.getSwCertCurrent() != null ? s.getSwCertCurrent() : 0,
             s -> s.getSwCertRequired() != null ? s.getSwCertRequired() : 0),
 
