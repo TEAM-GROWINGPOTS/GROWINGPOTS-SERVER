@@ -108,11 +108,11 @@ public @interface GraduationApi {
                                               "majorName": "스포츠의학과",
                                               "majorType": "MAIN",
                                               "conditions": [
-                                                { "code": "MAJOR_BASIC",    "name": "전공 기초", "current": 6,  "required": 7,  "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
-                                                { "code": "MAJOR_REQUIRED", "name": "전공 필수", "current": 9,  "required": 9,  "unit": "CREDITS", "satisfied": true,  "chartTarget": true  },
-                                                { "code": "MAJOR_ELECTIVE", "name": "전공 선택", "current": 15, "required": 51, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
-                                                { "code": "ENGLISH_COURSE",  "name": "영어 강의",    "current": 7, "required": 3, "unit": "COURSES", "satisfied": true,  "chartTarget": false },
-                                                { "code": "SW_CERT_COURSE",  "name": "SW 인증 강의", "current": 6, "required": 6, "unit": "CREDITS", "satisfied": true,  "chartTarget": false }
+                                                { "code": "MAJOR_BASIC",    "name": "전공기초", "current": 6,  "required": 7,  "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
+                                                { "code": "MAJOR_REQUIRED", "name": "전공필수", "current": 9,  "required": 9,  "unit": "CREDITS", "satisfied": true,  "chartTarget": true  },
+                                                { "code": "MAJOR_ELECTIVE", "name": "전공선택", "current": 15, "required": 51, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
+                                                { "code": "ENGLISH_COURSE",  "name": "영어강의",    "current": 7, "required": 3, "unit": "COURSES", "satisfied": true,  "chartTarget": false },
+                                                { "code": "SW_CERT_COURSE",  "name": "SW인증강의", "current": 6, "required": 6, "unit": "CREDITS", "satisfied": true,  "chartTarget": false }
                                               ],
                                               "graduationRequired": {
                                                 "hasGraduationRequired": true,
@@ -129,11 +129,11 @@ public @interface GraduationApi {
                                               "majorName": "연극영화학과",
                                               "majorType": "DOUBLE",
                                               "conditions": [
-                                                { "code": "MAJOR_BASIC",    "name": "전공 기초", "current": 3,  "required": 9,  "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
-                                                { "code": "MAJOR_REQUIRED", "name": "전공 필수", "current": 6,  "required": 15, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
-                                                { "code": "MAJOR_ELECTIVE", "name": "전공 선택", "current": 6,  "required": 12, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
-                                                { "code": "ENGLISH_COURSE",  "name": "영어 강의",    "current": 0, "required": 3, "unit": "COURSES", "satisfied": false, "chartTarget": false },
-                                                { "code": "SW_CERT_COURSE",  "name": "SW 인증 강의", "current": 0, "required": 0, "unit": "CREDITS", "satisfied": true,  "chartTarget": false }
+                                                { "code": "MAJOR_BASIC",    "name": "전공기초", "current": 3,  "required": 9,  "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
+                                                { "code": "MAJOR_REQUIRED", "name": "전공필수", "current": 6,  "required": 15, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
+                                                { "code": "MAJOR_ELECTIVE", "name": "전공선택", "current": 6,  "required": 12, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
+                                                { "code": "ENGLISH_COURSE",  "name": "영어강의",    "current": 0, "required": 3, "unit": "COURSES", "satisfied": false, "chartTarget": false },
+                                                { "code": "SW_CERT_COURSE",  "name": "SW인증강의", "current": 0, "required": 0, "unit": "CREDITS", "satisfied": true,  "chartTarget": false }
                                               ],
                                               "graduationRequired": null
                                             },
@@ -141,11 +141,11 @@ public @interface GraduationApi {
                                               "majorName": "화학공학과",
                                               "majorType": "DOUBLE",
                                               "conditions": [
-                                                { "code": "MAJOR_BASIC",    "name": "전공 기초", "current": 0,  "required": 9,  "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
-                                                { "code": "MAJOR_REQUIRED", "name": "전공 필수", "current": 0,  "required": 15, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
-                                                { "code": "MAJOR_ELECTIVE", "name": "전공 선택", "current": 0,  "required": 12, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
-                                                { "code": "ENGLISH_COURSE",  "name": "영어 강의",    "current": 0, "required": 3, "unit": "COURSES", "satisfied": false, "chartTarget": false },
-                                                { "code": "SW_CERT_COURSE",  "name": "SW 인증 강의", "current": 0, "required": 0, "unit": "CREDITS", "satisfied": true,  "chartTarget": false }
+                                                { "code": "MAJOR_BASIC",    "name": "전공기초", "current": 0,  "required": 9,  "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
+                                                { "code": "MAJOR_REQUIRED", "name": "전공필수", "current": 0,  "required": 15, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
+                                                { "code": "MAJOR_ELECTIVE", "name": "전공선택", "current": 0,  "required": 12, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
+                                                { "code": "ENGLISH_COURSE",  "name": "영어강의",    "current": 0, "required": 3, "unit": "COURSES", "satisfied": false, "chartTarget": false },
+                                                { "code": "SW_CERT_COURSE",  "name": "SW인증강의", "current": 0, "required": 0, "unit": "CREDITS", "satisfied": true,  "chartTarget": false }
                                               ],
                                               "graduationRequired": null
                                             }
@@ -154,10 +154,10 @@ public @interface GraduationApi {
                                             "majorName": null,
                                             "majorType": null,
                                             "conditions": [
-                                              { "code": "REQUIRED_GE",    "name": "필수 교과",      "current": 12, "required": 17, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
-                                              { "code": "DISTRIBUTED_GE", "name": "배분 이수 교과", "current": 3,  "required": 9,  "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
-                                              { "code": "FREE_GE",        "name": "자유 이수 교과", "current": 5,  "required": 3,  "unit": "CREDITS", "satisfied": true,  "chartTarget": true  },
-                                              { "code": "SW_CERT_COURSE",  "name": "SW 인증 강의", "current": 6, "required": 6, "unit": "CREDITS", "satisfied": true,  "chartTarget": false }
+                                              { "code": "REQUIRED_GE",    "name": "필수교과",      "current": 12, "required": 17, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
+                                              { "code": "DISTRIBUTED_GE", "name": "배분이수교과", "current": 3,  "required": 9,  "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
+                                              { "code": "FREE_GE",        "name": "자유이수교과", "current": 5,  "required": 3,  "unit": "CREDITS", "satisfied": true,  "chartTarget": true  },
+                                              { "code": "SW_CERT_COURSE",  "name": "SW인증강의", "current": 6, "required": 6, "unit": "CREDITS", "satisfied": true,  "chartTarget": false }
                                             ],
                                             "graduationRequired": null
                                           },
@@ -196,11 +196,11 @@ public @interface GraduationApi {
                                         "graduatable": false,
                                         "curriculumSatisfied": false,
                                         "conditions": [
-                                          { "code": "MAJOR_BASIC",    "name": "전공 기초", "current": 9,  "required": 12, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
-                                          { "code": "MAJOR_REQUIRED", "name": "전공 필수", "current": 15, "required": 30, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
-                                          { "code": "MAJOR_ELECTIVE", "name": "전공 선택", "current": 6,  "required": 21, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
-                                          { "code": "ENGLISH_COURSE",  "name": "영어 강의",    "current": 1, "required": 3, "unit": "COURSES", "satisfied": false, "chartTarget": false },
-                                          { "code": "SW_CERT_COURSE",  "name": "SW 인증 강의", "current": 3, "required": 6, "unit": "CREDITS", "satisfied": false, "chartTarget": false }
+                                          { "code": "MAJOR_BASIC",    "name": "전공기초", "current": 9,  "required": 12, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
+                                          { "code": "MAJOR_REQUIRED", "name": "전공필수", "current": 15, "required": 30, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
+                                          { "code": "MAJOR_ELECTIVE", "name": "전공선택", "current": 6,  "required": 21, "unit": "CREDITS", "satisfied": false, "chartTarget": true  },
+                                          { "code": "ENGLISH_COURSE",  "name": "영어강의",    "current": 1, "required": 3, "unit": "COURSES", "satisfied": false, "chartTarget": false },
+                                          { "code": "SW_CERT_COURSE",  "name": "SW인증강의", "current": 3, "required": 6, "unit": "CREDITS", "satisfied": false, "chartTarget": false }
                                         ],
                                         "graduationRequired": {
                                           "hasGraduationRequired": true,
@@ -324,7 +324,7 @@ public @interface GraduationApi {
                             examples = {
                                     @ExampleObject(
                                             name = "MAJOR_REQUIRED",
-                                            summary = "전공 필수 — 미이수 필수과목 포함, distAreaDescriptions=[]",
+                                            summary = "전공필수 — 미이수 필수과목 포함, distAreaDescriptions=[]",
                                             value = """
                                     {
                                       "success": true,
@@ -332,7 +332,7 @@ public @interface GraduationApi {
                                       "message": "이수구분별 과목을 조회했습니다.",
                                       "data": {
                                         "conditionCode": "MAJOR_REQUIRED",
-                                        "conditionName": "전공 필수",
+                                        "conditionName": "전공필수",
                                         "majors": [
                                           {
                                             "majorType": "MAIN",
@@ -348,7 +348,7 @@ public @interface GraduationApi {
                                                 "studentCourseId": 101,
                                                 "name": "화공열역학1",
                                                 "divisionCode": "MAJOR_REQUIRED",
-                                                "divisionName": "전공 필수",
+                                                "divisionName": "전공필수",
                                                 "departmentName": "화학공학과",
                                                 "credit": 3,
                                                 "semester": "1학기",
@@ -361,7 +361,7 @@ public @interface GraduationApi {
                                                 "studentCourseId": null,
                                                 "name": "반응공학",
                                                 "divisionCode": "MAJOR_REQUIRED",
-                                                "divisionName": "전공 필수",
+                                                "divisionName": "전공필수",
                                                 "departmentName": "화학공학과",
                                                 "credit": 3,
                                                 "semester": "1학기",
@@ -386,7 +386,7 @@ public @interface GraduationApi {
                                       "message": "이수구분별 과목을 조회했습니다.",
                                       "data": {
                                         "conditionCode": "DISTRIBUTED_GE",
-                                        "conditionName": "배분 이수 교과",
+                                        "conditionName": "배분이수교과",
                                         "majors": [
                                           {
                                             "majorType": "MAIN",
@@ -402,7 +402,7 @@ public @interface GraduationApi {
                                                 "studentCourseId": 201,
                                                 "name": "인간과 우주",
                                                 "divisionCode": "DISTRIBUTED_GE",
-                                                "divisionName": "배분 이수 교과",
+                                                "divisionName": "배분이수교과",
                                                 "departmentName": "교양학부",
                                                 "credit": 3,
                                                 "semester": "1학기",
@@ -415,7 +415,7 @@ public @interface GraduationApi {
                                                 "studentCourseId": 202,
                                                 "name": "현대사회의 이해",
                                                 "divisionCode": "DISTRIBUTED_GE",
-                                                "divisionName": "배분 이수 교과",
+                                                "divisionName": "배분이수교과",
                                                 "departmentName": "교양학부",
                                                 "credit": 3,
                                                 "semester": "2학기",
@@ -456,7 +456,7 @@ public @interface GraduationApi {
                                                 "studentCourseId": 301,
                                                 "name": "전문실기1",
                                                 "divisionCode": "MAJOR_ELECTIVE",
-                                                "divisionName": "전공 선택",
+                                                "divisionName": "전공선택",
                                                 "departmentName": "스포츠의학과",
                                                 "credit": 1,
                                                 "semester": "1학기",
@@ -469,7 +469,7 @@ public @interface GraduationApi {
                                                 "studentCourseId": null,
                                                 "name": "전문실기2",
                                                 "divisionCode": "MAJOR_ELECTIVE",
-                                                "divisionName": "전공 선택",
+                                                "divisionName": "전공선택",
                                                 "departmentName": "스포츠의학과",
                                                 "credit": 1,
                                                 "semester": "1학기",
