@@ -128,9 +128,12 @@ public class PlannerService {
                 .toList();
     }
 
-    // 플래너 항목별 재수강 표시 유형 계산.
-    // COMPLETED·IN_PROGRESS 과목이 플래너에 담겨 있으면 재수강이고,
-    // isSelected=true 버전 중 가장 늦은 학기의 항목만 BADGE, 나머지는 DIMMED.
+    // 플래너 항목별 학점 제외 여부 계산.
+    // 두 가지 경우에 DIMMED(학점 0) 처리한다:
+    // 1. COMPLETED·IN_PROGRESS 과목이 이수예정 학기에 담긴 경우(재수강):
+    //    isSelected=true 버전 중 가장 늦은 학기만 학점 인정, 나머지 DIMMED.
+    // 2. 미이수 과목이 여러 이수예정 학기에 중복으로 담긴 경우:
+    //    마찬가지로 가장 늦은 학기만 학점 인정, 나머지 DIMMED.
     // latestTerm 기준을 선택된 버전으로 한정하지 않으면, 버전을 전환해 비선택 상태가 된
     // 항목이 latestTerm 판정에 영향을 미쳐 선택된 항목이 잘못 DIMMED될 수 있다.
     private Map<Long, RetakeDisplay> computeRetakeDisplay(
@@ -147,10 +150,6 @@ public class PlannerService {
                 studentCourseRepository.findCourseIdsByStudentProfileAndStatusIn(
                         profile, List.of(CourseStatus.COMPLETED, CourseStatus.IN_PROGRESS)));
 
-        if (retakeCourseIds.isEmpty()) {
-            return Map.of();
-        }
-
         // versionId → PlannerTerm 역방향 맵. 이미 로드된 데이터만 사용해 lazy load 없이 구성.
         Map<Long, PlannerTerm> termByVersionId = new HashMap<>();
         for (PlannerTerm term : terms) {
@@ -159,16 +158,29 @@ public class PlannerService {
             }
         }
 
-        // courseId → 해당 과목의 모든 플래너 항목 (재수강 대상 과목만)
-        Map<Long, List<PlannerVersionItem>> retakeItemsByCourseId = items.stream()
-                .filter(i -> retakeCourseIds.contains(i.getCourse().getId()))
+        Map<Long, RetakeDisplay> result = new HashMap<>();
+
+        // courseId 기준으로 모든 항목을 그룹핑
+        Map<Long, List<PlannerVersionItem>> itemsByCourseId = items.stream()
                 .collect(Collectors.groupingBy(i -> i.getCourse().getId()));
 
-        Map<Long, RetakeDisplay> result = new HashMap<>();
-        for (List<PlannerVersionItem> courseItems : retakeItemsByCourseId.values()) {
-            // BADGE 기준이 되는 latestTerm: isSelected=true 버전에 속한 항목만으로 결정한다.
-            // 비선택 버전 항목까지 포함하면, 버전 전환 후 비선택 상태가 된 늦은 학기 항목이
-            // latestTerm을 선점해 선택된 항목이 잘못 DIMMED된다.
+        for (Map.Entry<Long, List<PlannerVersionItem>> entry : itemsByCourseId.entrySet()) {
+            Long courseId = entry.getKey();
+            List<PlannerVersionItem> courseItems = entry.getValue();
+            boolean isRetake = retakeCourseIds.contains(courseId);
+
+            // 미이수 과목이고 단일 학기에만 있으면 처리 불필요
+            if (!isRetake) {
+                long distinctTermCount = courseItems.stream()
+                        .map(i -> termByVersionId.get(i.getPlannerTermVersion().getId()))
+                        .filter(Objects::nonNull)
+                        .map(PlannerTerm::getId)
+                        .distinct()
+                        .count();
+                if (distinctTermCount <= 1) continue;
+            }
+
+            // BADGE 기준: isSelected=true 버전 중 가장 늦은 학기
             PlannerTerm latestSelectedTerm = courseItems.stream()
                     .filter(i -> i.getPlannerTermVersion().isSelected())
                     .map(i -> termByVersionId.get(i.getPlannerTermVersion().getId()))
@@ -180,7 +192,6 @@ public class PlannerService {
             for (PlannerVersionItem item : courseItems) {
                 PlannerTerm term = termByVersionId.get(item.getPlannerTermVersion().getId());
                 if (term == null) continue;
-                // BADGE: isSelected=true이면서 latestSelectedTerm과 동일한 학기
                 boolean isBadge = latestSelectedTerm != null
                         && item.getPlannerTermVersion().isSelected()
                         && term.getYearLevel() == latestSelectedTerm.getYearLevel()
