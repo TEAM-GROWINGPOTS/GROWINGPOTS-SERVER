@@ -15,7 +15,6 @@ reviews:
   path_filters:
     - '!build/**'
     - '!.gradle/**'
-    - '!gradle/wrapper/**'
     - '!**/*.pdf'
     - '!**/*.log'
   path_instructions:
