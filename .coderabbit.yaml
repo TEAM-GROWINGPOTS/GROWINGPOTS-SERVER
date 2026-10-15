@@ -1,0 +1,118 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: 'ko-KR'
+early_access: false
+tone_instructions: '한국어로 명확하고 건설적으로 리뷰한다. 2인 팀이라 코멘트는 짧게, 수정 방향과 근거를 함께 제시하고 장문은 피한다. 보안·개인정보·데이터 정합성을 최우선으로 본다.'
+reviews:
+  profile: 'assertive'
+  abort_on_close: true
+  request_changes_workflow: false
+  high_level_summary: true
+  review_status: true
+  assess_linked_issues: true
+  related_prs: true
+  changed_files_summary: true
+  poem: false
+  path_filters:
+    - '!build/**'
+    - '!.gradle/**'
+    - '!**/*.pdf'
+    - '!**/*.log'
+  path_instructions:
+    - path: '**'
+      instructions: |
+        - 전제: Java 21 / Spring Boot 3.5 / JPA / MySQL / Spring Security + JWT(카카오 OAuth) 백엔드.
+          성적표 PDF 파싱 데이터, 학번, 이름 등 개인 식별정보를 다룬다.
+        - 개인정보: 성적·학번·이름·PDF 파싱 결과 등 개인 식별정보가 로그(디버그 레벨 및 임시 진단 로그 포함),
+          예외 메시지, 에러 응답 본문, 외부 알림(Sentry·Discord)으로 나가지 않는지 점검할 것.
+          JPA 엔티티를 응답 DTO 없이 그대로 반환하지 않는지 점검할 것.
+        - 인가: 경로 변수·요청 파라미터로 전달된 리소스에 대해 요청자의 소유권을 검증하는지 점검할 것.
+          개발/디버그용 엔드포인트가 인증 없이 열려 있다면 프로파일로 제한되는지 점검할 것.
+        - 입력 검증: 요청 DTO에 @Valid와 Bean Validation이 적용됐는지 점검할 것.
+        - 트랜잭션: @Transactional 위치가 적절한지, 조회 전용 메서드에 readOnly가 지정됐는지,
+          같은 클래스 내부 호출로 프록시(AOP)가 적용되지 않는 패턴이 없는지,
+          PDF 파싱·외부 API 호출 같은 I/O가 트랜잭션 범위 안에 포함되지 않는지 점검할 것.
+        - JPA: N+1, 반복문 내 쿼리, 같은 데이터의 중복 조회가 없는지,
+          open-in-view=false 환경에서 지연 로딩(LAZY) 접근이 트랜잭션(세션) 밖에서 일어나지 않는지 점검할 것.
+          enum 필드는 @Enumerated(EnumType.STRING)을 쓰는지 점검할 것.
+        - 외부 API: 카카오 OAuth 등 외부 호출에 타임아웃과 실패 처리가 있는지 점검할 것.
+        - 예외 처리: 레포의 BaseException/ErrorCode 체계를 따르는지,
+          새로 추가하는 ErrorCode의 네이밍·HTTP 상태가 기존 항목과 일관적인지,
+          사용되지 않는 ErrorCode가 추가되지 않는지 점검할 것.
+        - 구조 관례: Swagger 어노테이션은 *Api 인터페이스에만 두고 *Controller는 구현만 하는지,
+          엔드포인트 추가·변경 시 *Api 인터페이스 문서도 함께 갱신됐는지,
+          Controller에 비즈니스 로직이 들어가지 않는지,
+          DTO 이름이 *Request / *Response 형식을 따르는지 점검할 것.
+        - 도메인 경계: 다른 도메인 엔티티의 상태 변경(쓰기)은 해당 도메인의 서비스를 통해서만 하는지 점검할 것.
+          다른 도메인 데이터의 조회(읽기)는 허용한다.
+        - 스키마 변경: 엔티티(@Entity) 변경 시 스키마 마이그레이션을 동반하는지 점검할 것.
+          마이그레이션 도구 도입 전이라면 적용 계획을 PR에 명시했는지 점검할 것.
+        - API 계약: 공통 응답 래퍼(BaseResponse) 형식이 일관적인지,
+          같은 의미의 필드가 서로 다른 이름을 쓰지 않는지, null이 한 필드에 여러 의미로 과적재되지 않는지,
+          응답 필드 추가·삭제·이름 변경이 프론트 호환성을 깨지 않는지 점검할 것.
+        - 테스트: 새 비즈니스 로직에는 대응 테스트가, 버그 수정에는 버그를 재현하는 테스트가 포함됐는지 점검할 것.
+        - 포매팅·스타일(들여쓰기, 줄바꿈, import 순서, 네이밍 취향 등)은 리뷰에서 제외하고
+          로직·설계·보안·정확성에 집중할 것.
+    - path: 'build.gradle'
+      instructions: |
+        - 새 의존성이 꼭 필요한지, 버전이 고정됐는지, 기존 라이브러리와 기능이 중복되지 않는지 점검할 것.
+        - 테스트 재시도 등 빌드·테스트 동작을 바꾸는 설정 변경은 근거가 PR에 있는지 점검할 것.
+    - path: 'src/main/java/com/growingpots/domain/graduation/**'
+      instructions: |
+        - 졸업 판정 결과가 바뀔 수 있는 변경인지 명확히 하고, 그렇다면 대응 테스트를 추가·수정했는지 점검할 것.
+        - 이수 상태(이수완료/수강중)를 세는 집계 기준이 여러 판정 경로에서 서로 일관적인지 점검할 것.
+    - path: 'src/main/java/com/growingpots/domain/transcript/**'
+      instructions: |
+        - PDF 파서 로직을 바꾸면 회귀 테스트를 함께 추가·수정하는지 점검할 것.
+        - 파싱 결과(개인 식별정보 포함)가 어떤 로그 레벨로도 출력되지 않는지 점검할 것.
+        - 업로드 파일의 크기·형식 검증, 스트림 정리, 파싱 실패 시 예외 처리가 있는지 점검할 것.
+    - path: 'src/main/java/com/growingpots/domain/planner/**'
+      instructions: |
+        - 플래너 자동저장의 동시성(비관적 락·격리수준) 가정을 깨는 변경인지 점검할 것.
+    - path: 'src/main/java/com/growingpots/domain/university/**'
+      instructions: |
+        - 입학년도 기준 졸업요건 조회가 적용 버전 하나만 선택하는지(여러 버전이 중복 적용되지 않는지) 점검할 것.
+    - path: 'src/main/java/com/growingpots/global/security/**'
+      instructions: |
+        - JWT 검증·인가 누락, 401/403 처리, 쿠키 보안 속성(Secure·HttpOnly·SameSite)과
+          CSRF 방어가 유지되는지 점검할 것.
+    - path: 'src/main/resources/**'
+      instructions: |
+        - 시크릿(토큰·비밀번호·DSN 등)이 하드코딩되지 않았는지,
+          prod 설정(ddl-auto, 로그 레벨 등) 변경이 의도적이고 안전한지 점검할 것.
+    - path: 'src/main/resources/db/migration/**'
+      instructions: |
+        - 이미 머지된 마이그레이션 파일을 수정하지 않고 새 버전 파일로 추가했는지 점검할 것.
+        - 버전 번호가 기존과 충돌하지 않는지, 운영 데이터가 있는 테이블 변경(컬럼 삭제·NOT NULL 추가 등)이 안전한지 점검할 것.
+    - path: '.github/workflows/**'
+      instructions: |
+        - 시크릿이 로그로 노출되지 않는지, 배포 조건(브랜치·환경) 변경이 안전한지 점검할 것.
+    - path: 'src/test/**'
+      instructions: |
+        - 통합 테스트 픽스처가 다른 테스트와 unique 값(유니크 제약 컬럼 등)을 공유하지 않는지 점검할 것.
+        - 테스트가 실제 성적표 파일이나 로컬 절대경로에 의존하지 않는지 점검할 것.
+        - 성능 테스트에 측정값에 대한 단언(assert)이 포함되는지 점검할 것.
+  auto_review:
+    enabled: true
+    drafts: false
+    ignore_title_keywords:
+      - '[skip-review]'
+      - '[docs'
+  tools:
+    pmd:
+      enabled: false
+    languagetool:
+      enabled: false
+    markdownlint:
+      enabled: true
+    actionlint:
+      enabled: true
+    gitleaks:
+      enabled: true
+    trufflehog:
+      enabled: true
+    osvScanner:
+      enabled: true
+    presidio:
+      enabled: true
+chat:
+  auto_reply: true
