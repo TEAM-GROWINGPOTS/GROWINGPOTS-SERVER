@@ -30,6 +30,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -82,11 +83,7 @@ public class TranscriptPersister {
         // 학교별로 학수번호가 겹칠 수 있어 학생 소속 학교로 한정한다.
         Map<String, Course> coursesByCode = courseRepository.findBySchool(studentProfile.getSchool()).stream()
                 .collect(Collectors.toMap(Course::getCourseCode, c -> c, (a, b) -> a));
-        // TEMP DIAGNOSTIC(#198 후속): dev에서 실제 업로드 시 course 매칭이 왜 비는지 확인용. 원인 파악 후 제거.
-        log.info("[DIAG-198] studentProfileId={}, schoolId={}, coursesByCode.size={}",
-                studentProfile.getId(),
-                studentProfile.getSchool() != null ? studentProfile.getSchool().getId() : null,
-                coursesByCode.size());
+        logUnmatchedCourseCodes(studentProfile, parsed.courses(), coursesByCode);
 
         List<Division> divisions = divisionRepository.findBySchool(studentProfile.getSchool());
         Map<DivisionCategory, Division> divisionsByCategory = divisions.stream()
@@ -108,6 +105,27 @@ public class TranscriptPersister {
         List<StudentMajor> studentMajors = saveMajorsAndSummaries(studentProfile, parsed, departments);
 
         certResultRepository.saveAll(toCertResults(studentProfile, studentMajors, parsed.graduationSummary()));
+    }
+
+    // 과목 마스터(COURSE)에 매칭되지 않은 학수번호를 모아 WARN 한 줄로 남긴다(#278). 어떤 코드가 왜 안 붙는지
+    // 추적하기 위한 용도라 학생 식별자는 남기지 않고, 미매칭이 없으면 아무것도 찍지 않는다.
+    private void logUnmatchedCourseCodes(
+            StudentProfile studentProfile, List<Map<String, String>> courses, Map<String, Course> coursesByCode) {
+        Set<String> unmatchedCodes = courses.stream()
+                .map(course -> course.get("courseCode"))
+                .filter(code -> code != null && !coursesByCode.containsKey(code))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (unmatchedCodes.isEmpty()) {
+            return;
+        }
+        String codes = unmatchedCodes.stream()
+                .map(code -> "'" + code + "'")
+                .collect(Collectors.joining(", ", "[", "]"));
+        log.warn("[CourseMatch] 과목 마스터 미매칭 {}건 (schoolId={}, 마스터 {}개): {}",
+                unmatchedCodes.size(),
+                studentProfile.getSchool() != null ? studentProfile.getSchool().getId() : null,
+                coursesByCode.size(),
+                codes);
     }
 
     private void updateStudentProfile(StudentProfile studentProfile, Map<String, String> studentInfo, LocalDate now) {
@@ -178,12 +196,6 @@ public class TranscriptPersister {
         String rawCourseCode = course.get("courseCode");
         boolean inProgress = CURRENT_SEMESTER_SECTION.equals(section);
         Course matchedCourse = rawCourseCode == null ? null : coursesByCode.get(rawCourseCode);
-        // TEMP DIAGNOSTIC(#198 후속): 원인 파악 후 제거.
-        if (rawCourseCode != null) {
-            log.info("[DIAG-198] rawCourseCode='{}' (len={}) -> matched={}, containsKey={}, mapSize={}",
-                    rawCourseCode, rawCourseCode.length(), matchedCourse != null,
-                    coursesByCode.containsKey(rawCourseCode), coursesByCode.size());
-        }
 
         // 금학기수강학점(진행 중) 과목은 PDF에 수강년도/학기가 안 찍혀 있어 오늘 날짜 기준으로 채운다.
         Integer takenYear = semester != null ? takenYear(semester) : (inProgress ? computeCurrentAcademicYear(now) : null);
