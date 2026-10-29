@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -99,6 +100,7 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.code").value("AUTH_200"))
                 .andExpect(jsonPath("$.data.nickname").value("김서영"))
                 .andExpect(jsonPath("$.data.onboardingCompleted").value(false))
+                .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
                 .andExpect(cookie().exists("accessToken"))
                 .andExpect(cookie().httpOnly("accessToken", true))
                 .andExpect(cookie().exists("refreshToken"))
@@ -300,6 +302,79 @@ class AuthControllerTest {
                         .cookie(new Cookie("refreshToken", accessToken)))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTH_001"));
+    }
+
+    @Test
+    void 재발급에_성공하면_새_accessToken을_응답_body로_반환한다() throws Exception {
+        Member member = memberRepository.save(Member.builder()
+                .nickname("재발급회원")
+                .oauthProvider(OauthProvider.KAKAO)
+                .oauthId("2005")
+                .email(null)
+                .build());
+        String refreshToken = jwtTokenProvider.generateRefreshToken(member.getId().toString());
+        member.updateRefreshToken(refreshToken);
+        memberRepository.save(member);
+
+        mockMvc.perform(post("/api/v1/auth/reissue")
+                        .cookie(new Cookie("refreshToken", refreshToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("AUTH_200_2"))
+                .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
+                .andExpect(cookie().exists("refreshToken"));
+    }
+
+    @Test
+    void Bearer_헤더의_accessToken으로_인증된다() throws Exception {
+        Member member = memberWithProfile("2006");
+        String accessToken = jwtTokenProvider.generateToken(member.getId().toString());
+
+        mockMvc.perform(get("/api/v1/students/me")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+                .andExpect(status().isOk());
+    }
+
+    // 웹이 Bearer 헤더로 전환하기 전까지는 기존 accessToken 쿠키도 받아야 한다(#286에서 제거 예정)
+    @Test
+    void accessToken_쿠키로도_인증된다() throws Exception {
+        Member member = memberWithProfile("2007");
+        String accessToken = jwtTokenProvider.generateToken(member.getId().toString());
+
+        mockMvc.perform(get("/api/v1/students/me")
+                        .cookie(new Cookie("accessToken", accessToken)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void 리프레시_토큰을_Bearer_헤더로_보내면_401_AUTH_001을_반환한다() throws Exception {
+        String refreshToken = jwtTokenProvider.generateRefreshToken("1");
+
+        mockMvc.perform(get("/api/v1/students/me")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + refreshToken))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTH_001"));
+    }
+
+    private Member memberWithProfile(String suffix) {
+        School school = schoolRepository.save(School.builder().name("경희대학교 국제캠퍼스-" + suffix).build());
+        Department department = departmentRepository.save(Department.builder()
+                .school(school)
+                .college("공과대학")
+                .name("컴퓨터공학과")
+                .build());
+        Member member = memberRepository.save(Member.builder()
+                .nickname("인증회원")
+                .oauthProvider(OauthProvider.KAKAO)
+                .oauthId(suffix)
+                .email(null)
+                .build());
+        studentProfileRepository.save(StudentProfile.builder()
+                .member(member)
+                .school(school)
+                .department(department)
+                .admissionYear(2022)
+                .build());
+        return member;
     }
 
     private record LoginRequestFixture(String provider, String oauthAccessToken) {
