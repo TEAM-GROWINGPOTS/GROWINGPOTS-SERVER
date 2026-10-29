@@ -1,6 +1,7 @@
 package com.growingpots.domain.graduation.controller;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -436,6 +437,70 @@ class GraduationRequiredTest {
                 .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='전문실기')].current").value(2))
                 .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='전문실기')].satisfied").value(true))
                 .andExpect(jsonPath("$.data.graduationRequired.totalCredit").value(4));
+    }
+
+    private void takeCourseInProgress(StudentProfile profile, String courseCode, int credit) {
+        Course course = courseRepository.findBySchool(profile.getSchool()).stream()
+                .filter(c -> courseCode.equals(c.getCourseCode())).findFirst().orElseThrow();
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(course).rawCourseCode(courseCode).rawCourseName(course.getName())
+                .credit(credit).takenYear(2026).takenSemester(Semester.SECOND)
+                .status(CourseStatus.IN_PROGRESS).source(RecordSource.PDF).isRetake(false).build());
+    }
+
+    // 졸업필수 과목을 이번 학기에 수강 중이면 이수로 인정해야 한다(#288) - 학점 계산(PDF 스냅샷)은
+    // 이미 수강 중 과목을 포함하는데 졸업필수만 COMPLETED만 세서, 수강 중이면 미충족 + 로띠 미노출이었다.
+    @Test
+    void 수강_중인_졸업필수_과목도_이수로_인정된다() throws Exception {
+        StudentMajor sportsMajor = setUpSportsScienceStudent("9230");
+        StudentProfile profile = sportsMajor.getStudentProfile();
+        completeCourse(profile, "CPE201", 2);
+        completeCourse(profile, "CPE103", 1);
+        takeCourseInProgress(profile, "CPE202", 2);
+
+        mockMvc.perform(get("/api/v1/students/me/graduation")
+                        .param("studentMajorId", String.valueOf(sportsMajor.getId())).param("source", "COMPLETED")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.graduationRequired.satisfied").value(true))
+                .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='전문실기')].current").value(2))
+                .andExpect(jsonPath("$.data.graduationRequired.totalCredit").value(5));
+
+        // 플래너 로드맵 로띠는 PLANNED 응답의 curriculumSatisfied로 뜬다
+        mockMvc.perform(get("/api/v1/students/me/graduation").param("source", "PLANNED")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.curriculumSatisfied").value(true));
+
+        mockMvc.perform(get("/api/v1/students/me/graduation/GRADUATION_REQUIRED/courses")
+                        .param("studentMajorId", String.valueOf(sportsMajor.getId()))
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.majors[0].satisfied").value(true))
+                .andExpect(jsonPath("$.data.majors[0].courses[?(@.name=='전문실기2')].taken").value(true));
+    }
+
+    // 재수강 중이면 같은 과목이 COMPLETED 행과 IN_PROGRESS 행으로 둘 다 남는다. 수강 중 과목을 세기
+    // 시작하면서 한 과목이 두 번 세지거나 목록에 두 번 뜨면 안 된다.
+    @Test
+    void 재수강_중인_졸업필수_과목은_한_번만_센다() throws Exception {
+        StudentMajor sportsMajor = setUpSportsScienceStudent("9231");
+        StudentProfile profile = sportsMajor.getStudentProfile();
+        completeCourse(profile, "CPE201", 2);
+        takeCourseInProgress(profile, "CPE201", 2);
+
+        mockMvc.perform(get("/api/v1/students/me/graduation")
+                        .param("studentMajorId", String.valueOf(sportsMajor.getId()))
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='전문실기')].current").value(1))
+                .andExpect(jsonPath("$.data.graduationRequired.totalCredit").value(2));
+
+        mockMvc.perform(get("/api/v1/students/me/graduation/GRADUATION_REQUIRED/courses")
+                        .param("studentMajorId", String.valueOf(sportsMajor.getId()))
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.majors[0].courses[?(@.name=='전문실기1')]", hasSize(1)));
     }
 
     // 예전엔 majors.stream().filter(DOUBLE).findFirst()로 첫 번째 복수전공만 쓰고 나머지는 조용히
