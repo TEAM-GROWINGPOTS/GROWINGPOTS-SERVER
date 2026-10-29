@@ -503,6 +503,38 @@ class GraduationRequiredTest {
                 .andExpect(jsonPath("$.data.majors[0].courses[?(@.name=='전문실기1')]", hasSize(1)));
     }
 
+    // course 매칭 없이 rawCourseCode로만 잡힌 수강 중 과목을 플래너에도 담아둔 경우, PLANNED에서
+    // 그 과목 학점이 두 번 더해지면 안 된다(getGraduation의 course_id 기준 제외에서 안 걸러지는 경로).
+    @Test
+    void rawCourseCode로_잡힌_수강중_과목을_플래너에도_담으면_학점을_한_번만_센다() throws Exception {
+        StudentMajor sportsMajor = setUpSportsScienceStudent("9232");
+        StudentProfile profile = sportsMajor.getStudentProfile();
+        completeCourse(profile, "CPE201", 2);
+        studentCourseRepository.save(StudentCourse.builder()
+                .studentProfile(profile).course(null).rawCourseCode("CPE202").rawCourseName("전문실기2")
+                .credit(2).takenYear(2026).takenSemester(Semester.SECOND)
+                .status(CourseStatus.IN_PROGRESS).source(RecordSource.PDF).isRetake(false).build());
+
+        Course cpe202 = courseRepository.findBySchool(profile.getSchool()).stream()
+                .filter(c -> "CPE202".equals(c.getCourseCode())).findFirst().orElseThrow();
+        PlannerSimulation simulation = plannerSimulationRepository.save(PlannerSimulation.builder()
+                .studentProfile(profile).name("내 플래너").build());
+        PlannerTerm term = plannerTermRepository.save(PlannerTerm.builder()
+                .plannerSimulation(simulation).yearLevel(4).semester(1).build());
+        PlannerTermVersion version = plannerTermVersionRepository.save(PlannerTermVersion.builder()
+                .plannerTerm(term).versionNo(1).name("폴더 1").isSelected(true).versionOrder(0).build());
+        plannerVersionItemRepository.save(PlannerVersionItem.builder()
+                .plannerTermVersion(version).course(cpe202).plannedDivision(null)
+                .credit(2).coursePositionOrder(0).build());
+
+        mockMvc.perform(get("/api/v1/students/me/graduation")
+                        .param("studentMajorId", String.valueOf(sportsMajor.getId())).param("source", "PLANNED")
+                        .with(authentication(authenticationOf(profile.getMember().getId()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.graduationRequired.items[?(@.name=='전문실기')].current").value(2))
+                .andExpect(jsonPath("$.data.graduationRequired.totalCredit").value(4));
+    }
+
     // 예전엔 majors.stream().filter(DOUBLE).findFirst()로 첫 번째 복수전공만 쓰고 나머지는 조용히
     // 버렸던 버그의 회귀 테스트. 본전공 1개 + 복수전공 2개인 학생이 majorType=ALL로 조회하면
     // sections.majors에 3개 전공이 전부(누락 없이) 나와야 한다.

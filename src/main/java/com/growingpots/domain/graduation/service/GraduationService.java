@@ -913,11 +913,11 @@ public class GraduationService {
                         sc -> resolveRequirementCourseId(sc, requirementCourseIds, requirementCourseIdByCode),
                         StudentCourse::getCredit, (a, b) -> a));
 
-        // PLANNED: 이 졸업요건 대상 과목만 걸러서 미이수 판정에 더한다. 재수강 과목(이미 completedCreditByCourseId에
-        // 있는 과목)이 plannedItems에 포함될 수 있으며, 아래 판정 로직에서 completed 값을 우선 사용하므로
-        // 졸업요건 판정에서는 이중카운트가 발생하지 않는다.
+        // PLANNED: 이 졸업요건 대상 과목만 걸러서 미이수 판정에 더한다. 이미 이수/수강 중으로 잡힌 과목은 뺀다 - getGraduation()이 course_id 기준으로 걸러 넘기지만,
+        // course 없이 rawCourseCode로만 매칭된 행(#218)은 거기서 안 걸러져 totalCredit이 두 번 더해진다.
         List<PlannerVersionItem> plannedInScope = plannedItems.stream()
-                .filter(i -> requirementCourseIds.contains(i.getCourse().getId()))
+                .filter(i -> requirementCourseIds.contains(i.getCourse().getId())
+                        && !completedCreditByCourseId.containsKey(i.getCourse().getId()))
                 .toList();
         Map<Long, Integer> plannedCreditByCourseId = plannedInScope.stream()
                 .collect(Collectors.toMap(i -> i.getCourse().getId(), PlannerVersionItem::getCredit, (a, b) -> a));
