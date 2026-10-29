@@ -805,7 +805,7 @@ public class GraduationService {
     // 조건별 상세는 unmetDescriptions에 문구로 담는다. 과목 리스트는 모든 하위조건에 연결된
     // 과목을 하나로 합쳐서 보여준다(전문실기1~6 + 맨손체조가 한 리스트에 섞여 나옴).
     private MajorCourses buildGraduationRequiredMajorCourses(StudentProfile profile, StudentMajor major) {
-        // 이 드릴다운 엔드포인트는 PLANNED를 지원하지 않아(별도 스코프) 항상 COMPLETED만 반영한다.
+        // 이 드릴다운 엔드포인트는 PLANNED를 지원하지 않아(별도 스코프) 이수내역(완료 + 수강 중)만 반영한다.
         GraduationRequiredJudgement judgement = judgeGraduationRequired(profile, major.getDepartment(), List.of());
         boolean hasRequiredList = !judgement.items().isEmpty();
 
@@ -900,20 +900,24 @@ public class GraduationService {
         // 매칭 불가능하지만, PDF 파싱은 매칭 실패해도 원문 학수번호는 남기므로(예: 학점교류과목) 그
         // 경우는 구제된다. resolveRequirementCourseId 참고.
         Map<String, Long> requirementCourseIdByCode = courseIdByCode(allItems);
-        List<StudentCourse> takenCourses = studentCourses.stream()
-                .filter(sc -> sc.getStatus() == CourseStatus.COMPLETED
+        // 수강 중(IN_PROGRESS) 과목도 이수로 인정한다(#288) - 학점 계산(PDF 스냅샷)이 이미 수강 중 학점을
+        // 포함하는데 졸업필수만 COMPLETED로 세면, 수강 중일 때 미충족으로 뜨고 PLANNED에서도 빠져(완료/수강중
+        // 과목은 계획 delta에서 제외됨) 어디서도 안 세졌다. 재수강 중이면 같은 과목이 COMPLETED/IN_PROGRESS
+        // 두 행으로 남으므로 과목당 한 행만 남긴다.
+        List<StudentCourse> takenCourses = dedupeByCourse(studentCourses.stream()
+                .filter(sc -> (sc.getStatus() == CourseStatus.COMPLETED || sc.getStatus() == CourseStatus.IN_PROGRESS)
                         && resolveRequirementCourseId(sc, requirementCourseIds, requirementCourseIdByCode) != null)
-                .toList();
+                .toList());
         Map<Long, Integer> completedCreditByCourseId = takenCourses.stream()
                 .collect(Collectors.toMap(
                         sc -> resolveRequirementCourseId(sc, requirementCourseIds, requirementCourseIdByCode),
                         StudentCourse::getCredit, (a, b) -> a));
 
-        // PLANNED: 이 졸업요건 대상 과목만 걸러서 미이수 판정에 더한다. 재수강 과목(이미 completedCreditByCourseId에
-        // 있는 과목)이 plannedItems에 포함될 수 있으며, 아래 판정 로직에서 completed 값을 우선 사용하므로
-        // 졸업요건 판정에서는 이중카운트가 발생하지 않는다.
+        // PLANNED: 이 졸업요건 대상 과목만 걸러서 미이수 판정에 더한다. 이미 이수/수강 중으로 잡힌 과목은 뺀다 - getGraduation()이 course_id 기준으로 걸러 넘기지만,
+        // course 없이 rawCourseCode로만 매칭된 행(#218)은 거기서 안 걸러져 totalCredit이 두 번 더해진다.
         List<PlannerVersionItem> plannedInScope = plannedItems.stream()
-                .filter(i -> requirementCourseIds.contains(i.getCourse().getId()))
+                .filter(i -> requirementCourseIds.contains(i.getCourse().getId())
+                        && !completedCreditByCourseId.containsKey(i.getCourse().getId()))
                 .toList();
         Map<Long, Integer> plannedCreditByCourseId = plannedInScope.stream()
                 .collect(Collectors.toMap(i -> i.getCourse().getId(), PlannerVersionItem::getCredit, (a, b) -> a));
