@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 import java.lang.annotation.ElementType;
@@ -57,6 +58,7 @@ public @interface AuthApi {
             @ApiResponse(responseCode = "401", description = "유효하지 않은 소셜 access token(AUTH_001)"),
             @ApiResponse(responseCode = "502", description = "소셜 서버 통신 실패(AUTH_004)")
     })
+    @SecurityRequirements // 인증 없이 호출하는 API라 전역 bearerAuth 요구사항을 해제
     @interface Login {
     }
 
@@ -100,6 +102,7 @@ public @interface AuthApi {
                     description = "만료된 refreshToken(AUTH_002), 유효하지 않은 refreshToken(AUTH_001), "
                             + "쿠키 없음 또는 저장된 토큰과 불일치(AUTH_005)")
     })
+    @SecurityRequirements // 인증 없이 호출하는 API라 전역 bearerAuth 요구사항을 해제
     @interface Reissue {
     }
 }

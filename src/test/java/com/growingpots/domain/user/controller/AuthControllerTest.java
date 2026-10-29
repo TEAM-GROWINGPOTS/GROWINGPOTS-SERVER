@@ -346,6 +346,17 @@ class AuthControllerTest {
     }
 
     @Test
+    void Bearer_헤더가_비어있으면_accessToken_쿠키로_인증된다() throws Exception {
+        Member member = memberWithProfile("2008");
+        String accessToken = jwtTokenProvider.generateToken(member.getId().toString());
+
+        mockMvc.perform(get("/api/v1/students/me")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer ")
+                        .cookie(new Cookie("accessToken", accessToken)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void 리프레시_토큰을_Bearer_헤더로_보내면_401_AUTH_001을_반환한다() throws Exception {
         String refreshToken = jwtTokenProvider.generateRefreshToken("1");
 
