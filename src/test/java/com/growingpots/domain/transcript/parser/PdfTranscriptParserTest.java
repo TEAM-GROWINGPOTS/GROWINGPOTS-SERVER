@@ -1,8 +1,10 @@
 package com.growingpots.domain.transcript.parser;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import java.io.ByteArrayOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -44,6 +46,60 @@ class PdfTranscriptParserTest {
 
         assertThat(result.courses()).isEmpty();
         assertThat(result.studentInfo()).isEmpty();
+    }
+
+    @Test
+    void acceptsPdfAtPageLimit() throws Exception {
+        assertThat(parser.parse(pdfWithPages(10)).courses()).isEmpty();
+    }
+
+    @Test
+    void rejectsPdfOverPageLimit() throws Exception {
+        byte[] pdf = pdfWithPages(11);
+
+        assertThatThrownBy(() -> parser.parse(pdf))
+                .isInstanceOf(PdfParsingException.class)
+                .hasMessage("PDF 페이지 수가 너무 많습니다.");
+    }
+
+    @Test
+    void acceptsPdfAtCharacterLimit() throws Exception {
+        assertThat(parser.parse(pdfWithCharacters(50_000)).courses()).isEmpty();
+    }
+
+    @Test
+    void rejectsPdfOverCharacterLimit() throws Exception {
+        byte[] pdf = pdfWithCharacters(50_001);
+
+        assertThatThrownBy(() -> parser.parse(pdf))
+                .isInstanceOf(PdfParsingException.class)
+                .hasMessage("PDF 글자 수가 너무 많습니다.");
+    }
+
+    private byte[] pdfWithPages(int pages) throws Exception {
+        try (PDDocument document = new PDDocument(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            for (int i = 0; i < pages; i++) {
+                document.addPage(new PDPage());
+            }
+            document.save(output);
+            return output.toByteArray();
+        }
+    }
+
+    private byte[] pdfWithCharacters(int characters) throws Exception {
+        try (PDDocument document = new PDDocument(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            PDPage page = new PDPage();
+            document.addPage(page);
+            try (PDPageContentStream contentStream = new PDPageContentStream(document, page)) {
+                contentStream.beginText();
+                contentStream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 1);
+                contentStream.newLineAtOffset(10, 700);
+                contentStream.showText("A".repeat(characters));
+                contentStream.endText();
+            }
+            document.save(output);
+            return output.toByteArray();
+        }
     }
 
     @Test

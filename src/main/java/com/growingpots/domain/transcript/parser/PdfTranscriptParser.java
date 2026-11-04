@@ -24,6 +24,10 @@ import org.springframework.stereotype.Component;
 @Component
 public class PdfTranscriptParser {
 
+    // 비정상적으로 큰 PDF가 CPU를 오래 점유하지 못하게 막는 상한(#290). 실제 졸업사정표 25개 기준
+    // 최대 2페이지, 3,398자여서 정상 파일이 걸리지 않도록 여유 있게 잡았다.
+    private static final int MAX_PAGES = 10;
+    private static final int MAX_CHARACTERS = 50_000;
     private static final float SAME_LINE_Y_TOLERANCE = 2.5F;
     private static final float SEGMENT_GAP_RATIO = 0.8F;
     private static final Pattern STUDENT_INFO_PATTERN = Pattern.compile(
@@ -87,6 +91,9 @@ public class PdfTranscriptParser {
 
     public ParsedTranscript parse(byte[] pdfBytes) {
         try (PDDocument document = Loader.loadPDF(pdfBytes)) {
+            if (document.getNumberOfPages() > MAX_PAGES) {
+                throw new PdfParsingException("PDF 페이지 수가 너무 많습니다.");
+            }
             PositionCollectingTextStripper stripper = new PositionCollectingTextStripper();
             stripper.setSortByPosition(true);
             stripper.writeText(document, new StringWriter());
@@ -1088,9 +1095,19 @@ public class PdfTranscriptParser {
         private final List<PageText> pages = new ArrayList<>();
         private int currentPageNumber;
         private List<TextPosition> currentPositions = new ArrayList<>();
+        private int characterCount;
 
         PositionCollectingTextStripper() throws IOException {
             super();
+        }
+
+        // writeString은 페이지를 다 읽은 뒤에 호출되므로, 읽는 도중에 중단할 수 있도록 여기서 센다.
+        @Override
+        protected void processTextPosition(TextPosition text) {
+            if (++characterCount > MAX_CHARACTERS) {
+                throw new PdfParsingException("PDF 글자 수가 너무 많습니다.");
+            }
+            super.processTextPosition(text);
         }
 
         @Override
