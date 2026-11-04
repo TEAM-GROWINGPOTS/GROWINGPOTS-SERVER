@@ -1155,14 +1155,14 @@ public class PdfTranscriptParser {
                     .toList();
         }
 
+        // positions가 Y 오름차순이라 허용 범위를 벗어난 이전 줄에는 이후 글자도 속할 수 없다. 마지막 줄만 비교하면 된다.
         private List<TextPosition> findLineGroup(List<List<TextPosition>> lineGroups, TextPosition position) {
-            for (List<TextPosition> lineGroup : lineGroups) {
-                TextPosition first = lineGroup.getFirst();
-                if (Math.abs(first.getYDirAdj() - position.getYDirAdj()) <= SAME_LINE_Y_TOLERANCE) {
-                    return lineGroup;
-                }
+            if (lineGroups.isEmpty()) {
+                return null;
             }
-            return null;
+            List<TextPosition> lastLineGroup = lineGroups.getLast();
+            TextPosition first = lastLineGroup.getFirst();
+            return Math.abs(first.getYDirAdj() - position.getYDirAdj()) <= SAME_LINE_Y_TOLERANCE ? lastLineGroup : null;
         }
 
         private TextLine toTextLine(List<TextPosition> lineGroup) {
