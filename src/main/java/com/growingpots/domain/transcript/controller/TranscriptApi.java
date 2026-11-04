@@ -26,7 +26,7 @@ public @interface TranscriptApi {
             @ApiResponse(responseCode = "201", description = "PDF 분석 완료 (TRANS_201)"),
             @ApiResponse(responseCode = "400", description = "지원하지 않는 PDF 형식(TRANS_002)"),
             @ApiResponse(responseCode = "401", description = "인증 실패(CMN_005)"),
-            @ApiResponse(responseCode = "413", description = "PDF 용량 초과, 10MB 제한(TRANS_004)"),
+            @ApiResponse(responseCode = "413", description = "PDF 용량 초과, 5MB 제한(TRANS_004)"),
             @ApiResponse(responseCode = "500", description = "PDF 파싱 실패(TRANS_001)")
     })
     @interface UploadTranscript {
