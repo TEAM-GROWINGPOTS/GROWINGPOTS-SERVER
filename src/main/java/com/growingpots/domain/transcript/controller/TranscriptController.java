@@ -25,7 +25,7 @@ public class TranscriptController {
     @TranscriptApi.UploadTranscript
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<BaseResponse<Void>> uploadTranscript(
-            @Parameter(description = "졸업사정관리표 PDF 파일 (최대 5MB)")
+            @Parameter(description = "졸업사정관리표 PDF 파일 (최대 10MB)")
             @RequestParam("file") MultipartFile file,
             Authentication authentication
     ) {
