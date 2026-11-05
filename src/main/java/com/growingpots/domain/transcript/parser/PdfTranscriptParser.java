@@ -1,6 +1,9 @@
 package com.growingpots.domain.transcript.parser;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -16,8 +19,14 @@ import java.util.stream.Collectors;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.contentstream.operator.Operator;
 import org.apache.pdfbox.cos.COSBase;
+import org.apache.pdfbox.cos.COSDocument;
+import org.apache.pdfbox.cos.COSName;
+import org.apache.pdfbox.cos.COSObjectKey;
+import org.apache.pdfbox.cos.COSStream;
+import org.apache.pdfbox.filter.FilterFactory;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.common.PDStream;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.pdfbox.text.TextPosition;
 import org.springframework.stereotype.Component;
@@ -33,6 +42,12 @@ public class PdfTranscriptParser {
     // 글자 없이 그리기 연산만 많거나 폼을 중첩 호출하는 PDF는 글자 수 상한에 걸리지 않아 따로 센다.
     // 로컬 PDF 중 가장 많은 파일이 74,829개다.
     private static final int MAX_OPERATORS = 500_000;
+    // 압축을 풀면 파일 크기의 1,000배까지 커져 메모리가 부족해질 수 있다. 로컬 PDF 중 가장 큰 파일이 4.24MB다.
+    private static final int MAX_DECODED_BYTES = 32 * 1024 * 1024;
+    // 이미지 코덱은 텍스트 추출 때 디코딩하지 않으므로 크기를 재지 않는다.
+    private static final Set<COSName> IMAGE_FILTERS = Set.of(
+            COSName.DCT_DECODE, COSName.DCT_DECODE_ABBREVIATION, COSName.JPX_DECODE,
+            COSName.JBIG2_DECODE, COSName.CCITTFAX_DECODE, COSName.CCITTFAX_DECODE_ABBREVIATION);
     private static final float SAME_LINE_Y_TOLERANCE = 2.5F;
     private static final float SEGMENT_GAP_RATIO = 0.8F;
     private static final Pattern STUDENT_INFO_PATTERN = Pattern.compile(
@@ -99,6 +114,7 @@ public class PdfTranscriptParser {
             if (document.getNumberOfPages() > MAX_PAGES) {
                 throw new PdfParsingException("PDF 페이지 수가 너무 많습니다.");
             }
+            validateDecodedSize(document);
             PositionCollectingTextStripper stripper = new PositionCollectingTextStripper();
             stripper.setSortByPosition(true);
             stripper.writeText(document, new StringWriter());
@@ -108,6 +124,33 @@ public class PdfTranscriptParser {
         } catch (IOException e) {
             throw new PdfParsingException("PDF 파싱에 실패했습니다.", e);
         }
+    }
+
+    // 문서의 모든 스트림을 훑어 폼이나 인라인 이미지까지 함께 잰다. PDFBox의 createInputStream은 전체를
+    // 메모리에 푼 뒤에 돌려주므로 쓸 수 없고, 필터를 직접 호출해 상한을 넘는 순간 중단한다.
+    private void validateDecodedSize(PDDocument document) throws IOException {
+        COSDocument cosDocument = document.getDocument();
+        int remaining = MAX_DECODED_BYTES;
+        for (COSObjectKey key : List.copyOf(cosDocument.getXrefTable().keySet())) {
+            if (cosDocument.getObjectFromPool(key).getObject() instanceof COSStream stream) {
+                remaining -= decodedSize(stream, remaining);
+            }
+        }
+    }
+
+    private int decodedSize(COSStream stream, int limit) throws IOException {
+        int size = 0;
+        try (InputStream raw = stream.createRawInputStream()) {
+            InputStream input = raw;
+            List<COSName> filters = new PDStream(stream).getFilters();
+            for (int index = 0; index < filters.size() && !IMAGE_FILTERS.contains(filters.get(index)); index++) {
+                LimitedOutputStream decoded = new LimitedOutputStream(limit);
+                FilterFactory.INSTANCE.getFilter(filters.get(index)).decode(input, decoded, stream, index);
+                size = decoded.size();
+                input = new ByteArrayInputStream(decoded.toByteArray());
+            }
+        }
+        return size;
     }
 
     private ParsedTranscript toParsedTranscript(List<PageText> pageTexts) {
@@ -1093,6 +1136,33 @@ public class PdfTranscriptParser {
             }
         }
         return -1;
+    }
+
+    private static class LimitedOutputStream extends ByteArrayOutputStream {
+
+        private final int limit;
+
+        LimitedOutputStream(int limit) {
+            this.limit = limit;
+        }
+
+        @Override
+        public synchronized void write(int b) {
+            checkLimit(1);
+            super.write(b);
+        }
+
+        @Override
+        public synchronized void write(byte[] b, int off, int len) {
+            checkLimit(len);
+            super.write(b, off, len);
+        }
+
+        private void checkLimit(int length) {
+            if (length > limit - count) {
+                throw new PdfParsingException("PDF 압축 해제 크기가 너무 큽니다.");
+            }
+        }
     }
 
     private static class PositionCollectingTextStripper extends PDFTextStripper {

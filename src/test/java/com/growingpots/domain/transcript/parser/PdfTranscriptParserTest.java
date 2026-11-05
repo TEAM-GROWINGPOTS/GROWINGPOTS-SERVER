@@ -86,6 +86,59 @@ class PdfTranscriptParserTest {
     }
 
     @Test
+    void acceptsPdfUnderDecodedSizeLimit() throws Exception {
+        assertThat(parser.parse(pdfWithDecodedContent(8 * 1024 * 1024)).courses()).isEmpty();
+    }
+
+    @Test
+    void rejectsPdfOverDecodedSizeLimitWithoutOperators() throws Exception {
+        byte[] pdf = pdfWithDecodedContent(33 * 1024 * 1024);
+
+        assertThatThrownBy(() -> parser.parse(pdf))
+                .isInstanceOf(PdfParsingException.class)
+                .hasMessage("PDF 압축 해제 크기가 너무 큽니다.");
+    }
+
+    @Test
+    void rejectsPdfWhenDecodedSizeOfAllStreamsIsOverLimit() throws Exception {
+        byte[] pdf = pdfWithFormsOfDecodedSize(4, 9 * 1024 * 1024);
+
+        assertThatThrownBy(() -> parser.parse(pdf))
+                .isInstanceOf(PdfParsingException.class)
+                .hasMessage("PDF 압축 해제 크기가 너무 큽니다.");
+    }
+
+    // 연산자 없이 숫자만 넣어 연산 수 상한을 거치지 않고 메모리만 쓰는 콘텐츠를 만든다.
+    private byte[] pdfWithDecodedContent(int bytes) throws Exception {
+        try (PDDocument document = new PDDocument(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            PDPage page = new PDPage();
+            document.addPage(page);
+            byte[] content = "1 ".repeat(bytes / 2).getBytes(StandardCharsets.US_ASCII);
+            page.setContents(new PDStream(document, new ByteArrayInputStream(content), COSName.FLATE_DECODE));
+            document.save(output);
+            return output.toByteArray();
+        }
+    }
+
+    private byte[] pdfWithFormsOfDecodedSize(int forms, int bytesPerForm) throws Exception {
+        try (PDDocument document = new PDDocument(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            PDPage page = new PDPage();
+            document.addPage(page);
+            byte[] content = "1 ".repeat(bytesPerForm / 2).getBytes(StandardCharsets.US_ASCII);
+            try (PDPageContentStream contentStream = new PDPageContentStream(document, page)) {
+                for (int i = 0; i < forms; i++) {
+                    PDFormXObject form = new PDFormXObject(
+                            new PDStream(document, new ByteArrayInputStream(content), COSName.FLATE_DECODE));
+                    form.setBBox(new PDRectangle(100, 100));
+                    contentStream.drawForm(form);
+                }
+            }
+            document.save(output);
+            return output.toByteArray();
+        }
+    }
+
+    @Test
     void acceptsPdfAtCharacterLimitWhenGlyphsMapToMultipleCharacters() throws Exception {
         assertThat(parser.parse(pdfWithThreeCharacterGlyphs(16_666)).courses()).isEmpty();
     }
