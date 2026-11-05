@@ -44,6 +44,9 @@ public class AuthService {
         String accessToken = jwtTokenProvider.generateToken(member.getId().toString());
         String refreshToken = jwtTokenProvider.generateRefreshToken(member.getId().toString());
         member.updateRefreshToken(refreshToken);
+        // REQUIRES_NEW로 생성/재조회된 member는 login() 영속성 컨텍스트에선 detached라, dirty checking만으로는
+        // refreshToken UPDATE가 flush되지 않는다(#283). 명시적으로 저장해 신규 가입·동시요청 패자 모두 반영한다.
+        memberRepository.save(member);
 
         return new LoginResult(accessToken, refreshToken, onboardingCompleted, member.getNickname());
     }
@@ -101,7 +104,9 @@ public class AuthService {
                     try {
                         return memberCreationService.insert(newMember);
                     } catch (DataIntegrityViolationException e) {
-                        return memberRepository.findByOauthProviderAndOauthId(provider, oauthId)
+                        // 동시 요청이 먼저 커밋한 회원을 login()의 RR 스냅샷으로는 못 본다(#283).
+                        // 새 트랜잭션(새 스냅샷)으로 재조회해야 상대가 커밋한 회원을 볼 수 있다.
+                        return memberCreationService.findByOauthInNewTransaction(provider, oauthId)
                                 .orElseThrow(() -> new BaseException(ErrorCode.INTERNAL_SERVER_ERROR));
                     }
                 });
