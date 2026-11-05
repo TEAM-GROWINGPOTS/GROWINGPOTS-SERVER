@@ -1,7 +1,5 @@
 package com.growingpots.domain.transcript.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.growingpots.domain.transcript.parser.ParsedTranscript;
 import com.growingpots.domain.transcript.parser.PdfParsingException;
 import com.growingpots.domain.transcript.parser.PdfTranscriptParser;
@@ -29,7 +27,6 @@ public class TranscriptService {
     private final StudentProfileRepository studentProfileRepository;
     private final PdfTranscriptParser pdfTranscriptParser;
     private final TranscriptPersister transcriptPersister;
-    private final ObjectMapper objectMapper;
 
     public void uploadTranscript(Long memberId, MultipartFile file) {
         StudentProfile studentProfile = findStudentProfile(memberId);
@@ -82,12 +79,8 @@ public class TranscriptService {
         }
     }
 
-    // 자동 파싱 결과를 눈으로 검증하기 위한 용도 (DB에는 courses만 저장)
+    // 이름·학번 등 개인정보가 로그에 남지 않도록 건수만 기록한다.
     private void logForVerification(ParsedTranscript parsed) {
-        try {
-            log.debug("졸업사정표 파싱 결과: {}", objectMapper.writeValueAsString(parsed));
-        } catch (JsonProcessingException e) {
-            log.warn("파싱 결과 로깅 실패: {}", e.getMessage());
-        }
+        log.debug("졸업사정표 파싱 결과: 과목 {}건, 전공 {}건", parsed.courses().size(), parsed.majorRequirements().size());
     }
 }

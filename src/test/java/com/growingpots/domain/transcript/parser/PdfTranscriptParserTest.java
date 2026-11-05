@@ -1,17 +1,28 @@
 package com.growingpots.domain.transcript.parser;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import org.apache.pdfbox.cos.COSName;
+import org.apache.pdfbox.cos.COSStream;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.PDResources;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.common.PDStream;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -44,6 +55,238 @@ class PdfTranscriptParserTest {
 
         assertThat(result.courses()).isEmpty();
         assertThat(result.studentInfo()).isEmpty();
+    }
+
+    @Test
+    void acceptsPdfAtPageLimit() throws Exception {
+        assertThat(parser.parse(pdfWithPages(10)).courses()).isEmpty();
+    }
+
+    @Test
+    void rejectsPdfOverPageLimit() throws Exception {
+        byte[] pdf = pdfWithPages(11);
+
+        assertThatThrownBy(() -> parser.parse(pdf))
+                .isInstanceOf(PdfParsingException.class)
+                .hasMessage("PDF 페이지 수가 너무 많습니다.");
+    }
+
+    @Test
+    void acceptsPdfAtCharacterLimit() throws Exception {
+        assertThat(parser.parse(pdfWithCharacters(50_000)).courses()).isEmpty();
+    }
+
+    @Test
+    void rejectsPdfOverCharacterLimit() throws Exception {
+        byte[] pdf = pdfWithCharacters(50_001);
+
+        assertThatThrownBy(() -> parser.parse(pdf))
+                .isInstanceOf(PdfParsingException.class)
+                .hasMessage("PDF 글자 수가 너무 많습니다.");
+    }
+
+    @Test
+    void acceptsPdfUnderDecodedSizeLimit() throws Exception {
+        assertThat(parser.parse(pdfWithDecodedContent(8 * 1024 * 1024)).courses()).isEmpty();
+    }
+
+    @Test
+    void rejectsPdfOverDecodedSizeLimitWithoutOperators() throws Exception {
+        byte[] pdf = pdfWithDecodedContent(33 * 1024 * 1024);
+
+        assertThatThrownBy(() -> parser.parse(pdf))
+                .isInstanceOf(PdfParsingException.class)
+                .hasMessage("PDF 압축 해제 크기가 너무 큽니다.");
+    }
+
+    @Test
+    void rejectsPdfWhenDecodedSizeOfAllStreamsIsOverLimit() throws Exception {
+        byte[] pdf = pdfWithFormsOfDecodedSize(4, 9 * 1024 * 1024);
+
+        assertThatThrownBy(() -> parser.parse(pdf))
+                .isInstanceOf(PdfParsingException.class)
+                .hasMessage("PDF 압축 해제 크기가 너무 큽니다.");
+    }
+
+    @Test
+    void rejectsPdfOverDecodedSizeLimitWithoutFilter() throws Exception {
+        byte[] content = "1 ".repeat(33 * 1024 * 1024 / 2).getBytes(StandardCharsets.US_ASCII);
+        byte[] pdf;
+        try (PDDocument document = new PDDocument(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            PDPage page = new PDPage();
+            document.addPage(page);
+            page.setContents(new PDStream(document, new ByteArrayInputStream(content)));
+            document.save(output);
+            pdf = output.toByteArray();
+        }
+
+        assertThatThrownBy(() -> parser.parse(pdf))
+                .isInstanceOf(PdfParsingException.class)
+                .hasMessage("PDF 압축 해제 크기가 너무 큽니다.");
+    }
+
+    // 연산자 없이 숫자만 넣어 연산 수 상한을 거치지 않고 메모리만 쓰는 콘텐츠를 만든다.
+    private byte[] pdfWithDecodedContent(int bytes) throws Exception {
+        try (PDDocument document = new PDDocument(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            PDPage page = new PDPage();
+            document.addPage(page);
+            byte[] content = "1 ".repeat(bytes / 2).getBytes(StandardCharsets.US_ASCII);
+            page.setContents(new PDStream(document, new ByteArrayInputStream(content), COSName.FLATE_DECODE));
+            document.save(output);
+            return output.toByteArray();
+        }
+    }
+
+    private byte[] pdfWithFormsOfDecodedSize(int forms, int bytesPerForm) throws Exception {
+        try (PDDocument document = new PDDocument(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            PDPage page = new PDPage();
+            document.addPage(page);
+            byte[] content = "1 ".repeat(bytesPerForm / 2).getBytes(StandardCharsets.US_ASCII);
+            try (PDPageContentStream contentStream = new PDPageContentStream(document, page)) {
+                for (int i = 0; i < forms; i++) {
+                    PDFormXObject form = new PDFormXObject(
+                            new PDStream(document, new ByteArrayInputStream(content), COSName.FLATE_DECODE));
+                    form.setBBox(new PDRectangle(100, 100));
+                    contentStream.drawForm(form);
+                }
+            }
+            document.save(output);
+            return output.toByteArray();
+        }
+    }
+
+    @Test
+    void acceptsPdfAtCharacterLimitWhenGlyphsMapToMultipleCharacters() throws Exception {
+        assertThat(parser.parse(pdfWithThreeCharacterGlyphs(16_666)).courses()).isEmpty();
+    }
+
+    @Test
+    void rejectsPdfOverCharacterLimitWhenGlyphsMapToMultipleCharacters() throws Exception {
+        byte[] pdf = pdfWithThreeCharacterGlyphs(16_667);
+
+        assertThatThrownBy(() -> parser.parse(pdf))
+                .isInstanceOf(PdfParsingException.class)
+                .hasMessage("PDF 글자 수가 너무 많습니다.");
+    }
+
+    // ToUnicode로 글리프 "A" 하나를 3글자로 매핑한다.
+    private byte[] pdfWithThreeCharacterGlyphs(int glyphs) throws Exception {
+        try (PDDocument document = new PDDocument(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            PDPage page = new PDPage();
+            document.addPage(page);
+            PDType1Font font = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+            String toUnicode = """
+                    begincmap
+                    1 begincodespacerange
+                    <00> <FF>
+                    endcodespacerange
+                    1 beginbfchar
+                    <41> <005800580058>
+                    endbfchar
+                    endcmap
+                    """;
+            COSStream toUnicodeStream = document.getDocument().createCOSStream();
+            try (OutputStream stream = toUnicodeStream.createOutputStream()) {
+                stream.write(toUnicode.getBytes(StandardCharsets.US_ASCII));
+            }
+            font.getCOSObject().setItem(COSName.TO_UNICODE, toUnicodeStream);
+            try (PDPageContentStream contentStream = new PDPageContentStream(document, page)) {
+                contentStream.beginText();
+                contentStream.setFont(font, 1);
+                contentStream.newLineAtOffset(10, 700);
+                contentStream.showText("A".repeat(glyphs));
+                contentStream.endText();
+            }
+            document.save(output);
+            return output.toByteArray();
+        }
+    }
+
+    @Test
+    void acceptsPdfAtOperatorLimit() throws Exception {
+        assertThat(parser.parse(pdfWithOperators(500_000)).courses()).isEmpty();
+    }
+
+    @Test
+    void rejectsPdfOverOperatorLimitWithoutText() throws Exception {
+        byte[] pdf = pdfWithOperators(500_001);
+
+        assertThatThrownBy(() -> parser.parse(pdf))
+                .isInstanceOf(PdfParsingException.class)
+                .hasMessage("PDF 연산 수가 너무 많습니다.");
+    }
+
+    @Test
+    void rejectsPdfWithDeeplyNestedForms() throws Exception {
+        byte[] pdf = pdfWithNestedForms(8, 10);
+
+        assertThatThrownBy(() -> parser.parse(pdf))
+                .isInstanceOf(PdfParsingException.class)
+                .hasMessage("PDF 연산 수가 너무 많습니다.");
+    }
+
+    private byte[] pdfWithOperators(int operators) throws Exception {
+        try (PDDocument document = new PDDocument(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            PDPage page = new PDPage();
+            document.addPage(page);
+            byte[] content = "n\n".repeat(operators).getBytes(StandardCharsets.US_ASCII);
+            page.setContents(new PDStream(document, new ByteArrayInputStream(content), COSName.FLATE_DECODE));
+            document.save(output);
+            return output.toByteArray();
+        }
+    }
+
+    // 폼이 다음 폼을 fanOut번 호출하도록 중첩해, 작은 파일로도 연산 수가 기하급수로 늘어나게 만든다.
+    private byte[] pdfWithNestedForms(int depth, int fanOut) throws Exception {
+        try (PDDocument document = new PDDocument(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            PDPage page = new PDPage();
+            document.addPage(page);
+            PDFormXObject form = null;
+            for (int level = 0; level < depth; level++) {
+                PDFormXObject next = new PDFormXObject(document);
+                next.setBBox(new PDRectangle(100, 100));
+                PDResources resources = new PDResources();
+                next.setResources(resources);
+                String content = form == null
+                        ? "n\n"
+                        : ("/" + resources.add(form).getName() + " Do\n").repeat(fanOut);
+                try (OutputStream stream = next.getCOSObject().createOutputStream()) {
+                    stream.write(content.getBytes(StandardCharsets.US_ASCII));
+                }
+                form = next;
+            }
+            try (PDPageContentStream contentStream = new PDPageContentStream(document, page)) {
+                contentStream.drawForm(form);
+            }
+            document.save(output);
+            return output.toByteArray();
+        }
+    }
+
+    private byte[] pdfWithPages(int pages) throws Exception {
+        try (PDDocument document = new PDDocument(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            for (int i = 0; i < pages; i++) {
+                document.addPage(new PDPage());
+            }
+            document.save(output);
+            return output.toByteArray();
+        }
+    }
+
+    private byte[] pdfWithCharacters(int characters) throws Exception {
+        try (PDDocument document = new PDDocument(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            PDPage page = new PDPage();
+            document.addPage(page);
+            try (PDPageContentStream contentStream = new PDPageContentStream(document, page)) {
+                contentStream.beginText();
+                contentStream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 1);
+                contentStream.newLineAtOffset(10, 700);
+                contentStream.showText("A".repeat(characters));
+                contentStream.endText();
+            }
+            document.save(output);
+            return output.toByteArray();
+        }
     }
 
     @Test
