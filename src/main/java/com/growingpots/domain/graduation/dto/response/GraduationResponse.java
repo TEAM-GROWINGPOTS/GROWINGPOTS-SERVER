@@ -182,7 +182,7 @@ public class GraduationResponse {
         @Schema(description = "요건 충족 여부")
         private final boolean satisfied;
 
-        @Schema(description = "연결 과목 중 이수(COMPLETED)한 학점 합계. source=PLANNED면 계획 과목 학점도 합산")
+        @Schema(description = "연결 과목 중 이수 완료(COMPLETED) + 수강 중(IN_PROGRESS)인 학점 합계. source=PLANNED면 계획 과목 학점도 합산")
         private final int totalCredit;
 
         @Schema(description = "미충족 하위조건 안내 문구 목록. 학점 기준 조건은 조건별로 한 줄씩 "
