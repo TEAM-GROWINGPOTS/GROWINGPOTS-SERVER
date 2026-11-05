@@ -46,7 +46,8 @@ public class AuthService {
         member.updateRefreshToken(refreshToken);
         // REQUIRES_NEW로 생성/재조회된 member는 login() 영속성 컨텍스트에선 detached라, dirty checking만으로는
         // refreshToken UPDATE가 flush되지 않는다(#283). 명시적으로 저장해 신규 가입·동시요청 패자 모두 반영한다.
-        memberRepository.save(member);
+        // detached면 save()는 merge라 관리되는 새 인스턴스를 반환하므로, 이후 사용을 위해 그 반환값으로 교체한다.
+        member = memberRepository.save(member);
 
         return new LoginResult(accessToken, refreshToken, onboardingCompleted, member.getNickname());
     }
