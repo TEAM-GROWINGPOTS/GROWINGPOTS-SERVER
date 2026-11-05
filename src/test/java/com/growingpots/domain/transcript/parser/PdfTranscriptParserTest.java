@@ -108,6 +108,23 @@ class PdfTranscriptParserTest {
                 .hasMessage("PDF 압축 해제 크기가 너무 큽니다.");
     }
 
+    @Test
+    void rejectsPdfOverDecodedSizeLimitWithoutFilter() throws Exception {
+        byte[] content = "1 ".repeat(33 * 1024 * 1024 / 2).getBytes(StandardCharsets.US_ASCII);
+        byte[] pdf;
+        try (PDDocument document = new PDDocument(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            PDPage page = new PDPage();
+            document.addPage(page);
+            page.setContents(new PDStream(document, new ByteArrayInputStream(content)));
+            document.save(output);
+            pdf = output.toByteArray();
+        }
+
+        assertThatThrownBy(() -> parser.parse(pdf))
+                .isInstanceOf(PdfParsingException.class)
+                .hasMessage("PDF 압축 해제 크기가 너무 큽니다.");
+    }
+
     // 연산자 없이 숫자만 넣어 연산 수 상한을 거치지 않고 메모리만 쓰는 콘텐츠를 만든다.
     private byte[] pdfWithDecodedContent(int bytes) throws Exception {
         try (PDDocument document = new PDDocument(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {

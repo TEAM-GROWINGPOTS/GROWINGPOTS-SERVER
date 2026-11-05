@@ -143,6 +143,11 @@ public class PdfTranscriptParser {
         try (InputStream raw = stream.createRawInputStream()) {
             InputStream input = raw;
             List<COSName> filters = new PDStream(stream).getFilters();
+            if (filters.isEmpty()) {
+                LimitedOutputStream counted = new LimitedOutputStream(limit);
+                raw.transferTo(counted);
+                return counted.size();
+            }
             for (int index = 0; index < filters.size() && !IMAGE_FILTERS.contains(filters.get(index)); index++) {
                 LimitedOutputStream decoded = new LimitedOutputStream(limit);
                 FilterFactory.INSTANCE.getFilter(filters.get(index)).decode(input, decoded, stream, index);
