@@ -1118,7 +1118,10 @@ public class PdfTranscriptParser {
         // writeString은 페이지를 다 읽은 뒤에 호출되므로, 읽는 도중에 중단할 수 있도록 여기서 센다.
         @Override
         protected void processTextPosition(TextPosition text) {
-            if (++characterCount > MAX_CHARACTERS) {
+            // 글리프 하나가 여러 글자로 매핑될 수 있어 호출 횟수가 아니라 글자 수를 더한다.
+            String unicode = text.getUnicode();
+            characterCount += Math.max(1, unicode == null ? 0 : unicode.length());
+            if (characterCount > MAX_CHARACTERS) {
                 throw new PdfParsingException("PDF 글자 수가 너무 많습니다.");
             }
             super.processTextPosition(text);

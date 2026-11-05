@@ -13,6 +13,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import org.apache.pdfbox.cos.COSName;
+import org.apache.pdfbox.cos.COSStream;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -82,6 +83,53 @@ class PdfTranscriptParserTest {
         assertThatThrownBy(() -> parser.parse(pdf))
                 .isInstanceOf(PdfParsingException.class)
                 .hasMessage("PDF 글자 수가 너무 많습니다.");
+    }
+
+    @Test
+    void acceptsPdfAtCharacterLimitWhenGlyphsMapToMultipleCharacters() throws Exception {
+        assertThat(parser.parse(pdfWithThreeCharacterGlyphs(16_666)).courses()).isEmpty();
+    }
+
+    @Test
+    void rejectsPdfOverCharacterLimitWhenGlyphsMapToMultipleCharacters() throws Exception {
+        byte[] pdf = pdfWithThreeCharacterGlyphs(16_667);
+
+        assertThatThrownBy(() -> parser.parse(pdf))
+                .isInstanceOf(PdfParsingException.class)
+                .hasMessage("PDF 글자 수가 너무 많습니다.");
+    }
+
+    // ToUnicode로 글리프 "A" 하나를 3글자로 매핑한다.
+    private byte[] pdfWithThreeCharacterGlyphs(int glyphs) throws Exception {
+        try (PDDocument document = new PDDocument(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            PDPage page = new PDPage();
+            document.addPage(page);
+            PDType1Font font = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+            String toUnicode = """
+                    begincmap
+                    1 begincodespacerange
+                    <00> <FF>
+                    endcodespacerange
+                    1 beginbfchar
+                    <41> <005800580058>
+                    endbfchar
+                    endcmap
+                    """;
+            COSStream toUnicodeStream = document.getDocument().createCOSStream();
+            try (OutputStream stream = toUnicodeStream.createOutputStream()) {
+                stream.write(toUnicode.getBytes(StandardCharsets.US_ASCII));
+            }
+            font.getCOSObject().setItem(COSName.TO_UNICODE, toUnicodeStream);
+            try (PDPageContentStream contentStream = new PDPageContentStream(document, page)) {
+                contentStream.beginText();
+                contentStream.setFont(font, 1);
+                contentStream.newLineAtOffset(10, 700);
+                contentStream.showText("A".repeat(glyphs));
+                contentStream.endText();
+            }
+            document.save(output);
+            return output.toByteArray();
+        }
     }
 
     @Test
