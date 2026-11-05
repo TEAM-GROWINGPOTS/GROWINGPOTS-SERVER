@@ -14,6 +14,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.contentstream.operator.Operator;
+import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.text.PDFTextStripper;
@@ -28,6 +30,9 @@ public class PdfTranscriptParser {
     // 최대 2페이지, 3,398자여서 정상 파일이 걸리지 않도록 여유 있게 잡았다.
     private static final int MAX_PAGES = 10;
     private static final int MAX_CHARACTERS = 50_000;
+    // 글자 없이 그리기 연산만 많거나 폼을 중첩 호출하는 PDF는 글자 수 상한에 걸리지 않아 따로 센다.
+    // 로컬 PDF 중 가장 많은 파일이 74,829개다.
+    private static final int MAX_OPERATORS = 500_000;
     private static final float SAME_LINE_Y_TOLERANCE = 2.5F;
     private static final float SEGMENT_GAP_RATIO = 0.8F;
     private static final Pattern STUDENT_INFO_PATTERN = Pattern.compile(
@@ -1096,9 +1101,18 @@ public class PdfTranscriptParser {
         private int currentPageNumber;
         private List<TextPosition> currentPositions = new ArrayList<>();
         private int characterCount;
+        private int operatorCount;
 
         PositionCollectingTextStripper() throws IOException {
             super();
+        }
+
+        @Override
+        protected void processOperator(Operator operator, List<COSBase> operands) throws IOException {
+            if (++operatorCount > MAX_OPERATORS) {
+                throw new PdfParsingException("PDF 연산 수가 너무 많습니다.");
+            }
+            super.processOperator(operator, operands);
         }
 
         // writeString은 페이지를 다 읽은 뒤에 호출되므로, 읽는 도중에 중단할 수 있도록 여기서 센다.

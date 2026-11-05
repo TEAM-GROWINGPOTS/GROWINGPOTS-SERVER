@@ -4,16 +4,24 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.PDResources;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.common.PDStream;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -74,6 +82,67 @@ class PdfTranscriptParserTest {
         assertThatThrownBy(() -> parser.parse(pdf))
                 .isInstanceOf(PdfParsingException.class)
                 .hasMessage("PDF 글자 수가 너무 많습니다.");
+    }
+
+    @Test
+    void acceptsPdfAtOperatorLimit() throws Exception {
+        assertThat(parser.parse(pdfWithOperators(500_000)).courses()).isEmpty();
+    }
+
+    @Test
+    void rejectsPdfOverOperatorLimitWithoutText() throws Exception {
+        byte[] pdf = pdfWithOperators(500_001);
+
+        assertThatThrownBy(() -> parser.parse(pdf))
+                .isInstanceOf(PdfParsingException.class)
+                .hasMessage("PDF 연산 수가 너무 많습니다.");
+    }
+
+    @Test
+    void rejectsPdfWithDeeplyNestedForms() throws Exception {
+        byte[] pdf = pdfWithNestedForms(8, 10);
+
+        assertThatThrownBy(() -> parser.parse(pdf))
+                .isInstanceOf(PdfParsingException.class)
+                .hasMessage("PDF 연산 수가 너무 많습니다.");
+    }
+
+    private byte[] pdfWithOperators(int operators) throws Exception {
+        try (PDDocument document = new PDDocument(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            PDPage page = new PDPage();
+            document.addPage(page);
+            byte[] content = "n\n".repeat(operators).getBytes(StandardCharsets.US_ASCII);
+            page.setContents(new PDStream(document, new ByteArrayInputStream(content), COSName.FLATE_DECODE));
+            document.save(output);
+            return output.toByteArray();
+        }
+    }
+
+    // 폼이 다음 폼을 fanOut번 호출하도록 중첩해, 작은 파일로도 연산 수가 기하급수로 늘어나게 만든다.
+    private byte[] pdfWithNestedForms(int depth, int fanOut) throws Exception {
+        try (PDDocument document = new PDDocument(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            PDPage page = new PDPage();
+            document.addPage(page);
+            PDFormXObject form = null;
+            for (int level = 0; level < depth; level++) {
+                PDFormXObject next = new PDFormXObject(document);
+                next.setBBox(new PDRectangle(100, 100));
+                PDResources resources = new PDResources();
+                next.setResources(resources);
+                String content = form == null
+                        ? "n\n"
+                        : ("/" + resources.add(form).getName() + " Do\n").repeat(fanOut);
+                try (OutputStream stream = next.getCOSObject().createOutputStream()) {
+                    stream.write(content.getBytes(StandardCharsets.US_ASCII));
+                }
+                form = next;
+            }
+            try (PDPageContentStream contentStream = new PDPageContentStream(document, page)) {
+                contentStream.drawForm(form);
+            }
+            document.save(output);
+            return output.toByteArray();
+        }
     }
 
     private byte[] pdfWithPages(int pages) throws Exception {
