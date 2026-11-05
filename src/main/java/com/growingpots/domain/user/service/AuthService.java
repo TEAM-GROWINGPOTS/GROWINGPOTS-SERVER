@@ -14,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
@@ -30,7 +31,10 @@ public class AuthService {
     public record LoginResult(String accessToken, String refreshToken, boolean onboardingCompleted, String nickname) {}
     public record ReissueResult(String accessToken, String refreshToken) {}
 
-    @Transactional
+    // 신규 회원은 insert()(REQUIRES_NEW)가 login()의 첫 조회 '이후'에 커밋하는데, 기본 격리(RR)에선 login()이
+    // 첫 조회 시점 스냅샷을 고정해 그 회원을 못 본다(#283) - 재조회·refreshToken 저장(merge)이 모두 실패한다.
+    // READ_COMMITTED는 조회마다 최신 커밋을 보므로 같은 트랜잭션에서 해결된다(격리수준 조정 선례: #268 PlannerService).
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public LoginResult login(OAuthLoginRequest request) {
         OauthProvider provider = parseProvider(request.provider());
         KakaoUserInfoResponse userInfo = kakaoOAuthClient.getUserInfo(request.oauthAccessToken());
@@ -43,10 +47,10 @@ public class AuthService {
 
         String accessToken = jwtTokenProvider.generateToken(member.getId().toString());
         String refreshToken = jwtTokenProvider.generateRefreshToken(member.getId().toString());
-        // member는 신규 가입(insert)·동시요청 패자(재조회) 경로에서 login() 기준 detached이고, login()의 RR
-        // 스냅샷엔 방금 커밋된 행이 보이지 않아 여기서 직접 저장(merge)하면 실패한다(#283). refreshToken 저장을
-        // 새 트랜잭션(새 스냅샷에서 id로 재조회 후 갱신)에 위임한다.
-        memberCreationService.updateRefreshTokenInNewTransaction(member.getId(), refreshToken);
+        // 신규 가입 경로의 member는 insert()(REQUIRES_NEW)에서 와 detached지만, READ_COMMITTED라 save()의 merge
+        // 조회가 방금 커밋된 행을 보므로 갱신이 반영된다. 기존 회원은 managed라 save()가 사실상 no-op이다(#283).
+        member.updateRefreshToken(refreshToken);
+        member = memberRepository.save(member);
 
         return new LoginResult(accessToken, refreshToken, onboardingCompleted, member.getNickname());
     }
@@ -104,9 +108,8 @@ public class AuthService {
                     try {
                         return memberCreationService.insert(newMember);
                     } catch (DataIntegrityViolationException e) {
-                        // 동시 요청이 먼저 커밋한 회원을 login()의 RR 스냅샷으로는 못 본다(#283).
-                        // 새 트랜잭션(새 스냅샷)으로 재조회해야 상대가 커밋한 회원을 볼 수 있다.
-                        return memberCreationService.findByOauthInNewTransaction(provider, oauthId)
+                        // 동시 요청이 먼저 커밋한 회원을 재조회한다. READ_COMMITTED라 같은 트랜잭션에서도 커밋된 행이 보인다(#283).
+                        return memberRepository.findByOauthProviderAndOauthId(provider, oauthId)
                                 .orElseThrow(() -> new BaseException(ErrorCode.INTERNAL_SERVER_ERROR));
                     }
                 });
