@@ -1,3 +1,9 @@
+# actuator(헬스체크, 지표)는 서버 안에서만 접근하는 관리 포트로 분리한다(#295). dev(18091)와 같은 서버라 포트를 다르게 둔다.
+management:
+  server:
+    port: 8090
+    address: 127.0.0.1
+
 spring:
   datasource:
     url: ${DB_URL}
