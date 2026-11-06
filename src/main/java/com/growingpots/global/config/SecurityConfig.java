@@ -31,6 +31,8 @@ public class SecurityConfig {
             "/swagger-ui/**",
             "/swagger-ui.html",
             "/v3/api-docs/**",
+            // dev/prod에선 actuator가 127.0.0.1에만 열린 관리 포트로 분리돼 앱 포트에는 이 경로가 없다(#295).
+            // 관리 포트에도 이 보안 설정이 적용되므로, 여기서 빼면 서버 안의 헬스체크·지표 수집도 401로 막힌다.
             "/actuator/health",
             "/actuator/prometheus",
             "/api/v1/dev/**"
