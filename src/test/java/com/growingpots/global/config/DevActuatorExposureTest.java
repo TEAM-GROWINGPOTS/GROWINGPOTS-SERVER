@@ -19,7 +19,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.test.context.ActiveProfiles;
 
-// dev 설정 파일을 그대로 불러와 actuator가 내부 관리 포트로만 열리는지 확인한다(#295).
+// dev 설정 파일을 그대로 불러와 actuator는 내부 관리 포트로만 열리고, 프론트 협업용 Swagger는 유지되는지 확인한다(#295).
 // 테스트는 기본으로 지표 내보내기를 꺼서 /actuator/prometheus가 아예 없다. 실제와 같게 켠다.
 @AutoConfigureObservability(tracing = false)
 @ActiveProfiles({"dev", "test"})
@@ -69,6 +69,12 @@ class DevActuatorExposureTest {
 
         assertThat(response.statusCode()).isNotEqualTo(200);
         assertThat(response.body()).doesNotContain("jvm_memory");
+    }
+
+    @Test
+    void 앱_포트에서_Swagger와_API_문서를_조회할_수_있다() throws Exception {
+        assertThat(get(serverPort, "/v3/api-docs").statusCode()).isEqualTo(200);
+        assertThat(get(serverPort, "/swagger-ui/index.html").statusCode()).isEqualTo(200);
     }
 
     private HttpResponse<String> get(int port, String path) throws Exception {

@@ -35,3 +35,10 @@ discord:
 logging:
   level:
     com.growingpots: info
+
+# prod에선 API 목록이 외부에 보이지 않게 Swagger와 API 문서를 끈다(#295). 프론트 협업용 dev는 유지한다.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

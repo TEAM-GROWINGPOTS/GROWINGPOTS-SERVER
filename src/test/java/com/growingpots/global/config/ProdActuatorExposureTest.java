@@ -18,7 +18,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.test.context.ActiveProfiles;
 
-// prod 설정 파일을 그대로 불러와 actuator가 외부에 노출되지 않는지 확인한다(#295).
+// prod 설정 파일을 그대로 불러와 actuator와 Swagger가 외부에 노출되지 않는지 확인한다(#295).
 // 포트만 테스트용 임의 포트로 바꾸고, 나머지 값은 application-prod.yml을 따른다.
 // 테스트는 기본으로 지표 내보내기를 꺼서 /actuator/prometheus가 아예 없다. 실제와 같게 켠다.
 @AutoConfigureObservability(tracing = false)
@@ -70,6 +70,16 @@ class ProdActuatorExposureTest {
 
         assertThat(response.statusCode()).isNotEqualTo(200);
         assertThat(response.body()).doesNotContain("jvm_memory");
+    }
+
+    @Test
+    void 앱_포트에서_Swagger와_API_문서를_조회할_수_없다() throws Exception {
+        HttpResponse<String> apiDocs = get(serverPort, "/v3/api-docs");
+        HttpResponse<String> swaggerUi = get(serverPort, "/swagger-ui/index.html");
+
+        assertThat(apiDocs.statusCode()).isNotEqualTo(200);
+        assertThat(apiDocs.body()).doesNotContain("openapi");
+        assertThat(swaggerUi.statusCode()).isNotEqualTo(200);
     }
 
     private HttpResponse<String> get(int port, String path) throws Exception {
