@@ -8,6 +8,9 @@ spring:
     hibernate:
       ddl-auto: create-drop
     open-in-view: false
+  # 마이그레이션은 MySQL 문법이라 H2에서 돌지 않는다. 테스트는 엔티티로 스키마를 만들고, 마이그레이션은 MigrationVerificationTest로 따로 검증한다.
+  flyway:
+    enabled: false
   security:
     oauth2:
       client:

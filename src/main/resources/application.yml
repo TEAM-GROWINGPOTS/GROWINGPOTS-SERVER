@@ -7,6 +7,11 @@ spring:
     multipart:
       max-file-size: 10MB
       max-request-size: 10MB
+  # 스키마는 db/migration의 마이그레이션 파일로만 바꾸고, Hibernate는 validate로 엔티티와 맞는지만 확인한다(#284).
+  # 테이블이 있는데 Flyway 기록이 없는 DB는 기본적으로 실행을 거부한다. 이미 쓰던 dev만 application-dev.yml에서 baseline을 켠다.
+  flyway:
+    enabled: true
+    baseline-on-migrate: false
 
 server:
   port: 8080
