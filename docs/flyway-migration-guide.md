@@ -1,6 +1,8 @@
 # Flyway 마이그레이션 작성 규칙
 
-스키마는 이제 Hibernate가 자동으로 바꾸지 않음. 엔티티를 바꾸면 `src/main/resources/db/migration`에 마이그레이션 파일을 같이 추가해야 함. local, dev, prod 모두 `ddl-auto: validate`라서, 마이그레이션을 빠뜨리면 앱이 안 뜸.
+스키마는 이제 Hibernate가 자동으로 바꾸지 않음. 엔티티를 바꾸면 `src/main/resources/db/migration`에 마이그레이션 파일을 같이 추가해야 함. local, dev, prod 모두 `ddl-auto: validate`라서, 테이블이나 컬럼을 마이그레이션에서 빠뜨리면 앱이 안 뜸.
+
+단 `validate`는 테이블·컬럼이 있는지와 타입만 확인함. 인덱스, 유니크, 외래 키, NOT NULL은 마이그레이션에서 빠뜨려도 앱이 그냥 뜸. 이런 걸 바꿨으면 마이그레이션에 들어갔는지 PR에서 직접 확인해야 함.
 
 ## 기본 규칙
 
@@ -59,6 +61,17 @@ docker rm -f growingpots-migration
 
 환경 변수가 없으면 이 테스트는 건너뜀. 다시 돌릴 때는 빈 DB로 해야 하니 컨테이너를 새로 띄우면 됨.
 
+이 테스트도 같은 `validate`를 써서 인덱스·유니크·외래 키·NOT NULL 누락은 못 잡음 (V1에서 일부러 빼고 돌려 봤는데 통과함).
+
+## 마이그레이션이 실패했을 때
+
+MySQL은 테이블 생성·변경을 되돌리지 못함. 그래서 마이그레이션이 중간에 실패하면 일부만 적용된 채로 남고, `flyway_schema_history`에 실패 기록(`success = 0`)이 남음. 이 상태로는 다음 배포 때 Flyway가 실행을 거부함.
+
+- **빈 DB에 V1을 처음 적용하다 실패한 경우** (local, prod 첫 배포): 데이터가 없으니 `flyway_schema_history`까지 테이블을 전부 지우고, 원인을 고친 뒤 다시 배포
+- **데이터가 있는 DB에서 V2 이후가 실패한 경우**: 테이블을 지우면 안 됨. 실패한 마이그레이션에서 이미 적용된 부분을 직접 되돌리고, `flyway_schema_history`에서 실패 기록 행을 지운 뒤, 마이그레이션을 고쳐서 다시 배포
+
+두 번째 경우 때문에 마이그레이션 파일 하나에는 관련된 변경만 작게 넣는 게 좋음. 어디까지 적용됐는지 찾기 쉬움.
+
 ## prod 첫 배포 때 할 것
 
 prod DB(`growingpots_prod`)에는 Flyway 도입 전 예전 구조의 테이블이 남아 있음. prod는 아직 연 적이 없어서 데이터를 보존하지 않고 새로 만들기로 함.
@@ -66,3 +79,4 @@ prod DB(`growingpots_prod`)에는 Flyway 도입 전 예전 구조의 테이블�
 1. 혹시 모르니 prod DB 백업
 2. `growingpots_prod`의 테이블을 전부 지움 (DB는 그대로 둠)
 3. 배포하면 Flyway가 V1부터 적용함
+4. V1이 중간에 실패하면 위의 "마이그레이션이 실패했을 때"의 첫 번째 경우대로 정리하고 다시 배포
