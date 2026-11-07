@@ -59,4 +59,6 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+	// MigrationVerificationTest는 이 환경 변수가 있을 때만 돈다. Gradle은 환경 변수 변화를 모르고 이전 결과를 재사용하므로 입력값으로 등록한다.
+	inputs.property('migrationTestDbUrl', System.getenv('MIGRATION_TEST_DB_URL') ?: '')
 }
