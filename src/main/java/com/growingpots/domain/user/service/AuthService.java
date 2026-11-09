@@ -30,7 +30,12 @@ public class AuthService {
     public record LoginResult(String accessToken, String refreshToken, boolean onboardingCompleted, String nickname) {}
     public record ReissueResult(String accessToken, String refreshToken) {}
 
-    @Transactional
+    // login()에는 의도적으로 @Transactional을 걸지 않는다(#294). 하나의 긴 트랜잭션으로 묶으면 카카오 API 호출과
+    // insert()(REQUIRES_NEW) 중첩 동안 커넥션을 최대 2개까지 쥐어, 신규 가입이 풀 크기만큼 몰리면 풀이 고갈된다.
+    // 조회/생성/토큰저장을 각각 짧은 개별 트랜잭션으로 나눠 한 번에 커넥션 1개만 쓰게 한다. 단계마다 새 트랜잭션
+    // (새 스냅샷)이라 기본 격리(RR)에서도 방금 커밋된 회원이 보이므로 격리수준 조정이나 merge가 필요 없다(#283).
+    // 트레이드오프: 로그인이 원자적이지 않다 - 회원 생성 후 토큰 저장이 실패하면 토큰만 누락될 수 있으나,
+    // insert()가 이미 REQUIRES_NEW라 원래도 비원자적이었고 재로그인으로 복구된다.
     public LoginResult login(OAuthLoginRequest request) {
         OauthProvider provider = parseProvider(request.provider());
         KakaoUserInfoResponse userInfo = kakaoOAuthClient.getUserInfo(request.oauthAccessToken());
@@ -43,7 +48,9 @@ public class AuthService {
 
         String accessToken = jwtTokenProvider.generateToken(member.getId().toString());
         String refreshToken = jwtTokenProvider.generateRefreshToken(member.getId().toString());
-        member.updateRefreshToken(refreshToken);
+        // refreshToken 저장은 별도의 짧은 트랜잭션에 위임한다. 새 트랜잭션에서 id로 다시 조회하면 managed 상태라
+        // dirty checking으로 갱신이 반영되고, login()이 트랜잭션을 쥐고 있지 않아 커넥션도 1개만 쓴다(#283, #294).
+        memberCreationService.updateRefreshToken(member.getId(), refreshToken);
 
         return new LoginResult(accessToken, refreshToken, onboardingCompleted, member.getNickname());
     }
@@ -101,6 +108,7 @@ public class AuthService {
                     try {
                         return memberCreationService.insert(newMember);
                     } catch (DataIntegrityViolationException e) {
+                        // 동시 요청이 먼저 커밋한 회원을 재조회한다. login()은 트랜잭션 밖이라 이 조회가 새 스냅샷으로 실행돼 그 회원이 보인다(#283).
                         return memberRepository.findByOauthProviderAndOauthId(provider, oauthId)
                                 .orElseThrow(() -> new BaseException(ErrorCode.INTERNAL_SERVER_ERROR));
                     }

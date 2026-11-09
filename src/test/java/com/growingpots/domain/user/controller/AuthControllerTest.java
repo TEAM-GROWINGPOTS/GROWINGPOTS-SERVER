@@ -31,6 +31,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -105,6 +106,25 @@ class AuthControllerTest {
                 .andExpect(cookie().httpOnly("accessToken", true))
                 .andExpect(cookie().exists("refreshToken"))
                 .andExpect(cookie().httpOnly("refreshToken", true));
+    }
+
+    // 신규 유저 첫 로그인 시 refreshToken이 DB에 저장돼야 한다(#283) - insert()가 REQUIRES_NEW라 반환된
+    // member가 detached여서 예전엔 dirty checking으로 flush되지 않아 null로 남았고, 그 세션 재발급이 401이었다.
+    @Test
+    void 신규_로그인_시_refreshToken이_DB에_저장된다() throws Exception {
+        when(kakaoOAuthClient.getUserInfo(anyString())).thenReturn(
+                new KakaoUserInfoResponse(3001L,
+                        new KakaoUserInfoResponse.Properties("신규회원"),
+                        new KakaoUserInfoResponse.KakaoAccount("new@example.com")));
+
+        mockMvc.perform(post("/api/v1/auth/oauth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new LoginRequestFixture("KAKAO", "kakao_access_token_xxx"))))
+                .andExpect(status().isOk());
+
+        Member saved = memberRepository.findByOauthProviderAndOauthId(OauthProvider.KAKAO, "3001").orElseThrow();
+        assertThat(saved.getRefreshToken()).isNotBlank();
     }
 
     // 기본정보입력만 하고 PDF를 아직 안 올린 상태(GraduationAnalysisSummary 없음)는 온보딩 완료가
