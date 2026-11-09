@@ -83,7 +83,8 @@ jobs:
             java -jar "${APP_JAR}" --spring.profiles.active=prod > "${APP_LOG}" 2>&1 &
 
           for i in $(seq 1 30); do
-            if curl -sf http://localhost:8080/actuator/health > /dev/null 2>&1; then
+            # actuator는 127.0.0.1에만 열린 관리 포트(8090)에 있다(#295)
+            if curl -sf http://127.0.0.1:8090/actuator/health > /dev/null 2>&1; then
               echo "Application started successfully"
               break
             fi
