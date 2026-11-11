@@ -6,15 +6,13 @@ import com.growingpots.global.exception.BaseException;
 import com.growingpots.global.response.BaseResponse;
 import com.growingpots.global.response.error.ErrorCode;
 import com.growingpots.global.response.success.SuccessCode;
+import com.growingpots.global.security.AuthCookieProvider;
 import com.growingpots.global.security.JwtTokenProvider;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.ResponseCookie;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -31,12 +29,7 @@ public class DevTokenController {
 
     private final MemberRepository memberRepository;
     private final JwtTokenProvider jwtTokenProvider;
-
-    @Value("${cookie.secure:true}")
-    private boolean cookieSecure;
-
-    @Value("${cookie.same-site:None}")
-    private String cookieSameSite;
+    private final AuthCookieProvider authCookieProvider;
 
     @Operation(
             summary = "[개발용] 임시 토큰 발급",
@@ -54,24 +47,8 @@ public class DevTokenController {
         String refreshToken = jwtTokenProvider.generateRefreshToken(memberId.toString());
         member.updateRefreshToken(refreshToken);
 
-        // AuthController와 동일하게 accessToken도 쿠키로 내려줘야 실제 인증에 쓸 수 있다
-        // (JwtAuthenticationFilter가 이제 accessToken 쿠키만 보고, Authorization 헤더는 안 봄).
-        response.addHeader(HttpHeaders.SET_COOKIE, ResponseCookie.from("accessToken", accessToken)
-                .httpOnly(true)
-                .secure(cookieSecure)
-                .path("/api")
-                .maxAge(jwtTokenProvider.getExpirationSeconds())
-                .sameSite(cookieSameSite)
-                .build()
-                .toString());
-        response.addHeader(HttpHeaders.SET_COOKIE, ResponseCookie.from("refreshToken", refreshToken)
-                .httpOnly(true)
-                .secure(cookieSecure)
-                .path("/api/v1/auth/reissue")
-                .maxAge(jwtTokenProvider.getRefreshExpirationSeconds())
-                .sameSite(cookieSameSite)
-                .build()
-                .toString());
+        // 실제 로그인과 동일하게 accessToken/refreshToken 쿠키를 내려줘야 인증·재발급 테스트에 쓸 수 있다.
+        authCookieProvider.setAuthCookies(response, accessToken, refreshToken);
 
         return BaseResponse.success(SuccessCode.OK, new DevTokenResponse(accessToken, refreshToken));
     }

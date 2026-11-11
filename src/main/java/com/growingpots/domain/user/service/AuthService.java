@@ -85,6 +85,21 @@ public class AuthService {
         return new ReissueResult(newAccessToken, newRefreshToken);
     }
 
+    // 로그아웃은 실패할 이유가 없어야 웹 흐름이 단순해지므로 멱등하게 처리한다.
+    // 쿠키가 없거나·토큰이 깨졌거나·DB 값과 달라도 예외 없이 끝내고, 쿠키 삭제는 컨트롤러가 항상 수행한다.
+    // DB의 refreshToken은 "제시된 토큰이 실제로 저장된 토큰과 일치"할 때만 조건부로 null 처리한다.
+    @Transactional
+    public void logout(String refreshToken) {
+        if (refreshToken == null) {
+            return;
+        }
+        JwtTokenProvider.ValidatedToken validated = jwtTokenProvider.validate(refreshToken);
+        if (!validated.isValid() || !"refresh".equals(validated.type())) {
+            return;
+        }
+        memberRepository.clearRefreshToken(Long.valueOf(validated.subject()), refreshToken);
+    }
+
     private String tokenPrefix(String token) {
         return token == null ? "null" : token.substring(0, Math.min(12, token.length()));
     }

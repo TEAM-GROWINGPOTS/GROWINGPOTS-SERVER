@@ -8,13 +8,10 @@ import com.growingpots.global.exception.BaseException;
 import com.growingpots.global.response.BaseResponse;
 import com.growingpots.global.response.error.ErrorCode;
 import com.growingpots.global.response.success.SuccessCode;
-import com.growingpots.global.security.JwtTokenProvider;
+import com.growingpots.global.security.AuthCookieProvider;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,13 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
-    private final JwtTokenProvider jwtTokenProvider;
-
-    @Value("${cookie.secure:true}")
-    private boolean cookieSecure;
-
-    @Value("${cookie.same-site:None}")
-    private String cookieSameSite;
+    private final AuthCookieProvider authCookieProvider;
 
     @AuthApi.Login
     @PostMapping("/oauth/login")
@@ -43,8 +34,7 @@ public class AuthController {
             @Valid @RequestBody OAuthLoginRequest request,
             HttpServletResponse response) {
         AuthService.LoginResult result = authService.login(request);
-        response.addHeader(HttpHeaders.SET_COOKIE, buildAccessCookie(result.accessToken()).toString());
-        response.addHeader(HttpHeaders.SET_COOKIE, buildRefreshCookie(result.refreshToken()).toString());
+        authCookieProvider.setAuthCookies(response, result.accessToken(), result.refreshToken());
         OAuthLoginResponse body = new OAuthLoginResponse(
                 result.accessToken(), result.onboardingCompleted(), result.nickname());
         return ResponseEntity.status(SuccessCode.LOGIN_SUCCESS.getStatus())
@@ -60,29 +50,20 @@ public class AuthController {
             throw new BaseException(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
         }
         AuthService.ReissueResult result = authService.reissue(refreshToken);
-        response.addHeader(HttpHeaders.SET_COOKIE, buildAccessCookie(result.accessToken()).toString());
-        response.addHeader(HttpHeaders.SET_COOKIE, buildRefreshCookie(result.refreshToken()).toString());
+        authCookieProvider.setAuthCookies(response, result.accessToken(), result.refreshToken());
         return ResponseEntity.status(SuccessCode.TOKEN_REISSUED.getStatus())
                 .body(BaseResponse.success(SuccessCode.TOKEN_REISSUED, new TokenReissueResponse(result.accessToken())));
     }
 
-    private ResponseCookie buildAccessCookie(String token) {
-        return ResponseCookie.from("accessToken", token)
-                .httpOnly(true)
-                .secure(cookieSecure)
-                .path("/api")
-                .maxAge(jwtTokenProvider.getExpirationSeconds())
-                .sameSite(cookieSameSite)
-                .build();
-    }
-
-    private ResponseCookie buildRefreshCookie(String token) {
-        return ResponseCookie.from("refreshToken", token)
-                .httpOnly(true)
-                .secure(cookieSecure)
-                .path("/api/v1/auth/reissue")
-                .maxAge(jwtTokenProvider.getRefreshExpirationSeconds())
-                .sameSite(cookieSameSite)
-                .build();
+    @AuthApi.Logout
+    @PostMapping("/logout")
+    public ResponseEntity<BaseResponse<Void>> logout(
+            @CookieValue(name = "refreshToken", required = false) String refreshToken,
+            HttpServletResponse response) {
+        // 멱등: 쿠키가 없든 DB 값과 다르든 서버 무효화는 조용히 끝내고, 인증 쿠키는 항상 삭제한다.
+        authService.logout(refreshToken);
+        authCookieProvider.clearAuthCookies(response);
+        return ResponseEntity.status(SuccessCode.LOGOUT_SUCCESS.getStatus())
+                .body(BaseResponse.success(SuccessCode.LOGOUT_SUCCESS));
     }
 }
