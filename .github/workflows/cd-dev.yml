@@ -68,19 +68,28 @@ jobs:
           set -e
           APP_DIR="/home/${USER}/app-dev"
           APP_JAR="${APP_DIR}/app.jar"
-          APP_LOG="${APP_DIR}/app.log"
 
-          mkdir -p "${APP_DIR}"
-          pkill -f "java -jar ${APP_JAR}" || true
-          cd "${APP_DIR}"
-          nohup env \
-            DEV_DB_URL='${{ secrets.DEV_DB_URL }}' \
-            DB_USERNAME='${{ secrets.DB_USERNAME }}' \
-            DB_PASSWORD='${{ secrets.DB_PASSWORD }}' \
-            DEV_JWT_SECRET='${{ secrets.DEV_JWT_SECRET }}' \
-            DISCORD_WEBHOOK_URL='${{ secrets.DISCORD_WEBHOOK_URL }}' \
-            SENTRY_DSN='${{ secrets.SENTRY_DSN }}' \
-            java -jar "${APP_JAR}" --spring.profiles.active=dev > "${APP_LOG}" 2>&1 &
+          # 앱은 systemd 서비스(growingpots-dev)로 돈다. 죽으면 자동 재시작하고 Discord로 알린다(#292).
+          # 환경 변수는 서비스가 읽는 파일로 넘긴다. 본인만 읽을 수 있게 600
+          umask 077
+          cat > "${APP_DIR}/dev.env" << 'ENV'
+          DEV_DB_URL='${{ secrets.DEV_DB_URL }}'
+          DB_USERNAME='${{ secrets.DB_USERNAME }}'
+          DB_PASSWORD='${{ secrets.DB_PASSWORD }}'
+          DEV_JWT_SECRET='${{ secrets.DEV_JWT_SECRET }}'
+          DISCORD_WEBHOOK_URL='${{ secrets.DISCORD_WEBHOOK_URL }}'
+          SENTRY_DSN='${{ secrets.SENTRY_DSN }}'
+          ENV
+
+          # systemd 전환 전 nohup으로 띄운 앱이 남아 있으면 끄고, 포트가 풀릴 때까지 기다린다 (전환 후 첫 배포에서만 해당)
+          if pkill -f "^java -jar ${APP_JAR}"; then
+            for i in $(seq 1 30); do
+              pgrep -f "^java -jar ${APP_JAR}" > /dev/null || break
+              sleep 1
+            done
+          fi
+
+          sudo systemctl restart growingpots-dev
 
           for i in $(seq 1 30); do
             # actuator는 127.0.0.1에만 열린 관리 포트(18091)에 있다(#295)
@@ -90,7 +99,7 @@ jobs:
             fi
             if [ $i -eq 30 ]; then
               echo "Application failed to start. Recent logs:"
-              tail -n 50 "${APP_LOG}" || true
+              sudo journalctl -u growingpots-dev -n 50 --no-pager || true
               exit 1
             fi
             echo "Waiting for application... ($i/30)"
