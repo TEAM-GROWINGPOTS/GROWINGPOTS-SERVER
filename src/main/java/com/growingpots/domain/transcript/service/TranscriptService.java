@@ -10,6 +10,8 @@ import com.growingpots.domain.user.repository.StudentProfileRepository;
 import com.growingpots.global.exception.BaseException;
 import com.growingpots.global.response.error.ErrorCode;
 import java.io.IOException;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -22,11 +24,16 @@ import org.springframework.web.multipart.MultipartFile;
 public class TranscriptService {
 
     private static final byte[] PDF_MAGIC_BYTES = {'%', 'P', 'D', 'F'};
+    // 파싱이 여러 개 겹치면 메모리가 같이 늘어 메모리 부족이 날 수 있어 동시에 도는 수를 제한한다(#292).
+    // 정상 파일 파싱은 1초 안에 끝나서, 잠깐 기다려도 자리가 안 나면 거절한다.
+    static final int MAX_CONCURRENT_PARSING = 2;
+    static final long PARSING_WAIT_SECONDS = 3;
 
     private final MemberRepository memberRepository;
     private final StudentProfileRepository studentProfileRepository;
     private final PdfTranscriptParser pdfTranscriptParser;
     private final TranscriptPersister transcriptPersister;
+    private final Semaphore parsingPermits = new Semaphore(MAX_CONCURRENT_PARSING);
 
     public void uploadTranscript(Long memberId, MultipartFile file) {
         StudentProfile studentProfile = findStudentProfile(memberId);
@@ -34,16 +41,33 @@ public class TranscriptService {
         byte[] pdfBytes = readBytes(file);
         validatePdfFormat(pdfBytes);
 
-        ParsedTranscript parsed;
-        try {
-            parsed = pdfTranscriptParser.parse(pdfBytes);
-        } catch (PdfParsingException e) {
-            throw new BaseException(ErrorCode.PDF_PARSING_FAILED, e.getMessage());
-        }
+        ParsedTranscript parsed = parse(pdfBytes);
         validateNotEmpty(parsed);
         logForVerification(parsed);
 
         transcriptPersister.persist(studentProfile, parsed);
+    }
+
+    private ParsedTranscript parse(byte[] pdfBytes) {
+        acquireParsingPermit();
+        try {
+            return pdfTranscriptParser.parse(pdfBytes);
+        } catch (PdfParsingException e) {
+            throw new BaseException(ErrorCode.PDF_PARSING_FAILED, e.getMessage());
+        } finally {
+            parsingPermits.release();
+        }
+    }
+
+    private void acquireParsingPermit() {
+        try {
+            if (!parsingPermits.tryAcquire(PARSING_WAIT_SECONDS, TimeUnit.SECONDS)) {
+                throw new BaseException(ErrorCode.PDF_PARSING_BUSY);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new BaseException(ErrorCode.PDF_PARSING_BUSY);
+        }
     }
 
     private StudentProfile findStudentProfile(Long memberId) {
