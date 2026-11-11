@@ -1,12 +1,14 @@
 package com.growingpots.domain.transcript.service;
 
 import com.growingpots.domain.transcript.parser.ParsedTranscript;
+import com.growingpots.domain.transcript.parser.PdfLimitExceededException;
 import com.growingpots.domain.transcript.parser.PdfParsingException;
 import com.growingpots.domain.transcript.parser.PdfTranscriptParser;
 import com.growingpots.domain.user.entity.Member;
 import com.growingpots.domain.user.entity.StudentProfile;
 import com.growingpots.domain.user.repository.MemberRepository;
 import com.growingpots.domain.user.repository.StudentProfileRepository;
+import com.growingpots.global.discord.DiscordNotifier;
 import com.growingpots.global.exception.BaseException;
 import com.growingpots.global.response.error.ErrorCode;
 import java.io.IOException;
@@ -33,6 +35,7 @@ public class TranscriptService {
     private final StudentProfileRepository studentProfileRepository;
     private final PdfTranscriptParser pdfTranscriptParser;
     private final TranscriptPersister transcriptPersister;
+    private final DiscordNotifier discordNotifier;
     private final Semaphore parsingPermits = new Semaphore(MAX_CONCURRENT_PARSING);
 
     public void uploadTranscript(Long memberId, MultipartFile file) {
@@ -41,7 +44,15 @@ public class TranscriptService {
         byte[] pdfBytes = readBytes(file);
         validatePdfFormat(pdfBytes);
 
-        ParsedTranscript parsed = parse(pdfBytes);
+        ParsedTranscript parsed;
+        try {
+            parsed = parse(pdfBytes);
+        } catch (PdfLimitExceededException e) {
+            notifyLimitExceeded(memberId, pdfBytes.length, e);
+            throw new BaseException(ErrorCode.PDF_PARSING_FAILED, e.getMessage());
+        } catch (PdfParsingException e) {
+            throw new BaseException(ErrorCode.PDF_PARSING_FAILED, e.getMessage());
+        }
         validateNotEmpty(parsed);
         logForVerification(parsed);
 
@@ -52,11 +63,16 @@ public class TranscriptService {
         acquireParsingPermit();
         try {
             return pdfTranscriptParser.parse(pdfBytes);
-        } catch (PdfParsingException e) {
-            throw new BaseException(ErrorCode.PDF_PARSING_FAILED, e.getMessage());
         } finally {
             parsingPermits.release();
         }
+    }
+
+    // 상한에 걸리는 건 악의적인 파일일 수 있어서, 알림이 없으면 올라와도 알 방법이 없다(#292).
+    private void notifyLimitExceeded(Long memberId, int fileSize, PdfLimitExceededException e) {
+        log.warn("PDF 상한 초과: memberId={}, fileSize={}, reason={}", memberId, fileSize, e.getMessage());
+        discordNotifier.sendError("⚠️ PDF 상한 초과로 업로드 거부",
+                String.format("**memberId**: %d\n**파일 크기**: %,d bytes\n**사유**: %s", memberId, fileSize, e.getMessage()));
     }
 
     private void acquireParsingPermit() {

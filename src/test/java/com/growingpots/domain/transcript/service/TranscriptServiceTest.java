@@ -3,16 +3,23 @@ package com.growingpots.domain.transcript.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.growingpots.domain.transcript.parser.ParsedTranscript;
+import com.growingpots.domain.transcript.parser.PdfLimitExceededException;
+import com.growingpots.domain.transcript.parser.PdfParsingException;
 import com.growingpots.domain.transcript.parser.PdfTranscriptParser;
 import com.growingpots.domain.user.entity.Member;
 import com.growingpots.domain.user.entity.StudentProfile;
 import com.growingpots.domain.user.repository.MemberRepository;
 import com.growingpots.domain.user.repository.StudentProfileRepository;
+import com.growingpots.global.discord.DiscordNotifier;
 import com.growingpots.global.exception.BaseException;
 import com.growingpots.global.response.error.ErrorCode;
 import java.util.List;
@@ -39,8 +46,9 @@ class TranscriptServiceTest {
     private final StudentProfileRepository studentProfileRepository = mock(StudentProfileRepository.class);
     private final PdfTranscriptParser parser = mock(PdfTranscriptParser.class);
     private final TranscriptPersister persister = mock(TranscriptPersister.class);
+    private final DiscordNotifier discordNotifier = mock(DiscordNotifier.class);
     private final TranscriptService service =
-            new TranscriptService(memberRepository, studentProfileRepository, parser, persister);
+            new TranscriptService(memberRepository, studentProfileRepository, parser, persister, discordNotifier);
     private final ExecutorService executor = Executors.newFixedThreadPool(TranscriptService.MAX_CONCURRENT_PARSING);
 
     @BeforeEach
@@ -102,5 +110,27 @@ class TranscriptServiceTest {
         }
         doReturn(PARSED).when(parser).parse(any());
         service.uploadTranscript(1L, PDF);
+    }
+
+    @Test
+    void 상한에_걸려_거부되면_Discord로_알린다() {
+        when(parser.parse(any())).thenThrow(new PdfLimitExceededException("PDF 압축 해제 크기가 너무 큽니다."));
+
+        assertThatThrownBy(() -> service.uploadTranscript(1L, PDF))
+                .isInstanceOf(BaseException.class)
+                .extracting(e -> ((BaseException) e).getErrorType())
+                .isEqualTo(ErrorCode.PDF_PARSING_FAILED);
+        verify(discordNotifier).sendError(anyString(), contains("PDF 압축 해제 크기가 너무 큽니다."));
+    }
+
+    @Test
+    void 일반_파싱_실패는_알리지_않는다() {
+        when(parser.parse(any())).thenThrow(new PdfParsingException("PDF 파싱에 실패했습니다."));
+
+        assertThatThrownBy(() -> service.uploadTranscript(1L, PDF))
+                .isInstanceOf(BaseException.class)
+                .extracting(e -> ((BaseException) e).getErrorType())
+                .isEqualTo(ErrorCode.PDF_PARSING_FAILED);
+        verifyNoInteractions(discordNotifier);
     }
 }

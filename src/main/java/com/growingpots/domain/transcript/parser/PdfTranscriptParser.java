@@ -112,7 +112,7 @@ public class PdfTranscriptParser {
     public ParsedTranscript parse(byte[] pdfBytes) {
         try (PDDocument document = Loader.loadPDF(pdfBytes)) {
             if (document.getNumberOfPages() > MAX_PAGES) {
-                throw new PdfParsingException("PDF 페이지 수가 너무 많습니다.");
+                throw new PdfLimitExceededException("PDF 페이지 수가 너무 많습니다.");
             }
             validateDecodedSize(document);
             PositionCollectingTextStripper stripper = new PositionCollectingTextStripper();
@@ -1165,7 +1165,7 @@ public class PdfTranscriptParser {
 
         private void checkLimit(int length) {
             if (length > limit - count) {
-                throw new PdfParsingException("PDF 압축 해제 크기가 너무 큽니다.");
+                throw new PdfLimitExceededException("PDF 압축 해제 크기가 너무 큽니다.");
             }
         }
     }
@@ -1185,7 +1185,7 @@ public class PdfTranscriptParser {
         @Override
         protected void processOperator(Operator operator, List<COSBase> operands) throws IOException {
             if (++operatorCount > MAX_OPERATORS) {
-                throw new PdfParsingException("PDF 연산 수가 너무 많습니다.");
+                throw new PdfLimitExceededException("PDF 연산 수가 너무 많습니다.");
             }
             super.processOperator(operator, operands);
         }
@@ -1197,7 +1197,7 @@ public class PdfTranscriptParser {
             String unicode = text.getUnicode();
             characterCount += Math.max(1, unicode == null ? 0 : unicode.length());
             if (characterCount > MAX_CHARACTERS) {
-                throw new PdfParsingException("PDF 글자 수가 너무 많습니다.");
+                throw new PdfLimitExceededException("PDF 글자 수가 너무 많습니다.");
             }
             super.processTextPosition(text);
         }
