@@ -386,6 +386,110 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.code").value("AUTH_001"));
     }
 
+    @Test
+    void 로그아웃에_성공하면_DB_refreshToken이_null이_되고_인증쿠키가_삭제된다() throws Exception {
+        Member member = memberRepository.save(Member.builder()
+                .nickname("로그아웃회원")
+                .oauthProvider(OauthProvider.KAKAO)
+                .oauthId("3100")
+                .email(null)
+                .build());
+        String refreshToken = jwtTokenProvider.generateRefreshToken(member.getId().toString());
+        member.updateRefreshToken(refreshToken);
+        memberRepository.save(member);
+
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .cookie(new Cookie("refreshToken", refreshToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("AUTH_200_1"))
+                .andExpect(cookie().maxAge("refreshToken", 0))
+                .andExpect(cookie().maxAge("accessToken", 0));
+
+        Member reloaded = memberRepository.findById(member.getId()).orElseThrow();
+        assertThat(reloaded.getRefreshToken()).isNull();
+    }
+
+    // 로그아웃은 실패할 이유가 없어야 한다 - 쿠키가 아예 없어도 200 + 쿠키 삭제 헤더를 내려준다.
+    @Test
+    void 쿠키_없이_로그아웃해도_200이고_쿠키_삭제_헤더를_내려준다() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("AUTH_200_1"))
+                .andExpect(cookie().maxAge("refreshToken", 0))
+                .andExpect(cookie().maxAge("accessToken", 0));
+    }
+
+    // 제시한 토큰이 DB에 저장된 토큰과 다르면(동시 재발급으로 이미 회전된 경우 등) DB는 건드리지 않는다.
+    // 조건부 UPDATE(WHERE refresh_token = 제시토큰)가 어긋나 0건이 되어, 방금 갱신된 세션을 지우지 않는다.
+    @Test
+    void 저장된_토큰과_다른_refreshToken으로_로그아웃하면_DB는_그대로_두고_200이다() throws Exception {
+        Member member = memberRepository.save(Member.builder()
+                .nickname("불일치회원")
+                .oauthProvider(OauthProvider.KAKAO)
+                .oauthId("3101")
+                .email(null)
+                .build());
+        String presentedToken = jwtTokenProvider.generateRefreshToken(member.getId().toString());
+        // DB에는 제시 토큰과 다른 값이 저장돼 있는 상황을 만든다.
+        member.updateRefreshToken("stored-different-refresh-token");
+        memberRepository.save(member);
+
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .cookie(new Cookie("refreshToken", presentedToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("AUTH_200_1"));
+
+        Member reloaded = memberRepository.findById(member.getId()).orElseThrow();
+        assertThat(reloaded.getRefreshToken()).isEqualTo("stored-different-refresh-token");
+    }
+
+    // refresh 타입이 아닌 토큰(accessToken 등)이나 깨진 토큰으로 로그아웃하면 DB는 건드리지 않고 200으로 끝낸다.
+    @Test
+    void refresh_타입이_아닌_토큰으로_로그아웃하면_DB는_그대로_두고_200이다() throws Exception {
+        Member member = memberRepository.save(Member.builder()
+                .nickname("타입불일치회원")
+                .oauthProvider(OauthProvider.KAKAO)
+                .oauthId("3103")
+                .email(null)
+                .build());
+        String storedRefreshToken = jwtTokenProvider.generateRefreshToken(member.getId().toString());
+        member.updateRefreshToken(storedRefreshToken);
+        memberRepository.save(member);
+        // refresh가 아니라 access 타입 토큰을 쿠키로 보낸다.
+        String accessToken = jwtTokenProvider.generateToken(member.getId().toString());
+
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .cookie(new Cookie("refreshToken", accessToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("AUTH_200_1"));
+
+        Member reloaded = memberRepository.findById(member.getId()).orElseThrow();
+        assertThat(reloaded.getRefreshToken()).isEqualTo(storedRefreshToken);
+    }
+
+    // 로그아웃으로 DB 토큰이 무효화되면, 같은 refreshToken으로 재발급을 시도해도 401(AUTH_005)이다.
+    @Test
+    void 로그아웃_후_같은_refreshToken으로_재발급하면_401_AUTH_005를_반환한다() throws Exception {
+        Member member = memberRepository.save(Member.builder()
+                .nickname("재로그아웃회원")
+                .oauthProvider(OauthProvider.KAKAO)
+                .oauthId("3102")
+                .email(null)
+                .build());
+        String refreshToken = jwtTokenProvider.generateRefreshToken(member.getId().toString());
+        member.updateRefreshToken(refreshToken);
+        memberRepository.save(member);
+
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .cookie(new Cookie("refreshToken", refreshToken)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/auth/reissue")
+                        .cookie(new Cookie("refreshToken", refreshToken)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTH_005"));
+    }
+
     private Member memberWithProfile(String suffix) {
         School school = schoolRepository.save(School.builder().name("경희대학교 국제캠퍼스-" + suffix).build());
         Department department = departmentRepository.save(Department.builder()

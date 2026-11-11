@@ -105,4 +105,41 @@ public @interface AuthApi {
     @SecurityRequirements // 인증 없이 호출하는 API라 전역 bearerAuth 요구사항을 해제
     @interface Reissue {
     }
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @Operation(
+            summary = "로그아웃",
+            description = """
+                    HttpOnly 쿠키로 전달된 refreshToken을 무효화하고 인증 쿠키(accessToken·refreshToken)를 삭제한다.
+                    - 멱등 처리: 쿠키가 없거나 만료됐거나 저장된 토큰과 달라도 항상 200 + 쿠키 삭제
+                    - 서버의 refreshToken은 제시된 토큰이 저장된 값과 일치할 때만 null 처리(다른 기기/재발급 세션은 건드리지 않음)
+                    - accessToken은 만료까지 유효(블랙리스트 없음) — 웹은 메모리에서 폐기"""
+    )
+    @Parameter(
+            name = "refreshToken",
+            in = ParameterIn.COOKIE,
+            description = "HttpOnly 쿠키로 전달된 refreshToken (브라우저가 자동 첨부, 없어도 200)",
+            required = false
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "로그아웃 성공 (AUTH_200_1)",
+                    content = @Content(
+                            mediaType = "application/json",
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "success": true,
+                                      "code": "AUTH_200_1",
+                                      "message": "로그아웃에 성공했습니다.",
+                                      "data": null
+                                    }
+                                    """)
+                    )
+            )
+    })
+    @SecurityRequirements // 인증 없이 호출하는 API라 전역 bearerAuth 요구사항을 해제
+    @interface Logout {
+    }
 }
