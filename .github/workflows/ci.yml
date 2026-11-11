@@ -32,3 +32,45 @@ jobs:
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: ./gradlew clean build
+
+  # 위 build 잡의 테스트는 H2라 마이그레이션 파일을 실행하지 않는다(#284).
+  # RDS와 같은 MySQL 8.4를 띄워 빈 DB에 마이그레이션을 전부 적용하고, 엔티티와 맞는지 확인한다.
+  migration:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: ci-password
+          MYSQL_DATABASE: growingpots
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -uroot -pci-password"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Grant execute permission for Gradle wrapper
+        run: chmod +x gradlew
+
+      - name: Verify migrations on MySQL
+        env:
+          MIGRATION_TEST_DB_URL: jdbc:mysql://127.0.0.1:3306/growingpots?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+          MIGRATION_TEST_DB_PASSWORD: ci-password
+        run: ./gradlew test --tests '*MigrationVerificationTest'
