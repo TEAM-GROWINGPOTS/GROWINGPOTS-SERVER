@@ -1,15 +1,19 @@
 package com.growingpots.domain.transcript.service;
 
 import com.growingpots.domain.transcript.parser.ParsedTranscript;
+import com.growingpots.domain.transcript.parser.PdfLimitExceededException;
 import com.growingpots.domain.transcript.parser.PdfParsingException;
 import com.growingpots.domain.transcript.parser.PdfTranscriptParser;
 import com.growingpots.domain.user.entity.Member;
 import com.growingpots.domain.user.entity.StudentProfile;
 import com.growingpots.domain.user.repository.MemberRepository;
 import com.growingpots.domain.user.repository.StudentProfileRepository;
+import com.growingpots.global.discord.DiscordNotifier;
 import com.growingpots.global.exception.BaseException;
 import com.growingpots.global.response.error.ErrorCode;
 import java.io.IOException;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -22,11 +26,17 @@ import org.springframework.web.multipart.MultipartFile;
 public class TranscriptService {
 
     private static final byte[] PDF_MAGIC_BYTES = {'%', 'P', 'D', 'F'};
+    // 파싱이 여러 개 겹치면 메모리가 같이 늘어 메모리 부족이 날 수 있어 동시에 도는 수를 제한한다(#292).
+    // 정상 파일 파싱은 1초 안에 끝나서, 잠깐 기다려도 자리가 안 나면 거절한다.
+    static final int MAX_CONCURRENT_PARSING = 2;
+    static final long PARSING_WAIT_SECONDS = 3;
 
     private final MemberRepository memberRepository;
     private final StudentProfileRepository studentProfileRepository;
     private final PdfTranscriptParser pdfTranscriptParser;
     private final TranscriptPersister transcriptPersister;
+    private final DiscordNotifier discordNotifier;
+    private final Semaphore parsingPermits = new Semaphore(MAX_CONCURRENT_PARSING);
 
     public void uploadTranscript(Long memberId, MultipartFile file) {
         StudentProfile studentProfile = findStudentProfile(memberId);
@@ -36,7 +46,10 @@ public class TranscriptService {
 
         ParsedTranscript parsed;
         try {
-            parsed = pdfTranscriptParser.parse(pdfBytes);
+            parsed = parse(pdfBytes);
+        } catch (PdfLimitExceededException e) {
+            notifyLimitExceeded(memberId, pdfBytes.length, e);
+            throw new BaseException(ErrorCode.PDF_PARSING_FAILED, e.getMessage());
         } catch (PdfParsingException e) {
             throw new BaseException(ErrorCode.PDF_PARSING_FAILED, e.getMessage());
         }
@@ -44,6 +57,33 @@ public class TranscriptService {
         logForVerification(parsed);
 
         transcriptPersister.persist(studentProfile, parsed);
+    }
+
+    private ParsedTranscript parse(byte[] pdfBytes) {
+        acquireParsingPermit();
+        try {
+            return pdfTranscriptParser.parse(pdfBytes);
+        } finally {
+            parsingPermits.release();
+        }
+    }
+
+    // 상한에 걸리는 건 악의적인 파일일 수 있어서, 알림이 없으면 올라와도 알 방법이 없다(#292).
+    private void notifyLimitExceeded(Long memberId, int fileSize, PdfLimitExceededException e) {
+        log.warn("PDF 상한 초과: memberId={}, fileSize={}, reason={}", memberId, fileSize, e.getMessage());
+        discordNotifier.sendError("⚠️ PDF 상한 초과로 업로드 거부",
+                String.format("**memberId**: %d\n**파일 크기**: %,d bytes\n**사유**: %s", memberId, fileSize, e.getMessage()));
+    }
+
+    private void acquireParsingPermit() {
+        try {
+            if (!parsingPermits.tryAcquire(PARSING_WAIT_SECONDS, TimeUnit.SECONDS)) {
+                throw new BaseException(ErrorCode.PDF_PARSING_BUSY);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new BaseException(ErrorCode.PDF_PARSING_BUSY);
+        }
     }
 
     private StudentProfile findStudentProfile(Long memberId) {
