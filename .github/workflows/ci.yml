@@ -35,6 +35,7 @@ jobs:
 
   # 위 build 잡의 테스트는 H2라 마이그레이션 파일을 실행하지 않는다(#284).
   # RDS와 같은 MySQL 8.4를 띄워 빈 DB에 마이그레이션을 전부 적용하고, 엔티티와 맞는지 확인한다.
+  # H2로는 재현이 안 되는 동시 요청 테스트(#304, #305)도 여기서 같이 돌린다.
   migration:
     runs-on: ubuntu-latest
 
@@ -73,4 +74,4 @@ jobs:
         env:
           MIGRATION_TEST_DB_URL: jdbc:mysql://127.0.0.1:3306/growingpots?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
           MIGRATION_TEST_DB_PASSWORD: ci-password
-        run: ./gradlew test --tests '*MigrationVerificationTest'
+        run: ./gradlew test --tests '*MigrationVerificationTest' --tests '*SameStudentConcurrentRequestTest'
