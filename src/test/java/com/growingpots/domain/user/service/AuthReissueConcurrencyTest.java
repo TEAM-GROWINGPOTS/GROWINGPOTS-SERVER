@@ -77,6 +77,24 @@ class AuthReissueConcurrencyTest {
         assertThat(error.getErrorType()).isEqualTo(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
     }
 
+    // 완료기준 2번: 재발급이 먼저 토큰을 X→Y로 회전시킨 뒤, 옛 토큰 X로 로그아웃하면
+    // 로그아웃도 compare-and-set이라 0건이 되어, 재발급된 새 토큰 Y를 null로 지우지 않는다.
+    @Test
+    void 재발급으로_토큰_회전_후_옛_토큰으로_로그아웃하면_새_토큰이_지워지지_않는다() {
+        Member member = saveMemberWithRefreshToken("3004");
+        Long memberId = member.getId();
+        String oldToken = member.getRefreshToken();
+
+        authService.reissue(oldToken); // X -> Y 회전
+        String rotated = memberRepository.findById(memberId).orElseThrow().getRefreshToken();
+
+        authService.logout(oldToken); // 옛 토큰 X로 로그아웃 (멱등, DB에는 영향 없어야 함)
+
+        String stored = memberRepository.findById(memberId).orElseThrow().getRefreshToken();
+        assertThat(stored).as("옛 토큰 로그아웃이 재발급된 새 토큰을 지우면 안 됨")
+                .isNotNull().isEqualTo(rotated);
+    }
+
     // 핵심 경합: 재발급이 토큰을 조회해 통과한 뒤, 저장하기 전에 로그아웃이 먼저 커밋되면
     // 재발급은 조건부 UPDATE가 0건이 되어 401이고, 로그아웃이 지운 null을 되살리지 않아야 한다.
     @Test
