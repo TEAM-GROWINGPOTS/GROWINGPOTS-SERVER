@@ -20,4 +20,13 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     @Modifying(clearAutomatically = true)
     @Query("UPDATE Member m SET m.refreshToken = null WHERE m.id = :id AND m.refreshToken = :refreshToken")
     int clearRefreshToken(@Param("id") Long id, @Param("refreshToken") String refreshToken);
+
+    // 재발급: 제시된(옛) 토큰이 DB에 그대로일 때만 새 토큰으로 교체한다(compare-and-set).
+    // 조회와 교체 사이에 로그아웃/다른 재발급이 토큰을 먼저 바꿨다면 refreshToken 조건이 어긋나 0건이 되어,
+    // 무효화됐거나 이미 회전된 세션을 새 토큰으로 되살리지 않는다. 반환값은 실제로 바꾼 행 수(#302).
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE Member m SET m.refreshToken = :newRefreshToken WHERE m.id = :id AND m.refreshToken = :currentRefreshToken")
+    int updateRefreshTokenIfMatches(@Param("id") Long id,
+                                    @Param("currentRefreshToken") String currentRefreshToken,
+                                    @Param("newRefreshToken") String newRefreshToken);
 }
