@@ -70,7 +70,9 @@ public class AuthService {
         // JWT 자체는 유효한데 DB에 저장된 현재 토큰과 문자열이 달라서 나는 에러라, "제출된 토큰"과
         // "DB에 실제 저장된 토큰"을 나란히 남겨야 재현 없이도 원인(로테이션 경합 vs 클라이언트가
         // 계속 같은 죽은 토큰을 재전송하는 것)을 구분할 수 있다. 토큰 전체가 아니라 앞 12자만 남긴다.
-        Member member = memberRepository.findByIdAndRefreshToken(memberId, refreshToken)
+        // 존재/일치 1차 확인(+위 #233 진단 로그). 여기서 통과해도 아래 저장 직전에 로그아웃이나 다른
+        // 재발급이 토큰을 바꿀 수 있으므로, 실제 교체는 조건부로 한 번 더 확인한다.
+        memberRepository.findByIdAndRefreshToken(memberId, refreshToken)
                 .orElseThrow(() -> {
                     log.warn("refresh token mismatch: memberId={}, presentedPrefix={}, storedPrefix={}",
                             memberId, tokenPrefix(refreshToken), storedTokenPrefix(memberId));
@@ -80,7 +82,14 @@ public class AuthService {
         String subject = memberId.toString();
         String newAccessToken = jwtTokenProvider.generateToken(subject);
         String newRefreshToken = jwtTokenProvider.generateRefreshToken(subject);
-        member.updateRefreshToken(newRefreshToken);
+        // 저장도 compare-and-set: 조회 이후 로그아웃/다른 재발급이 먼저 토큰을 바꿨다면 0건이 되어 실패시킨다.
+        // 조건 없이 덮어쓰면 방금 로그아웃으로 무효화된 토큰 자리를 새 토큰이 되살려 세션이 부활한다(#302).
+        int updated = memberRepository.updateRefreshTokenIfMatches(memberId, refreshToken, newRefreshToken);
+        if (updated == 0) {
+            log.warn("refresh token rotation lost race: memberId={}, presentedPrefix={}, storedPrefix={}",
+                    memberId, tokenPrefix(refreshToken), storedTokenPrefix(memberId));
+            throw new BaseException(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
+        }
 
         return new ReissueResult(newAccessToken, newRefreshToken);
     }
