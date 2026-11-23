@@ -43,6 +43,7 @@ public enum ErrorCode implements ErrorType {
     PDF_INVALID_FORMAT(HttpStatus.BAD_REQUEST, "TRANS_002", "지원하지 않는 PDF 형식입니다."),
     LLM_API_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "TRANS_003", "AI 파싱 중 오류가 발생했습니다."),
     PDF_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "TRANS_004", "PDF 용량이 너무 큽니다."),
+    PDF_PARSING_BUSY(HttpStatus.SERVICE_UNAVAILABLE, "TRANS_005", "PDF 분석 요청이 많습니다. 잠시 후 다시 시도해주세요."),
 
     // Requirement
     REQUIREMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "REQ_001", "졸업요건 데이터가 존재하지 않습니다."),

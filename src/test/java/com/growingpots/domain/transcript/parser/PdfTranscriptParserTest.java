@@ -67,7 +67,7 @@ class PdfTranscriptParserTest {
         byte[] pdf = pdfWithPages(11);
 
         assertThatThrownBy(() -> parser.parse(pdf))
-                .isInstanceOf(PdfParsingException.class)
+                .isInstanceOf(PdfLimitExceededException.class)
                 .hasMessage("PDF 페이지 수가 너무 많습니다.");
     }
 
@@ -81,7 +81,7 @@ class PdfTranscriptParserTest {
         byte[] pdf = pdfWithCharacters(50_001);
 
         assertThatThrownBy(() -> parser.parse(pdf))
-                .isInstanceOf(PdfParsingException.class)
+                .isInstanceOf(PdfLimitExceededException.class)
                 .hasMessage("PDF 글자 수가 너무 많습니다.");
     }
 
@@ -95,7 +95,7 @@ class PdfTranscriptParserTest {
         byte[] pdf = pdfWithDecodedContent(33 * 1024 * 1024);
 
         assertThatThrownBy(() -> parser.parse(pdf))
-                .isInstanceOf(PdfParsingException.class)
+                .isInstanceOf(PdfLimitExceededException.class)
                 .hasMessage("PDF 압축 해제 크기가 너무 큽니다.");
     }
 
@@ -104,7 +104,7 @@ class PdfTranscriptParserTest {
         byte[] pdf = pdfWithFormsOfDecodedSize(4, 9 * 1024 * 1024);
 
         assertThatThrownBy(() -> parser.parse(pdf))
-                .isInstanceOf(PdfParsingException.class)
+                .isInstanceOf(PdfLimitExceededException.class)
                 .hasMessage("PDF 압축 해제 크기가 너무 큽니다.");
     }
 
@@ -121,7 +121,7 @@ class PdfTranscriptParserTest {
         }
 
         assertThatThrownBy(() -> parser.parse(pdf))
-                .isInstanceOf(PdfParsingException.class)
+                .isInstanceOf(PdfLimitExceededException.class)
                 .hasMessage("PDF 압축 해제 크기가 너무 큽니다.");
     }
 
@@ -165,7 +165,7 @@ class PdfTranscriptParserTest {
         byte[] pdf = pdfWithThreeCharacterGlyphs(16_667);
 
         assertThatThrownBy(() -> parser.parse(pdf))
-                .isInstanceOf(PdfParsingException.class)
+                .isInstanceOf(PdfLimitExceededException.class)
                 .hasMessage("PDF 글자 수가 너무 많습니다.");
     }
 
@@ -212,7 +212,7 @@ class PdfTranscriptParserTest {
         byte[] pdf = pdfWithOperators(500_001);
 
         assertThatThrownBy(() -> parser.parse(pdf))
-                .isInstanceOf(PdfParsingException.class)
+                .isInstanceOf(PdfLimitExceededException.class)
                 .hasMessage("PDF 연산 수가 너무 많습니다.");
     }
 
@@ -221,7 +221,7 @@ class PdfTranscriptParserTest {
         byte[] pdf = pdfWithNestedForms(8, 10);
 
         assertThatThrownBy(() -> parser.parse(pdf))
-                .isInstanceOf(PdfParsingException.class)
+                .isInstanceOf(PdfLimitExceededException.class)
                 .hasMessage("PDF 연산 수가 너무 많습니다.");
     }
 
