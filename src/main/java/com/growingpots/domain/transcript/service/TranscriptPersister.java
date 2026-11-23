@@ -40,6 +40,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 // PDF 파싱(TranscriptService)과 DB 저장을 분리한 클래스. 파싱은 DB 커넥션이 필요 없는 작업이라
@@ -72,8 +73,17 @@ public class TranscriptPersister {
     private final GraduationAnalysisSummaryRepository graduationAnalysisSummaryRepository;
     private final CertResultRepository certResultRepository;
 
-    @Transactional
-    public void persist(StudentProfile studentProfile, ParsedTranscript parsed) {
+    // 같은 학생 요청(재업로드 연타, 업로드 중 온보딩 확인 등)이 겹치면 중복 저장되거나 서로 덮어써서(#304),
+    // savePlanner와 같은 방식으로 학생 행을 먼저 잠가 한 줄로 세운다. 밖(TranscriptService)에서 읽은 프로필은
+    // 파싱하는 동안 낡았을 수 있어서, 잠근 뒤 다시 읽은 프로필로 작업한다.
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public void persist(StudentProfile detachedProfile, ParsedTranscript parsed) {
+        Long memberId = detachedProfile.getMember().getId();
+        studentProfileRepository.lockByMemberId(memberId)
+                .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
+        StudentProfile studentProfile = studentProfileRepository.findWithDetailsByMemberId(memberId)
+                .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
+
         // 진행 중 과목의 수강년도/학기 계산에 쓰는 "오늘"을 한 번만 고정해, 학기 경계를 걸치는 순간에도
         // 같은 persist() 호출 안에서는 일관된 값을 쓰도록 한다.
         LocalDate now = LocalDate.now();
@@ -136,7 +146,6 @@ public class TranscriptPersister {
                 extractGrade(studentInfo.get("grade")),
                 extractAdmissionYear(studentNo),
                 computeCurrentTerm(now));
-        studentProfileRepository.save(studentProfile);
     }
 
     // 연도는 학번의 앞 4자리를 가져옴.

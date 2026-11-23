@@ -32,6 +32,7 @@ import com.growingpots.global.exception.BaseException;
 import com.growingpots.global.response.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
@@ -69,7 +70,7 @@ public class StudentProfileService {
     // 기본정보를 다시 제출하면(학교/학과를 잘못 골랐다거나) 새 값으로 덮어쓴다. 이미 PDF 분석이 끝나
     // 있었다면 그 분석 데이터는 이제 새 학과/학교 기준과 어긋날 수 있어 함께 지운다(재분석 유도).
     // 확인까지 끝난 뒤에는 기존처럼 막는다.
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public StudentProfileCreateResponse create(Long memberId, StudentProfileCreateRequest request) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND));
@@ -84,7 +85,9 @@ public class StudentProfileService {
             throw new BaseException(ErrorCode.DEPARTMENT_NOT_IN_SCHOOL);
         }
 
-        Optional<StudentProfile> existingProfile = studentProfileRepository.findByMember(member);
+        // 이미 프로필이 있으면 재제출이라 PDF 저장 등과 겹치지 않게 학생 행을 먼저 잠근다(#304).
+        Optional<StudentProfile> existingProfile = studentProfileRepository.lockByMemberId(memberId)
+                .flatMap(id -> studentProfileRepository.findByMember(member));
         if (existingProfile.isPresent()) {
             return updateOnboardingInfo(existingProfile.get(), school, department, request.admissionYear());
         }
@@ -166,8 +169,10 @@ public class StudentProfileService {
 
     // 분석확인 화면의 "확인" 버튼이 호출한다. 이 시점부터 onboardingCompleted가 true가 된다.
     // PDF를 한 번도 분석한 적 없으면(GraduationAnalysisSummary 없음) 확인할 분석 결과 자체가 없으므로 막는다.
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void confirmOnboarding(Long memberId) {
+        // PDF 저장과 겹치면 한쪽 변경이 다른 쪽에 덮어써져서 학생 행을 먼저 잠근다(#304).
+        lockStudentProfile(memberId);
         StudentProfile profile = studentProfileRepository.findWithDetailsByMemberId(memberId)
                 .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
 
@@ -263,8 +268,11 @@ public class StudentProfileService {
 
     // 검수 화면([저장하기])에서 넘어온 전체 목록으로 STUDENT_COURSE를 완전히 교체한다.
     // studentCourseId가 있으면 수정, 없으면 신규(직접추가), 요청에 없는 기존 항목은 삭제.
-    @Transactional
+    // [저장하기] 연타로 두 요청이 겹치면 직접 추가한 과목이 둘 다 INSERT돼서(#304), 학생 행을 먼저 잠가
+    // 한 줄로 세운다. 뒤 요청은 앞 요청이 넣은 과목을 "요청에 없는 기존 항목"으로 보고 지운 뒤 다시 넣는다.
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void updateMyCourses(Long memberId, StudentCourseUpdateRequest request) {
+        lockStudentProfile(memberId);
         StudentProfile profile = studentProfileRepository.findWithDetailsByMemberId(memberId)
                 .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
         School school = profile.getSchool();
@@ -346,6 +354,12 @@ public class StudentProfileService {
                 .toList();
         studentCourseRepository.deleteAllInBatch(toDelete);
         studentCourseRepository.saveAll(newCourses);
+    }
+
+    // savePlanner와 같은 락 전용 경량 쿼리. 같은 학생의 쓰기 요청을 한 줄로 세운다.
+    private void lockStudentProfile(Long memberId) {
+        studentProfileRepository.lockByMemberId(memberId)
+                .orElseThrow(() -> new BaseException(ErrorCode.STUDENT_PROFILE_NOT_FOUND));
     }
 
     private Set<Long> ids(List<CourseUpdateItem> items, Function<CourseUpdateItem, Long> extractor) {
